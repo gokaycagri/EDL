@@ -24,11 +24,10 @@
         .url-list { list-style: none; padding: 0; }
         .url-list li { background-color: #f9f9f9; padding: 10px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 8px; cursor: pointer; }
         .url-list li .url-display { display: flex; justify-content: space-between; align-items: center; }
-        .url-list li .edit-form form { display: flex; align-items: center; width: 100%; }
-        .url-list li .edit-form input[name="name"] { width: 150px; }
-        .url-list li .edit-form input[name="url"] { flex-grow: 1; }
-        .url-list li .edit-form select { width: 80px; }
-        .url-list li .edit-form input, .url-list li .edit-form select { margin-right: 10px; }
+        .url-list li .edit-form form { display: flex; align-items: center; flex-wrap: wrap; }
+        .url-list li .edit-form input, .url-list li .edit-form select { margin-right: 10px; margin-bottom: 10px; }
+        .url-list li .edit-form p { width: 100%; margin-bottom: 10px; }
+        .url-list li .edit-form .button-group { display: flex; justify-content: flex-end; width: 100%;}
         .url-list li span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; margin-right: 1em; }
         .url-list li div { display: flex; align-items: center; flex-shrink: 0;}
         .file-list a { text-decoration: none; color: #007bff; }
@@ -55,6 +54,7 @@
                 <option value="csv">CSV</option>
             </select>
             <input type="text" name="key_or_column" placeholder="Key or Column" style="display: none;">
+            <input type="number" name="schedule_interval_minutes" placeholder="Schedule (mins, optional)" min="1">
             <button type="submit" class="button">Add URL</button>
         </form>
         <ul class="url-list">
@@ -64,6 +64,9 @@
                     <span>{{ item.name }}</span>
                     <div>
                         <span class="badge">{{ stats.get(item.name, {}).get('count', 'N/A') }} items ({{ stats.get(item.name, {}).get('fetch_time', 'N/A') }})</span>
+                        {% if item.get('schedule_interval_minutes') %}
+                            <span class="badge">Scheduled: {{ item.schedule_interval_minutes }} mins</span>
+                        {% endif %}
                         <a href="/remove/{{ loop.index0 }}" class="button remove" onclick="event.stopPropagation();">Remove</a>
                     </div>
                 </div>
@@ -77,21 +80,18 @@
                             <option value="csv" {% if item.format == 'csv' %}selected{% endif %}>CSV</option>
                         </select>
                         <input type="text" name="key_or_column" value="{{ item.get('key_or_column', '') }}" placeholder="Key or Column" style="display: {% if item.format in ['json', 'csv'] %}block{% else %}none{% endif %};">
-                        <button type="submit" class="button">Update</button>
-                        <button type="button" class="button remove" onclick="toggleEdit({{ loop.index0 }}); event.stopPropagation();">Cancel</button>
+                        <input type="number" name="schedule_interval_minutes" value="{{ item.get('schedule_interval_minutes', '') }}" placeholder="Schedule (mins, optional)" min="1">
+                        <p>Last Updated: {{ stats.get(item.name, {}).get('last_updated', 'N/A') }}</p>
+                        <div class="button-group">
+                            <button type="submit" class="button">Update</button>
+                            <button type="button" class="button remove" onclick="toggleEdit({{ loop.index0 }}); event.stopPropagation();">Cancel</button>
+                        </div>
                     </form>
                 </div>
             </li>
             {% endfor %}
         </ul>
         <hr>
-        <h2>Process Feeds <span class="last-updated">(Last updated: {{ stats.get('last_updated', 'N/A') }})</span></h2>
-        <div id="update-section">
-            <p>Click the button below to update the threat intelligence feeds from the sources above.</p>
-            <button id="run-button" class="button run">Update Feeds</button>
-            <div id="loader" class="loader"></div>
-            <div id="status-message" class="status-message" style="display: none;"></div>
-        </div>
         <h2>Downloadable Lists</h2>
         <ul class="file-list">
             <li><a href="/data/palo_alto_edl.txt">Palo Alto EDL</a></li>

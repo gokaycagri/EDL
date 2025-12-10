@@ -4,12 +4,14 @@
         {
             "name": "firehol_level1",
             "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
-            "format": "text"
+            "format": "text",
+            "schedule_interval_minutes": 60
         },
         {
             "name": "firehol_level2",
             "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset",
-            "format": "text"
+            "format": "text",
+            "schedule_interval_minutes": 120
         }
     ]
 }
