@@ -15,7 +15,7 @@ from .aggregator import main as run_aggregator, aggregate_single_source
 from .output_formatter import format_for_palo_alto, format_for_fortinet
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = 'a_very_secret_and_static_key_for_testing_do_not_use_in_production'
 app.config['SESSION_COOKIE_NAME'] = 'threat_feed_aggregator_session'
 
 # Define paths
@@ -144,7 +144,7 @@ def login():
         else:
             session['logged_in'] = True
             session.modified = True
-            print(f"Session after login: {session}")
+            print(f"DEBUG: Session after login: {session}")
             return redirect(url_for('index'))
     return render_template('login.html', error=error)
 
@@ -154,8 +154,8 @@ def logout():
     return redirect(url_for('index'))
 
 @app.route('/')
-@login_required
 def index():
+    print(f"DEBUG: Session content in index: {session}")
     config = read_config()
     stats = read_stats()
     db_data = read_db() # Read db.json
@@ -352,4 +352,4 @@ def download_file(filename):
 if __name__ == '__main__':
     scheduler.start() # Start the scheduler
     update_scheduled_jobs() # Load initial jobs
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
