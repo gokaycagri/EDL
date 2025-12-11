@@ -7,32 +7,39 @@ from datetime import datetime, timezone
 from tzlocal import get_localzone
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
-from apscheduler.triggers.interval import IntervalTrigger # Added for type checking
+from apscheduler.triggers.interval import IntervalTrigger
 
-
-# It's important to import the main function from your script.
+# Import refactored modules
 from .aggregator import main as run_aggregator, aggregate_single_source
 from .output_formatter import format_for_palo_alto, format_for_fortinet
+from .db_manager import init_db, get_all_indicators, get_unique_ip_count
 
 app = Flask(__name__)
-app.secret_key = 'a_very_secret_and_static_key_for_testing_do_not_use_in_production'
+# Use environment variable for secret key, fallback for dev
+app.secret_key = os.environ.get('SECRET_KEY', 'a_very_secret_and_static_key_for_testing_do_not_use_in_production')
 app.config['SESSION_COOKIE_NAME'] = 'threat_feed_aggregator_session'
 
 # Define paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 CONFIG_FILE = os.path.join(BASE_DIR, "config", "config.json")
-DB_FILE = os.path.join(DATA_DIR, "db.json") # Add DB_FILE path here for JsonStore
 STATS_FILE = os.path.join(BASE_DIR, "stats.json")
+
+# Ensure data directory exists
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
 # Initialize scheduler
 jobstores = {
-    'default': SQLAlchemyJobStore(url=f'sqlite:///{DATA_DIR}/jobs.sqlite') # New file for scheduled jobs
+    'default': SQLAlchemyJobStore(url=f'sqlite:///{os.path.join(DATA_DIR, "jobs.sqlite")}')
 }
 scheduler = BackgroundScheduler(jobstores=jobstores)
 
 # Global variables
 AGGREGATION_STATUS = "idle"  # idle, running, completed
+
+# Initialize Database
+init_db()
 
 def login_required(f):
     @wraps(f)
@@ -48,6 +55,11 @@ def read_config():
     with open(CONFIG_FILE, "r") as f:
         return json.load(f)
 
+def write_config(config):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+    update_scheduled_jobs()
+
 def update_scheduled_jobs():
     """
     Manages APScheduler jobs based on the current configuration in config.json.
@@ -58,14 +70,12 @@ def update_scheduled_jobs():
 
     # Remove jobs that are no longer configured or whose schedule has changed
     for job in scheduler.get_jobs():
-        # Ensure job.args is not empty before accessing its elements
         if not job.args or 'name' not in job.args[0]:
-            print(f"Skipping malformed job {job.id}")
             continue
 
-        job_source_name = job.args[0]['name'] # Assuming 'source_config' is the first arg
+        job_source_name = job.args[0]['name']
         current_interval = None
-        if isinstance(job.trigger, IntervalTrigger): # Check if it's an IntervalTrigger
+        if isinstance(job.trigger, IntervalTrigger):
             current_interval = job.trigger.interval.total_seconds() / 60
 
         if job_source_name not in configured_sources or \
@@ -87,33 +97,13 @@ def update_scheduled_jobs():
                     minutes=interval_minutes,
                     id=job_id,
                     args=[source_config],
-                    replace_existing=True # Update if already exists, useful for config changes
+                    replace_existing=True
                 )
                 print(f"Scheduled job for {source_name} to run every {interval_minutes} minutes.")
             else:
-                # Job exists, check if interval changed and update if necessary
                 if existing_job.trigger.interval.total_seconds() / 60 != interval_minutes:
                     scheduler.reschedule_job(job_id, trigger='interval', minutes=interval_minutes)
                     print(f"Rescheduled job for {source_name} to run every {interval_minutes} minutes.")
-
-def write_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
-    update_scheduled_jobs() # Call after writing config
-
-def read_db():
-    print(f"DEBUG(app): Attempting to read DB from {DB_FILE}")
-    if not os.path.exists(DB_FILE):
-        print(f"DEBUG(app): {DB_FILE} not found. Returning empty indicators.")
-        return {"indicators": {}}
-    with open(DB_FILE, "r") as f:
-        try:
-            db_data = json.load(f)
-            print(f"DEBUG(app): DB read successfully. Indicators count: {len(db_data.get('indicators', {}))}")
-            return db_data
-        except json.JSONDecodeError:
-            print(f"DEBUG(app): Error decoding JSON from {DB_FILE}. Returning empty indicators.")
-            return {"indicators": {}}
 
 def read_stats():
     if not os.path.exists(STATS_FILE):
@@ -122,7 +112,6 @@ def read_stats():
         try:
             stats = json.load(f)
             if isinstance(stats, dict):
-                # Ensure all values are dictionaries
                 for key, value in stats.items():
                     if not isinstance(value, dict):
                         stats[key] = {}
@@ -139,12 +128,13 @@ def write_stats(stats):
 def login():
     error = None
     if request.method == 'POST':
-        if request.form['username'] != 'admin' or request.form['password'] != '123456':
+        # Use environment variable for admin password
+        admin_password = os.environ.get('ADMIN_PASSWORD', '123456')
+        if request.form['username'] != 'admin' or request.form['password'] != admin_password:
             error = 'Invalid Credentials. Please try again.'
         else:
             session['logged_in'] = True
             session.modified = True
-            print(f"DEBUG: Session after login: {session}")
             return redirect(url_for('index'))
     return render_template('login.html', error=error)
 
@@ -155,29 +145,28 @@ def logout():
 
 @app.route('/')
 def index():
-    print(f"DEBUG: Session content in index: {session}")
     config = read_config()
     stats = read_stats()
-    db_data = read_db() # Read db.json
-    unique_ip_count = len(db_data.get("indicators", {})) # Calculate unique IP count
-    print(f"DEBUG(app): Unique IP Count before rendering: {unique_ip_count}")
+    
+    # Get unique IP count from DB
+    unique_ip_count = get_unique_ip_count()
+    
+    local_tz = get_localzone()
 
-    local_tz = get_localzone() # Get local timezone once
-
-    # Format timestamps in stats for display
+    # Format timestamps
     formatted_stats = {}
     for key, value in stats.items():
         if isinstance(value, dict) and 'last_updated' in value and value['last_updated'] != 'N/A':
             try:
                 dt_obj = datetime.fromisoformat(value['last_updated'])
-                formatted_stats[key] = {**value, 'last_updated': dt_obj.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')} # Converted to local_tz
+                formatted_stats[key] = {**value, 'last_updated': dt_obj.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')}
             except (ValueError, TypeError):
                 formatted_stats[key] = value
         elif key == 'last_updated' and value != 'N/A':
             if isinstance(value, str):
                 try:
                     dt_obj = datetime.fromisoformat(value)
-                    formatted_stats[key] = dt_obj.astimezone(local_tz).strftime('%d/%m/%Y %H:%M') # Converted to local_tz
+                    formatted_stats[key] = dt_obj.astimezone(local_tz).strftime('%d/%m/%Y %H:%M')
                 except (ValueError, TypeError):
                     formatted_stats[key] = value
             else:
@@ -185,18 +174,17 @@ def index():
         else:
             formatted_stats[key] = value
 
-    scheduled_jobs = scheduler.get_jobs() # Get scheduled jobs
-    # Prepare jobs for template
+    scheduled_jobs = scheduler.get_jobs()
     jobs_for_template = []
     for job in scheduled_jobs:
         jobs_for_template.append({
             'id': job.id,
             'name': job.name,
-            'next_run_time': job.next_run_time.astimezone(local_tz).strftime('%d/%m/%Y %H:%M') if job.next_run_time else 'N/A', # Converted to local_tz
+            'next_run_time': job.next_run_time.astimezone(local_tz).strftime('%d/%m/%Y %H:%M') if job.next_run_time else 'N/A',
             'interval': f"{job.trigger.interval.total_seconds() / 60} minutes" if isinstance(job.trigger, IntervalTrigger) else 'N/A'
         })
 
-    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, unique_ip_count=unique_ip_count) # Pass formatted stats and jobs to template
+    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, unique_ip_count=unique_ip_count)
 
 @app.route('/add', methods=['POST'])
 @login_required
@@ -235,13 +223,12 @@ def update_url(index):
                 updated_source["key_or_column"] = key_or_column
             if schedule_interval_minutes:
                 updated_source["schedule_interval_minutes"] = schedule_interval_minutes
-            else: # If schedule_interval_minutes is empty, remove it from config
+            else:
                 if "schedule_interval_minutes" in updated_source:
                     del updated_source["schedule_interval_minutes"]
             config["source_urls"][index] = updated_source
-            write_config(config) # This updates the scheduler
+            write_config(config)
 
-            # Trigger an immediate fetch for the updated source in a separate thread
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
             thread.start()
 
@@ -270,27 +257,21 @@ def fetch_and_process_single_feed(source_config):
     """
     Fetches and processes data for a single threat feed source, updates DB and stats,
     then updates the output files (Palo Alto, Fortinet) based on the current full DB.
-    This function is designed to be run by the scheduler for individual sources.
     """
     name = source_config["name"]
     print(f"Starting scheduled fetch for {name}...")
 
-    # Call the single source aggregation function from aggregator.py
-    # This function now handles updating db.json and stats.json for the source
     aggregate_single_source(source_config)
 
-    # After updating a single source, re-generate the full output files
-    # This requires reading the entire indicators_db
-    db = read_db() # Use read_db() to safely get data
-    processed_data = list(db.get("indicators", {}).keys())
+    # Re-generate output files from SQLite DB
+    indicators_data = get_all_indicators()
+    processed_data = list(indicators_data.keys())
 
-    # Format and save for Palo Alto
     palo_alto_output = format_for_palo_alto(processed_data)
     palo_alto_file_path = os.path.join(DATA_DIR, "palo_alto_edl.txt")
     with open(palo_alto_file_path, "w") as f:
         f.write(palo_alto_output)
 
-    # Format and save for Fortinet
     fortinet_output = format_for_fortinet(processed_data)
     fortinet_file_path = os.path.join(DATA_DIR, "fortinet_edl.txt")
     with open(fortinet_file_path, "w") as f:
@@ -298,12 +279,9 @@ def fetch_and_process_single_feed(source_config):
     
     print(f"Completed scheduled fetch for {name}.")
 
-
-def aggregation_task(update_status=True): # Modified aggregation_task
+def aggregation_task(update_status=True):
     """
     Runs a full aggregation of all configured threat feeds.
-    If update_status is True, updates global AGGREGATION_STATUS.
-    This is used for the 'run all' button or initial full scan.
     """
     global AGGREGATION_STATUS
     if update_status:
@@ -312,19 +290,25 @@ def aggregation_task(update_status=True): # Modified aggregation_task
     config = read_config()
     source_urls = config.get("source_urls", [])
 
-    # Use the refactored main from aggregator.py which now calls aggregate_single_source for each
-    results = run_aggregator(source_urls) # This now orchestrates calls to aggregate_single_source
+    run_aggregator(source_urls)
     
-    # The stats.json is now updated by aggregate_single_source for each feed.
-    # We still want to ensure the overall 'last_updated' in stats is current for the entire batch if run this way.
     current_stats = read_stats()
     current_stats["last_updated"] = datetime.now(timezone.utc).isoformat()
     write_stats(current_stats)
+    
+    # Also update the output files after a full run
+    indicators_data = get_all_indicators()
+    processed_data = list(indicators_data.keys())
+    
+    palo_alto_output = format_for_palo_alto(processed_data)
+    palo_alto_file_path = os.path.join(DATA_DIR, "palo_alto_edl.txt")
+    with open(palo_alto_file_path, "w") as f:
+        f.write(palo_alto_output)
 
-    # Output files are already updated by fetch_and_process_single_feed within run_aggregator's loop,
-    # but we can ensure they are consistent by re-reading the latest db.json if needed,
-    # or trust that aggregate_single_source handles it.
-    # For now, relying on aggregate_single_source to update them.
+    fortinet_output = format_for_fortinet(processed_data)
+    fortinet_file_path = os.path.join(DATA_DIR, "fortinet_edl.txt")
+    with open(fortinet_file_path, "w") as f:
+        f.write(fortinet_output)
 
     if update_status:
         AGGREGATION_STATUS = "completed"
@@ -334,7 +318,6 @@ def aggregation_task(update_status=True): # Modified aggregation_task
 def run_script():
     global AGGREGATION_STATUS
     AGGREGATION_STATUS = "running"
-    # Run the aggregation script in a separate thread to avoid blocking the web server
     thread = threading.Thread(target=aggregation_task)
     thread.start()
     return jsonify({"status": "running"})

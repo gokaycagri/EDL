@@ -1,44 +1,37 @@
 import unittest
-import sys
-import os
+from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
-
-# Add the src directory to the Python path
 from threat_feed_aggregator.data_processor import process_data
 
 class TestDataProcessor(unittest.TestCase):
 
-    def test_process_data_empty_input(self):
-        db = {}
-        processed_db, count = process_data("", db)
-        self.assertEqual(processed_db, {})
+    @patch('threat_feed_aggregator.data_processor.upsert_indicators_bulk')
+    def test_process_data_empty_input(self, mock_upsert):
+        count = process_data("", data_format="text")
         self.assertEqual(count, 0)
+        mock_upsert.assert_not_called()
 
-    def test_process_data_add_new_items(self):
-        db = {}
+    @patch('threat_feed_aggregator.data_processor.upsert_indicators_bulk')
+    def test_process_data_add_new_items(self, mock_upsert):
         raw_data = "item1\nitem2"
-        processed_db, count = process_data(raw_data, db)
-        self.assertIn("item1", processed_db)
-        self.assertIn("item2", processed_db)
-        self.assertIn("last_seen", processed_db["item1"])
+        count = process_data(raw_data, data_format="text")
         self.assertEqual(count, 2)
+        mock_upsert.assert_called_once()
+        # Verify that upsert was called with correct data
+        args, _ = mock_upsert.call_args
+        self.assertIn("item1", args[0])
+        self.assertIn("item2", args[0])
 
-    def test_process_data_update_existing_items(self):
-        now_iso = datetime.now(timezone.utc).isoformat()
-        db = {"item1": {"last_seen": "2023-01-01T00:00:00Z"}}
-        raw_data = "item1"
-        processed_db, count = process_data(raw_data, db)
-        self.assertNotEqual(processed_db["item1"]["last_seen"], "2023-01-01T00:00:00Z")
-        self.assertEqual(count, 1)
-
-    def test_process_data_with_comments_and_empty_lines(self):
-        db = {}
+    @patch('threat_feed_aggregator.data_processor.upsert_indicators_bulk')
+    def test_process_data_with_comments_and_empty_lines(self, mock_upsert):
         raw_data = "# comment\nitem1\n\nitem2\n  # another comment"
-        processed_db, count = process_data(raw_data, db)
-        self.assertIn("item1", processed_db)
-        self.assertIn("item2", processed_db)
-        self.assertNotIn("# comment", processed_db)
+        count = process_data(raw_data, data_format="text")
         self.assertEqual(count, 2)
+        mock_upsert.assert_called_once()
+        args, _ = mock_upsert.call_args
+        self.assertIn("item1", args[0])
+        self.assertIn("item2", args[0])
+        self.assertNotIn("# comment", args[0])
 
 if __name__ == '__main__':
     unittest.main()
