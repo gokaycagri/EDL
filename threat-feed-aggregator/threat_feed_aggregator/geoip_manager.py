@@ -2,7 +2,7 @@ import os
 import logging
 import geoip2.database
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 GEOIP_DB_PATH = os.path.join(DATA_DIR, "GeoLite2-Country.mmdb")
 

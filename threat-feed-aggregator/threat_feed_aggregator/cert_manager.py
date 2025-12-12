@@ -9,8 +9,8 @@ from cryptography.x509.oid import NameOID
 import datetime
 
 # Define certificate paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CERTS_DIR = os.path.join(BASE_DIR, "certs")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CERTS_DIR = os.path.join(BASE_DIR, "threat_feed_aggregator", "certs")
 CERT_FILE = os.path.join(CERTS_DIR, "cert.pem")
 KEY_FILE = os.path.join(CERTS_DIR, "key.pem")
 

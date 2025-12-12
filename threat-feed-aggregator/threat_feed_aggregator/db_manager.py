@@ -1,8 +1,11 @@
 import sqlite3
 import logging
 from datetime import datetime, timezone
+import os
 
-DB_NAME = "threat_feed.db"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DB_NAME = os.path.join(DATA_DIR, "threat_feed.db")
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME)

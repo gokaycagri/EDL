@@ -3,8 +3,8 @@ import json
 import logging
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, "config", "config.json")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_FILE = os.path.join(BASE_DIR, "threat_feed_aggregator", "config", "config.json")
 
 def read_config():
     if not os.path.exists(CONFIG_FILE):

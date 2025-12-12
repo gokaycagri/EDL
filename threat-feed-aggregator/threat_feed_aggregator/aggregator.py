@@ -14,10 +14,10 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG) # Set to DEBUG for this module
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(BASE_DIR, "config", "config.json")
-STATS_FILE = os.path.join(BASE_DIR, "stats.json")
-DATA_DIR = os.path.join(BASE_DIR, "data") # Added DATA_DIR for output files
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_FILE = os.path.join(BASE_DIR, "threat_feed_aggregator", "config", "config.json") # Config remains in package
+STATS_FILE = os.path.join(BASE_DIR, "stats.json") # Stats in root
+DATA_DIR = os.path.join(BASE_DIR, "data") # Data in root
 
 def read_config():
     if not os.path.exists(CONFIG_FILE):

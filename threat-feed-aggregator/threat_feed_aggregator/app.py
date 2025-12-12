@@ -41,9 +41,9 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 
 # Define paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
-CONFIG_FILE = os.path.join(BASE_DIR, "config", "config.json")
+CONFIG_FILE = os.path.join(BASE_DIR, "threat_feed_aggregator", "config", "config.json")
 STATS_FILE = os.path.join(BASE_DIR, "stats.json")
 
 # Ensure data directory exists
