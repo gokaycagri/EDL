@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  aggregator:
+    build: .
+    container_name: threat-feed-aggregator
+    ports:
+      - "443:443"
+    volumes:
+      # Persist SQLite Database and EDL files
+      - ./data:/app/data
+      # Persist Configuration
+      - ./threat_feed_aggregator/config:/app/threat_feed_aggregator/config
+      # Persist SSL Certificates
+      - ./threat_feed_aggregator/certs:/app/threat_feed_aggregator/certs
+      # Persist Statistics
+      - ./stats.json:/app/stats.json
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change_me_in_prod}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-123456}
+    restart: unless-stopped

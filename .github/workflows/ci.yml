@@ -1,0 +1,30 @@
+name: Threat Feed Aggregator CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r threat-feed-aggregator/requirements.txt
+        # Install test dependencies if any specifically needed, otherwise requirements.txt covers it
+
+    - name: Run Tests
+      working-directory: ./threat-feed-aggregator
+      run: |
+        python -m unittest discover tests
