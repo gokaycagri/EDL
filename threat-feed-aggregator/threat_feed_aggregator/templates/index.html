@@ -3,587 +3,511 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Threat Feed Aggregator</title>
-    <!-- Bootstrap 5 CSS -->
+    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- FontAwesome Icons -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            background-color: #f0f2f5;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .navbar-brand {
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
-        .card {
-            border: none;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-            margin-bottom: 1.5rem;
-            transition: transform 0.2s;
-        }
-        .card:hover {
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-        }
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .stat-card h2 {
-            font-size: 2.5rem;
-            font-weight: 700;
-        }
-        .list-group-item {
-            border-left: none;
-            border-right: none;
-            padding: 1rem 1.25rem;
-        }
-        .list-group-item:first-child { border-top: none; }
-        .list-group-item:last-child { border-bottom: none; }
-        
-        .badge-custom {
-            font-weight: 500;
-            padding: 0.5em 0.8em;
-        }
-        .btn-icon {
-            margin-right: 5px;
-        }
-        .loader {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
-            margin-left: 10px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .status-badge {
-            font-size: 0.8rem;
-        }
-        .edit-panel {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 10px;
-            border: 1px solid #e9ecef;
-        }
+        body { background-color: #f8f9fa; }
+        .sidebar { height: 100vh; background-color: #343a40; color: white; position: fixed; padding-top: 20px; width: 250px; }
+        .sidebar a { color: white; text-decoration: none; display: block; padding: 10px 20px; }
+        .sidebar a:hover { background-color: #495057; }
+        .content { margin-left: 250px; padding: 20px; }
+        .card { margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; }
+        .card-header { background-color: #fff; border-bottom: 1px solid #e9ecef; font-weight: bold; }
+        .status-badge { font-size: 0.9em; padding: 5px 10px; border-radius: 20px; }
+        .btn-action { margin-right: 5px; }
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="fa-solid fa-shield-halved me-2"></i>Threat Feed Aggregator
-            </a>
-            <div class="ms-auto">
-                <a href="/logout" class="btn btn-outline-light btn-sm">
-                    <i class="fa-solid fa-sign-out-alt me-1"></i>Logout
-                </a>
-            </div>
-        </div>
-    </nav>
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h4 class="text-center mb-4"><i class="fas fa-shield-alt"></i> Threat Feed</h4>
+        <a href="#"><i class="fas fa-tachometer-alt me-2"></i> Dashboard</a>
+        <a href="{{ url_for('logout') }}"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
+    </div>
 
-        <!-- Dashboard Stats Row -->
-        <div class="row mb-4">
-            <div class="col-md-8">
-                <div class="card h-100">
-                    <div class="card-body d-flex align-items-center justify-content-between">
-                        <div>
-                            <h5 class="card-title text-muted mb-0">System Status</h5>
-                            <p class="card-text mt-2">
-                                Aggregation System is 
-                                <span class="badge bg-success">Active</span>
-                            </p>
-                            <div id="status-message" class="alert alert-info py-2 px-3 mt-2 mb-0" style="display: none; font-size: 0.9rem;"></div>
-                        </div>
-                        <div class="text-end">
-                            <button id="run-button" class="btn btn-primary btn-lg shadow-sm">
-                                <i class="fa-solid fa-sync me-2"></i>Run All Feeds
-                            </button>
-                            <div id="loader" class="loader" style="display: none;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card stat-card h-100">
-                    <div class="card-body text-center d-flex flex-column justify-content-center">
-                        <h6 class="text-uppercase opacity-75 mb-2">Total Unique IPs</h6>
-                        <h2 class="mb-0">{{ unique_ip_count }}</h2>
-                    </div>
-                </div>
+    <!-- Content -->
+    <div class="content">
+        <!-- Header & Status -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h3><i class="fas fa-network-wired"></i> Dashboard</h3>
+            <div>
+                <span class="me-2 fw-bold">System Status:</span>
+                <span id="system-status" class="badge bg-secondary status-badge">Checking...</span>
+                <button id="run-btn" class="btn btn-primary btn-sm ms-3" onclick="runAggregation()">
+                    <i class="fas fa-sync"></i> Run All Feeds
+                </button>
             </div>
         </div>
 
-        <!-- Analytics Row -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-chart-pie me-2 text-primary"></i>Threat Analytics (Top 10 Countries)</h5>
+        <!-- Global Stats -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card text-center text-primary">
+                    <div class="card-body">
+                        <h6>TOTAL INDICATORS</h6>
+                        <h2 class="display-4 fw-bold">{{ total_indicator_count }}</h2>
                     </div>
-                    <div class="card-body" style="height: 300px; position: relative;">
-                        <canvas id="countryChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center text-success">
+                    <div class="card-body">
+                        <h6>UNIQUE IPs</h6>
+                        <h2 class="display-4 fw-bold">{{ indicator_counts_by_type.get('ip', 0) }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center text-info">
+                    <div class="card-body">
+                        <h6>DOMAINS/URLs</h6>
+                        <h2 class="display-4 fw-bold">{{ indicator_counts_by_type.get('domain', 0) + indicator_counts_by_type.get('url', 0) }}</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center text-warning">
+                    <div class="card-body">
+                        <h6>WHITELISTED</h6>
+                        <h2 class="display-4 fw-bold">{{ whitelist|length }}</h2>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="row">
-            <!-- Left Column: Sources -->
-            <div class="col-lg-8">
-                <!-- Add New Source Card -->
-                <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-plus-circle me-2 text-primary"></i>Add New Source</h5>
+            <!-- Left Column: Chart & Active Feeds -->
+            <div class="col-md-8">
+                <!-- Detailed Active Jobs Status (New) -->
+                <div class="card mb-3" id="active-jobs-card" style="display: none;">
+                    <div class="card-header bg-light text-dark">
+                        <i class="fas fa-spinner fa-spin me-2"></i> Running Jobs
                     </div>
-                    <div class="card-body">
-                        <form action="/add" method="post" class="row g-3">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <div class="col-md-4">
-                                <input type="text" name="name" class="form-control" placeholder="Display Name" required>
-                            </div>
-                            <div class="col-md-5">
-                                <input type="text" name="url" class="form-control" placeholder="Feed URL" required>
-                            </div>
-                            <div class="col-md-3">
-                                <select name="format" class="form-select" onchange="toggleKeyField(this)">
-                                    <option value="text">Text</option>
-                                    <option value="json">JSON</option>
-                                    <option value="csv">CSV</option>
-                                </select>
-                            </div>
-                            <div class="col-md-12" id="key-field-group" style="display: none;">
-                                <input type="text" name="key_or_column" class="form-control" placeholder="JSON Key or CSV Column Index">
-                            </div>
-                            <div class="col-md-8">
-                                <div class="input-group">
-                                    <span class="input-group-text"><i class="fa-regular fa-clock"></i></span>
-                                    <input type="number" name="schedule_interval_minutes" class="form-control" placeholder="Schedule Interval (minutes)" min="1">
-                                </div>
-                            </div>
-                            <div class="col-md-4 text-end">
-                                <button type="submit" class="btn btn-success w-100">
-                                    <i class="fa-solid fa-check me-1"></i>Add Source
-                                </button>
-                            </div>
-                        </form>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush" id="active-jobs-list">
+                            <!-- Populated via JS -->
+                        </ul>
                     </div>
                 </div>
 
-                <!-- Sources List -->
+                <!-- Threat Map / Chart -->
                 <div class="card">
-                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fa-solid fa-list-ul me-2 text-primary"></i>Active Sources</h5>
-                        <span class="badge bg-secondary">{{ urls|length }} Sources</span>
+                    <div class="card-header"><i class="fas fa-chart-pie me-2"></i> Threat Analytics (Top 10 Countries)</div>
+                    <div class="card-body">
+                        <canvas id="threatChart" height="100"></canvas>
                     </div>
-                    <ul class="list-group list-group-flush">
-                        {% for item in urls %}
-                        <li class="list-group-item">
-                            <div class="d-flex justify-content-between align-items-center" style="cursor: pointer;" onclick="toggleEdit({{ loop.index0 }})">
+                </div>
+
+                <!-- Active Feeds List -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-list-ul me-2"></i> Configured Sources</span>
+                        <span class="badge bg-secondary">{{ config.source_urls|length }} Sources</span>
+                    </div>
+                    <div class="card-body">
+                        {% for source in config.source_urls %}
+                        <div class="border-bottom py-3">
+                            <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <h6 class="mb-1 fw-bold">{{ item.name }}</h6>
-                                    <small class="text-muted text-break">{{ item.url }}</small>
+                                    <h6 class="fw-bold mb-1">{{ source.name }}</h6>
+                                    <small class="text-muted"><i class="fas fa-link me-1"></i> {{ source.url }}</small>
                                 </div>
                                 <div class="text-end">
-                                    <div class="mb-1">
-                                        <span class="badge bg-light text-dark border me-1">
-                                            <i class="fa-solid fa-database me-1"></i>{{ stats.get(item.name, {}).get('count', 0) }} IPs
-                                        </span>
-                                        {% if item.get('schedule_interval_minutes') %}
-                                        <span class="badge bg-light text-dark border">
-                                            <i class="fa-solid fa-clock me-1"></i>{{ item.schedule_interval_minutes }}m
-                                        </span>
-                                        {% endif %}
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                        Last: {{ stats.get(item.name, {}).get('last_updated', 'Never') }}
-                                        ({{ stats.get(item.name, {}).get('fetch_time', '0s') }})
-                                    </small>
+                                    <button class="btn btn-sm btn-outline-secondary btn-action" data-bs-toggle="collapse" data-bs-target="#edit-{{ loop.index0 }}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
                                 </div>
                             </div>
-                            
-                            <!-- Hidden Edit Form -->
-                            <div id="edit-form-{{ loop.index0 }}" class="edit-panel" style="display: none;" onclick="event.stopPropagation();">
-                                <form action="/update/{{ loop.index0 }}" method="post">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <div class="row g-2">
-                                        <div class="col-md-4">
-                                            <label class="form-label small">Name</label>
-                                            <input type="text" name="name" value="{{ item.name }}" class="form-control form-control-sm" required>
-                                        </div>
-                                        <div class="col-md-8">
-                                            <label class="form-label small">URL</label>
-                                            <input type="text" name="url" value="{{ item.url }}" class="form-control form-control-sm" required>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label small">Format</label>
-                                            <select name="format" class="form-select form-select-sm" onchange="toggleKeyField(this)">
-                                                <option value="text" {% if item.format == 'text' %}selected{% endif %}>Text</option>
-                                                <option value="json" {% if item.format == 'json' %}selected{% endif %}>JSON</option>
-                                                <option value="csv" {% if item.format == 'csv' %}selected{% endif %}>CSV</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label small">Key/Col</label>
-                                            <input type="text" name="key_or_column" value="{{ item.get('key_or_column', '') }}" class="form-control form-control-sm" placeholder="Optional">
-                                        </div>
-                                        <div class="col-md-4">
-                                            <label class="form-label small">Interval (m)</label>
-                                            <input type="number" name="schedule_interval_minutes" value="{{ item.get('schedule_interval_minutes', '') }}" class="form-control form-control-sm" min="1">
-                                        </div>
-                                    </div>
-                                    <div class="d-flex justify-content-between mt-3">
-                                        <a href="/remove/{{ loop.index0 }}" class="btn btn-outline-danger btn-sm">
-                                            <i class="fa-solid fa-trash-can me-1"></i>Remove
-                                        </a>
-                                        <div>
-                                            <button type="button" class="btn btn-secondary btn-sm me-1" onclick="toggleEdit({{ loop.index0 }})">Cancel</button>
-                                            <button type="submit" class="btn btn-primary btn-sm">Update & Run</button>
-                                        </div>
-                                    </div>
-                                </form>
+                            <!-- Stats Row -->
+                            <div class="d-flex justify-content-start mt-2 gap-4">
+                                <span class="badge bg-light text-dark border"><i class="fas fa-database me-1"></i> {{ stats.get(source.name, {}).get('count', '0') }} Items</span>
+                                <span class="badge bg-light text-dark border"><i class="fas fa-clock me-1"></i> {{ source.schedule_interval_minutes }}m</span>
+                                <span class="badge bg-light text-dark border" title="Last Updated"><i class="fas fa-history me-1"></i> {{ stats.get(source.name, {}).get('last_updated', 'Never') }} ({{ stats.get(source.name, {}).get('fetch_time', '0s') }})</span>
                             </div>
-                        </li>
+
+                            <!-- Edit Form -->
+                            <div class="collapse mt-3" id="edit-{{ loop.index0 }}">
+                                <div class="card card-body bg-light">
+                                    <form action="{{ url_for('update_url', index=loop.index0) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <div class="row g-2">
+                                            <div class="col-md-3">
+                                                <label class="form-label small">Name</label>
+                                                <input type="text" class="form-control form-control-sm" name="name" value="{{ source.name }}" required>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">URL</label>
+                                                <input type="text" class="form-control form-control-sm" name="url" value="{{ source.url }}" required>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">Format</label>
+                                                <select class="form-select form-select-sm" name="format">
+                                                    <option value="text" {% if source.format == 'text' %}selected{% endif %}>Text</option>
+                                                    <option value="json" {% if source.format == 'json' %}selected{% endif %}>JSON</option>
+                                                    <option value="csv" {% if source.format == 'csv' %}selected{% endif %}>CSV</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">Key/Col</label>
+                                                <input type="text" class="form-control form-control-sm" name="key_or_column" value="{{ source.key_or_column or '' }}" placeholder="Optional">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label small">Interval (m)</label>
+                                                <input type="number" class="form-control form-control-sm" name="schedule_interval_minutes" value="{{ source.schedule_interval_minutes }}" min="1">
+                                            </div>
+                                        </div>
+                                        <div class="mt-2 d-flex justify-content-between">
+                                            <a href="{{ url_for('remove_url', index=loop.index0) }}" class="text-danger small text-decoration-none" onclick="return confirm('Are you sure?')"><i class="fas fa-trash-alt"></i> Remove</a>
+                                            <div>
+                                                <button type="button" class="btn btn-sm btn-secondary me-1" data-bs-toggle="collapse" data-bs-target="#edit-{{ loop.index0 }}">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-primary">Update & Run</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                         {% endfor %}
-                        {% if not urls %}
-                        <li class="list-group-item text-center py-4 text-muted">
-                            <i class="fa-solid fa-info-circle me-2"></i>No threat feeds configured yet.
-                        </li>
-                        {% endif %}
-                    </ul>
+                    </div>
+                </div>
+
+                <!-- Job History Table (New) -->
+                <div class="card mt-4">
+                    <div class="card-header"><i class="fas fa-history me-2"></i> Job History & Logs (Last 20)</div>
+                    <div class="card-body p-0">
+                        <table class="table table-striped table-hover mb-0" style="font-size: 0.9em;">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Status</th>
+                                    <th>Start Time</th>
+                                    <th>Duration</th>
+                                    <th>Items</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="job-history-body">
+                                <!-- Populated via JS -->
+                                <tr><td colspan="6" class="text-center text-muted">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            <!-- Right Column: Sidebar -->
-            <div class="col-lg-4">
-                <!-- Downloads Card -->
+            <!-- Right Column: Actions & Settings -->
+            <div class="col-md-4">
+                
+                <!-- Add Source -->
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-download me-2 text-primary"></i>Export Lists</h5>
+                    <div class="card-header"><i class="fas fa-plus-circle me-2"></i> Add New Source</div>
+                    <div class="card-body">
+                        <form action="{{ url_for('add_url') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <input type="text" class="form-control" name="name" placeholder="Display Name" required>
+                            </div>
+                            <div class="mb-2">
+                                <input type="text" class="form-control" name="url" placeholder="Feed URL" required>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <select class="form-select" name="format">
+                                        <option value="text">Text</option>
+                                        <option value="json">JSON</option>
+                                        <option value="csv">CSV</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                                        <input type="number" class="form-control" name="schedule_interval_minutes" placeholder="Mins" min="1">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-success"><i class="fas fa-check me-2"></i> Add Source</button>
+                            </div>
+                        </form>
                     </div>
+                </div>
+
+                <!-- Downloads -->
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-download me-2"></i> Export Lists</div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
-                            <a href="/data/palo_alto_edl.txt" class="btn btn-outline-dark text-start">
-                                <i class="fa-solid fa-file-shield me-2 text-danger"></i>Palo Alto EDL
-                            </a>
-                            <a href="/data/fortinet_edl.txt" class="btn btn-outline-dark text-start">
-                                <i class="fa-solid fa-file-shield me-2 text-success"></i>Fortinet EDL
-                            </a>
+                            <a href="{{ url_for('download_file', filename='palo_alto_edl.txt') }}" class="btn btn-outline-primary text-start"><i class="fas fa-file-alt me-2"></i> Palo Alto EDL</a>
+                            <a href="{{ url_for('download_file', filename='fortinet_edl.txt') }}" class="btn btn-outline-primary text-start"><i class="fas fa-file-alt me-2"></i> Fortinet EDL</a>
                         </div>
                     </div>
                 </div>
 
-                <!-- Settings Card -->
+                <!-- Settings -->
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-sliders me-2 text-primary"></i>Settings</h5>
-                    </div>
+                    <div class="card-header"><i class="fas fa-cogs me-2"></i> Settings</div>
                     <div class="card-body">
-                        <form action="/update_settings" method="post">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <div class="mb-3">
-                                <label for="lifetime" class="form-label">Indicator Lifetime (days)</label>
-                                <div class="input-group">
-                                    <input type="number" id="lifetime" name="indicator_lifetime_days" value="{{ config.get('indicator_lifetime_days', 30) }}" class="form-control">
-                                    <button type="submit" class="btn btn-outline-primary">Save</button>
-                                </div>
-                                <div class="form-text">Older IPs are automatically removed.</div>
+                        <form action="{{ url_for('update_settings') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <label class="form-label small">Indicator Lifetime (days)</label>
+                            <div class="input-group mb-2">
+                                <input type="number" class="form-control" name="indicator_lifetime_days" value="{{ config.indicator_lifetime_days }}" min="0">
+                                <button class="btn btn-outline-secondary" type="submit">Save</button>
+                            </div>
+                            <small class="text-muted d-block mb-3">Older IPs are automatically removed.</small>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- SSL -->
+                <div class="card">
+                    <div class="card-header"><i class="fas fa-lock me-2"></i> SSL Configuration</div>
+                    <div class="card-body">
+                        <form action="{{ url_for('upload_cert') }}" method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <label class="form-label small">Upload .pfx Certificate</label>
+                                <input type="file" class="form-control form-control-sm" name="pfx_file">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">PFX Password</label>
+                                <input type="password" class="form-control form-control-sm" name="password">
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-upload me-2"></i> Upload & Restart</button>
                             </div>
                         </form>
                     </div>
                 </div>
 
-                <!-- SSL Card -->
+                <!-- Whitelist -->
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-lock me-2 text-warning"></i>SSL Configuration</h5>
-                    </div>
+                    <div class="card-header"><i class="fas fa-clipboard-check me-2"></i> Whitelist</div>
                     <div class="card-body">
-                        <form action="/upload_cert" method="post" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <div class="mb-3">
-                                <label for="pfx_file" class="form-label small">Upload .pfx Certificate</label>
-                                <input type="file" id="pfx_file" name="pfx_file" class="form-control form-control-sm" accept=".pfx" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label small">PFX Password</label>
-                                <input type="password" id="password" name="password" class="form-control form-control-sm" placeholder="Optional">
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-warning btn-sm text-dark">
-                                    <i class="fa-solid fa-upload me-1"></i>Upload & Restart
-                                </button>
-                            </div>
+                        <form action="{{ url_for('add_whitelist') }}" method="POST" class="mb-3">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="text" class="form-control form-control-sm mb-2" name="item" placeholder="IP or CIDR (e.g. 8.8.8.8, 192.168.1.0/24)" required>
+                            <input type="text" class="form-control form-control-sm mb-2" name="description" placeholder="Description (Optional)">
+                            <button type="submit" class="btn btn-dark btn-sm w-100">Add to Whitelist</button>
                         </form>
-                    </div>
-                </div>
-
-                <!-- Whitelist Management Card -->
-                <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-file-circle-check me-2 text-success"></i>Whitelist</h5>
-                    </div>
-                    <div class="card-body">
-                        <form action="/add_whitelist" method="post" class="mb-3">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <div class="input-group input-group-sm mb-2">
-                                <input type="text" name="item" class="form-control" placeholder="IP or CIDR (e.g. 8.8.8.8, 192.168.1.0/24)" required>
-                            </div>
-                            <div class="input-group input-group-sm mb-2">
-                                <input type="text" name="description" class="form-control" placeholder="Description (Optional)">
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-success btn-sm">Add to Whitelist</button>
-                            </div>
-                        </form>
-                        
-                        <div style="max-height: 200px; overflow-y: auto;">
-                            <ul class="list-group list-group-flush small">
+                        <div style="max-height: 150px; overflow-y: auto;">
+                            {% if whitelist %}
+                                <ul class="list-group list-group-flush small">
                                 {% for w in whitelist %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                    <div style="overflow: hidden; text-overflow: ellipsis;">
-                                        <strong>{{ w.item }}</strong>
-                                        <br><span class="text-muted" style="font-size: 0.75em;">{{ w.description }}</span>
-                                    </div>
-                                    <a href="/remove_whitelist/{{ w.id }}" class="text-danger ms-2"><i class="fa-solid fa-times"></i></a>
-                                </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                        <span title="{{ w.description }}">{{ w.item }}</span>
+                                        <a href="{{ url_for('remove_whitelist', item_id=w.id) }}" class="text-danger"><i class="fas fa-times"></i></a>
+                                    </li>
                                 {% endfor %}
-                                {% if not whitelist %}
-                                <li class="list-group-item text-center text-muted">Empty whitelist</li>
-                                {% endif %}
-                            </ul>
+                                </ul>
+                            {% else %}
+                                <p class="text-muted small text-center">Empty whitelist</p>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
 
-                <!-- LDAP Configuration Card -->
+                <!-- LDAP Config -->
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-users me-2 text-info"></i>LDAP Configuration</h5>
-                    </div>
+                    <div class="card-header"><i class="fas fa-users me-2"></i> LDAP Configuration</div>
                     <div class="card-body">
-                        <form action="/update_ldap_settings" method="post">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            
+                        <form action="{{ url_for('update_ldap_settings') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" id="ldap_enabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap', {}).get('enabled') %}checked{% endif %}>
                                 <label class="form-check-label" for="ldap_enabled">Enable LDAP Auth</label>
                             </div>
-
                             <div class="mb-2">
-                                <label for="ldap_server" class="form-label small">Server URL</label>
-                                <input type="text" id="ldap_server" name="ldap_server" class="form-control form-control-sm" value="{{ config.get('auth', {}).get('ldap', {}).get('server', '') }}" placeholder="ldap://192.168.1.10">
+                                <label class="form-label small">Server URL</label>
+                                <input type="text" class="form-control form-control-sm" name="ldap_server" value="{{ config.get('auth', {}).get('ldap', {}).get('server', '') }}" placeholder="ldap://domain.com">
                             </div>
-                            
-                            <div class="mb-3">
-                                <label for="ldap_domain" class="form-label small">Domain / Base DN</label>
-                                <input type="text" id="ldap_domain" name="ldap_domain" class="form-control form-control-sm" value="{{ config.get('auth', {}).get('ldap', {}).get('domain', '') }}" placeholder="EXAMPLE or example.com">
+                            <div class="mb-2">
+                                <label class="form-label small">Domain / Base DN</label>
+                                <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ config.get('auth', {}).get('ldap', {}).get('domain', '') }}" placeholder="dc=example,dc=com">
                             </div>
-
                             <div class="d-grid">
-                                <button type="submit" class="btn btn-info btn-sm text-white">
-                                    <i class="fa-solid fa-save me-1"></i>Save LDAP Settings
-                                </button>
+                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save LDAP Settings</button>
                             </div>
                         </form>
                     </div>
                 </div>
 
-                <!-- Admin Password Card -->
+                <!-- Admin Password -->
                 <div class="card">
-                    <div class="card-header bg-white py-3">
-                        <h5 class="mb-0"><i class="fa-solid fa-key me-2 text-danger"></i>Admin Password</h5>
-                    </div>
+                    <div class="card-header"><i class="fas fa-key me-2"></i> Admin Password</div>
                     <div class="card-body">
-                        <form action="/change_admin_password" method="post">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                            <div class="mb-3">
-                                <label for="current_password" class="form-label small">Current Password</label>
-                                <input type="password" id="current_password" name="current_password" class="form-control form-control-sm" required>
+                        <form action="{{ url_for('change_admin_password') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-2">
+                                <label class="form-label small">Current Password</label>
+                                <input type="password" class="form-control form-control-sm" name="current_password" required>
                             </div>
-                            <div class="mb-3">
-                                <label for="new_password" class="form-label small">New Password</label>
-                                <input type="password" id="new_password" name="new_password" class="form-control form-control-sm" required>
+                            <div class="mb-2">
+                                <label class="form-label small">New Password</label>
+                                <input type="password" class="form-control form-control-sm" name="new_password" required>
                             </div>
-                            <div class="mb-3">
-                                <label for="confirm_new_password" class="form-label small">Confirm New Password</label>
-                                <input type="password" id="confirm_new_password" name="confirm_new_password" class="form-control form-control-sm" required>
+                            <div class="mb-2">
+                                <label class="form-label small">Confirm New Password</label>
+                                <input type="password" class="form-control form-control-sm" name="confirm_new_password" required>
                             </div>
                             <div class="d-grid">
-                                <button type="submit" class="btn btn-danger btn-sm">
-                                    <i class="fa-solid fa-edit me-1"></i>Change Password
-                                </button>
+                                <button type="submit" class="btn btn-warning btn-sm text-white"><i class="fas fa-edit me-2"></i> Change Password</button>
                             </div>
                         </form>
                     </div>
                 </div>
-                
-                <div class="text-center text-muted mt-3">
-                    <small>Threat Feed Aggregator v1.0</small>
-                </div>
+
             </div>
         </div>
+        
+        <footer class="mt-5 text-center text-muted small">
+            <p>Threat Feed Aggregator v1.1</p>
+        </footer>
     </div>
 
-    <!-- Bootstrap JS Bundle -->
+    <!-- JavaScript -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
     <script>
-        // Render Chart
-        const countryStats = {{ country_stats|tojson }};
-        if (countryStats && countryStats.length > 0) {
-            const ctx = document.getElementById('countryChart').getContext('2d');
-            const labels = countryStats.map(item => item.country_code || 'Unknown');
-            const data = countryStats.map(item => item.count);
-            
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '# of IPs',
-                        data: data,
-                        backgroundColor: [
-                            'rgba(255, 99, 132, 0.2)',
-                            'rgba(54, 162, 235, 0.2)',
-                            'rgba(255, 206, 86, 0.2)',
-                            'rgba(75, 192, 192, 0.2)',
-                            'rgba(153, 102, 255, 0.2)',
-                            'rgba(255, 159, 64, 0.2)'
-                        ],
-                        borderColor: [
-                            'rgba(255, 99, 132, 1)',
-                            'rgba(54, 162, 235, 1)',
-                            'rgba(255, 206, 86, 1)',
-                            'rgba(75, 192, 192, 1)',
-                            'rgba(153, 102, 255, 1)',
-                            'rgba(255, 159, 64, 1)'
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-        }
-
-        function toggleKeyField(selectElement) {
-            // Find key field in the same form, handling both main add form and list update forms
-            let form = selectElement.closest('form');
-            let keyField;
-            
-            // Check if it's the main form or loop form
-            if (form.classList.contains('row')) {
-                 keyField = document.getElementById('key-field-group');
-            } else {
-                 // For loop forms, the key field is the 4th input container
-                 // simpler to search by name within the form
-                 let input = form.querySelector('input[name="key_or_column"]');
-                 keyField = input.closest('div'); 
-                 // If the layout in loop form puts input directly in col-md-4, that's what we target.
-                 // Actually in my loop html: <div class="col-md-4"><label>Key/Col</label><input...></div>
-                 keyField = input.closest('.col-md-4');
+        // --- Chart.js Data ---
+        const countryData = {{ country_stats|tojson }};
+        const ctx = document.getElementById('threatChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: countryData.map(item => item.country_code),
+                datasets: [{
+                    label: 'Indicators per Country',
+                    data: countryData.map(item => item.count),
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true } }
             }
+        });
 
-            if (selectElement.value === 'json' || selectElement.value === 'csv') {
-                if(keyField) keyField.style.display = 'block';
-                // For the main form specifically
-                if(selectElement.closest('.card-body').querySelector('#key-field-group')) {
-                     document.getElementById('key-field-group').style.display = 'block';
-                }
-            } else {
-                if(keyField) keyField.style.display = 'none';
-                 // For the main form specifically
-                if(selectElement.closest('.card-body').querySelector('#key-field-group')) {
-                     document.getElementById('key-field-group').style.display = 'none';
-                }
-            }
-        }
-
-        function toggleEdit(index) {
-            var form = document.getElementById('edit-form-' + index);
-            if (form.style.display === 'none') {
-                form.style.display = 'block';
-            } else {
-                form.style.display = 'none';
-            }
-        }
-
-        document.getElementById('run-button').addEventListener('click', function() {
-            var loader = document.getElementById('loader');
-            var statusMessage = document.getElementById('status-message');
-            var runButton = document.getElementById('run-button');
-
-            // Show loader and status message
-            loader.style.display = 'inline-block';
-            statusMessage.style.display = 'block';
-            statusMessage.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Updating feeds... Please wait.';
-            statusMessage.className = 'alert alert-warning py-2 px-3 mt-2 mb-0';
-            
-            // Disable button
-            runButton.disabled = true;
-
-            var csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-            // Make request to the /run endpoint
-            fetch('/run', {
-                headers: {
-                    'X-CSRFToken': csrfToken
-                }
-            })
+        // --- Status Updates ---
+        function updateStatus() {
+            // Check Global Status
+            fetch('/status')
                 .then(response => response.json())
                 .then(data => {
+                    const statusBadge = document.getElementById('system-status');
+                    const runBtn = document.getElementById('run-btn');
+                    
                     if (data.status === 'running') {
-                        // Poll for completion status
-                        var checkStatus = setInterval(function() {
-                            fetch('/status')
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.status === 'completed') {
-                                        clearInterval(checkStatus);
-                                        window.location.reload();
-                                    }
-                                });
-                        }, 2000); // Poll every 2 seconds
+                        statusBadge.className = 'badge bg-warning text-dark status-badge';
+                        statusBadge.innerHTML = '<i class="fas fa-sync fa-spin me-1"></i> Running';
+                        runBtn.disabled = true;
+                        
+                        // Show detailed active jobs card
+                        document.getElementById('active-jobs-card').style.display = 'block';
+                        fetchDetailedStatus();
+                    } else {
+                        statusBadge.className = 'badge bg-success status-badge';
+                        statusBadge.innerHTML = 'Active';
+                        runBtn.disabled = false;
+                        
+                        // Hide detailed card if idle
+                        document.getElementById('active-jobs-card').style.display = 'none';
                     }
-                })
-                .catch(error => {
-                    statusMessage.innerHTML = '<i class="fa-solid fa-exclamation-triangle me-2"></i>Error starting update.';
-                    statusMessage.className = 'alert alert-danger py-2 px-3 mt-2 mb-0';
-                    loader.style.display = 'none';
-                    runButton.disabled = false;
                 });
-        });
+            
+            // Always fetch history
+            fetchJobHistory();
+        }
+
+        function fetchDetailedStatus() {
+            fetch('/api/status_detailed')
+                .then(response => response.json())
+                .then(jobs => {
+                    const list = document.getElementById('active-jobs-list');
+                    list.innerHTML = '';
+                    
+                    if (Object.keys(jobs).length === 0) {
+                        document.getElementById('active-jobs-card').style.display = 'none';
+                        return;
+                    }
+
+                    for (const [source, info] of Object.entries(jobs)) {
+                        let badgeClass = 'bg-primary';
+                        if (info.status === 'Fetching') badgeClass = 'bg-info text-dark';
+                        if (info.status === 'Parsing') badgeClass = 'bg-warning text-dark';
+                        if (info.status === 'Saving') badgeClass = 'bg-success';
+                        if (info.status === 'Failed') badgeClass = 'bg-danger';
+
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        li.innerHTML = `
+                            <div>
+                                <span class="fw-bold">${source}</span>
+                                <div class="small text-muted">${info.details || ''}</div>
+                            </div>
+                            <span class="badge ${badgeClass} rounded-pill">${info.status}</span>
+                        `;
+                        list.appendChild(li);
+                    }
+                });
+        }
+
+        function fetchJobHistory() {
+            fetch('/api/history')
+                .then(response => response.json())
+                .then(history => {
+                    const tbody = document.getElementById('job-history-body');
+                    tbody.innerHTML = '';
+                    
+                    if (history.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No history found.</td></tr>';
+                        return;
+                    }
+
+                    history.forEach(job => {
+                        let statusIcon = '<i class="fas fa-check-circle text-success"></i>';
+                        if (job.status === 'running') statusIcon = '<i class="fas fa-spinner fa-spin text-warning"></i>';
+                        if (job.status === 'failure') statusIcon = '<i class="fas fa-times-circle text-danger"></i>';
+                        
+                        const row = `
+                            <tr>
+                                <td>${job.source_name}</td>
+                                <td>${statusIcon} ${job.status}</td>
+                                <td>${job.start_time}</td>
+                                <td>${job.duration}</td>
+                                <td>${job.items_processed}</td>
+                                <td class="text-muted small">${job.message || '-'}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                });
+        }
+
+        function runAggregation() {
+            const btn = document.getElementById('run-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+            
+            fetch('/run')
+                .then(response => response.json())
+                .then(data => {
+                    updateStatus(); // Immediate check
+                });
+        }
+
+        // Initial Load & Interval
+        updateStatus();
+        setInterval(updateStatus, 3000); // Refresh every 3 seconds
+
     </script>
 </body>
 </html>

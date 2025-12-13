@@ -4,6 +4,10 @@ from io import StringIO
 import re
 import ipaddress
 
+# Pre-compile regex patterns for performance
+URL_PATTERN = re.compile(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
+DOMAIN_PATTERN = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$")
+
 def parse_text(raw_data):
     """
     Parses plain text data, with one indicator per line.
@@ -46,6 +50,7 @@ def identify_indicator_type(indicator):
         return "unknown"
 
     # Check for IP address or CIDR
+    # ipaddress module is generally efficient enough, but regex could be used for pre-filtering if needed.
     try:
         if '/' in indicator:
             ipaddress.ip_network(indicator, strict=False)
@@ -57,13 +62,11 @@ def identify_indicator_type(indicator):
         pass # Not an IP or CIDR
 
     # Check for URL
-    # A simple regex for URL, more robust checks might involve URL parsing libraries
-    if re.match(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+", indicator):
+    if URL_PATTERN.match(indicator):
         return "url"
 
-    # Check for Domain (simple check: contains a dot, no spaces, not an IP, not a URL)
-    # This might catch some IPs as domains if IP check failed, but IP check is first.
-    if re.match(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$", indicator):
+    # Check for Domain
+    if DOMAIN_PATTERN.match(indicator):
          return "domain"
 
     return "unknown"

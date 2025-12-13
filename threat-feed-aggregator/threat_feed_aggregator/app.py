@@ -15,13 +15,13 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.triggers.interval import IntervalTrigger
 from flask_wtf.csrf import CSRFProtect
 
-# Import refactored modules
-from .aggregator import main as run_aggregator, aggregate_single_source, fetch_and_process_single_feed
+from .config_manager import read_config, write_config, read_stats, write_stats, BASE_DIR, DATA_DIR, CONFIG_FILE, STATS_FILE
+from .aggregator import main as run_aggregator, fetch_and_process_single_feed, CURRENT_JOB_STATUS
 from .output_formatter import format_for_palo_alto, format_for_fortinet
 from .db_manager import (
     init_db,
     get_all_indicators,
-    get_unique_ip_count,
+    get_unique_indicator_count,
     get_whitelist,
     add_whitelist_item,
     remove_whitelist_item,
@@ -29,7 +29,9 @@ from .db_manager import (
     get_country_stats,
     set_admin_password,
     check_admin_credentials,
-    get_admin_password_hash
+    get_admin_password_hash,
+    get_indicator_counts_by_type,
+    get_job_history # NEW
 )
 from .cert_manager import generate_self_signed_cert, process_pfx_upload, get_cert_paths
 from .auth_manager import check_credentials
@@ -48,23 +50,11 @@ app.secret_key = SECRET_KEY
 app.config['SESSION_COOKIE_NAME'] = 'threat_feed_aggregator_session'
 
 # SECURITY HARDENING
-# 1. CSRF Protection
 csrf = CSRFProtect(app)
-
-# 2. File Upload Limit (Max 2MB)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
-
-# 3. Secure Cookie Settings (Requires HTTPS)
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = False
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-
-
-# Define paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-CONFIG_FILE = os.path.join(BASE_DIR, "threat_feed_aggregator", "config", "config.json")
-STATS_FILE = os.path.join(BASE_DIR, "stats.json")
 
 # Ensure data directory exists
 if not os.path.exists(DATA_DIR):
@@ -77,21 +67,21 @@ jobstores = {
 scheduler = BackgroundScheduler(jobstores=jobstores)
 
 # Global variables
-AGGREGATION_STATUS = "idle"  # idle, running, completed
+AGGREGATION_STATUS = "idle"
 
 # Initialize Database
 init_db()
 
 # Initialize admin password from ENV if DB is empty
 if ADMIN_PASSWORD_ENV:
-    if not get_admin_password_hash(): # Check if admin password exists in DB
+    if not get_admin_password_hash():
         success, msg = set_admin_password(ADMIN_PASSWORD_ENV)
         if success:
             logging.info("Admin password initialized from ADMIN_PASSWORD environment variable.")
         else:
             logging.error(f"Failed to set initial admin password from ENV: {msg}")
 else:
-    logging.warning("Environment variable 'ADMIN_PASSWORD' is not set. Please set it for initial admin setup or change it via GUI.")
+    logging.warning("Environment variable 'ADMIN_PASSWORD' is not set.")
 
 # Ensure SSL Certificates exist
 generate_self_signed_cert()
@@ -104,68 +94,25 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def read_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {"source_urls": []}
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
-
-def write_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
-    update_scheduled_jobs()
-
 def update_scheduled_jobs():
-    """
-    Manages APScheduler jobs based on the current configuration in config.json.
-    Adds, updates, or removes jobs for individual threat feed sources.
-    """
     config = read_config()
     configured_sources = {source['name']: source for source in config.get('source_urls', [])}
 
-    # Clear all existing jobs before re-adding them based on current config
     scheduler.remove_all_jobs()
 
-    # Add or update jobs for configured sources
     for source_name, source_config in configured_sources.items():
         interval_minutes = source_config.get('schedule_interval_minutes')
         if interval_minutes:
             job_id = f"feed_fetch_{source_name}"
-            existing_job = scheduler.get_job(job_id)
-
-            if not existing_job:
-                scheduler.add_job(
-                    fetch_and_process_single_feed,
-                    'interval',
-                    minutes=interval_minutes,
-                    id=job_id,
-                    args=[source_config],
-                    replace_existing=True
-                )
-                print(f"Scheduled job for {source_name} to run every {interval_minutes} minutes.")
-            else:
-                if existing_job.trigger.interval.total_seconds() / 60 != interval_minutes:
-                    scheduler.reschedule_job(job_id, trigger='interval', minutes=interval_minutes)
-                    print(f"Rescheduled job for {source_name} to run every {interval_minutes} minutes.")
-
-def read_stats():
-    if not os.path.exists(STATS_FILE):
-        return {}
-    with open(STATS_FILE, "r") as f:
-        try:
-            stats = json.load(f)
-            if isinstance(stats, dict):
-                for key, value in stats.items():
-                    if not isinstance(value, dict):
-                        stats[key] = {}
-                return stats
-        except json.JSONDecodeError:
-            pass
-    return {}
-
-def write_stats(stats):
-    with open(STATS_FILE, "w") as f:
-        json.dump(stats, f, indent=4)
+            scheduler.add_job(
+                fetch_and_process_single_feed,
+                'interval',
+                minutes=interval_minutes,
+                id=job_id,
+                args=[source_config],
+                replace_existing=True
+            )
+            print(f"Scheduled job for {source_name} to run every {interval_minutes} minutes.")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -174,12 +121,11 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        # Use auth_manager to check credentials (Local or LDAP)
         success, message = check_credentials(username, password)
         
         if success:
             session['logged_in'] = True
-            session['username'] = username # Store username for display
+            session['username'] = username
             session.modified = True
             return redirect(url_for('index'))
         else:
@@ -199,16 +145,10 @@ def index():
     config = read_config()
     stats = read_stats()
     
-    # Get unique IP count from DB
-    unique_ip_count = get_unique_ip_count()
-    
-    # Get Country Stats
+    total_indicator_count = get_unique_indicator_count()
+    indicator_counts_by_type = get_indicator_counts_by_type()
     country_stats = get_country_stats()
-    
-    # Get Whitelist
     whitelist = get_whitelist()
-    
-    logging.debug(f"Country Stats for chart: {country_stats}")
     
     local_tz = get_localzone()
 
@@ -243,7 +183,35 @@ def index():
             'interval': f"{job.trigger.interval.total_seconds() / 60} minutes" if isinstance(job.trigger, IntervalTrigger) else 'N/A'
         })
 
-    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, unique_ip_count=unique_ip_count, whitelist=whitelist, country_stats=country_stats)
+    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, total_indicator_count=total_indicator_count, indicator_counts_by_type=indicator_counts_by_type, whitelist=whitelist, country_stats=country_stats)
+
+@app.route('/api/status_detailed')
+@login_required
+def status_detailed():
+    """Returns detailed status of currently running jobs."""
+    return jsonify(CURRENT_JOB_STATUS)
+
+@app.route('/api/history')
+@login_required
+def job_history():
+    """Returns past job execution history."""
+    history = get_job_history(limit=20)
+    # Format dates
+    local_tz = get_localzone()
+    for item in history:
+        try:
+            start_dt = datetime.fromisoformat(item['start_time'])
+            item['start_time'] = start_dt.astimezone(local_tz).strftime('%Y-%m-%d %H:%M:%S')
+            if item['end_time']:
+                end_dt = datetime.fromisoformat(item['end_time'])
+                item['end_time'] = end_dt.astimezone(local_tz).strftime('%H:%M:%S')
+                duration = (end_dt - start_dt).total_seconds()
+                item['duration'] = f"{duration:.2f}s"
+            else:
+                item['duration'] = "Running..."
+        except Exception:
+            pass
+    return jsonify(history)
 
 @app.route('/add', methods=['POST'])
 @login_required
@@ -263,6 +231,7 @@ def add_url():
             new_source["schedule_interval_minutes"] = schedule_interval_minutes
         config["source_urls"].append(new_source)
         write_config(config)
+        update_scheduled_jobs()
     return redirect(url_for('index'))
 
 @app.route('/update/<int:index>', methods=['POST'])
@@ -287,6 +256,8 @@ def update_url(index):
                     del updated_source["schedule_interval_minutes"]
             config["source_urls"][index] = updated_source
             write_config(config)
+            
+            update_scheduled_jobs()
 
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
             thread.start()
@@ -300,6 +271,7 @@ def remove_url(index):
     if 0 <= index < len(config["source_urls"]):
         config["source_urls"].pop(index)
         write_config(config)
+        update_scheduled_jobs()
     return redirect(url_for('index'))
 
 @app.route('/update_settings', methods=['POST'])
@@ -349,8 +321,6 @@ def upload_cert():
     if file:
         file_content = file.read()
         success, message = process_pfx_upload(file_content, password)
-        if success:
-             pass
     return redirect(url_for('index'))
 
 # --- Whitelist Routes ---
@@ -366,13 +336,11 @@ def add_whitelist():
         if not success:
             flash(f'Error: {message}')
         else:
-            # Immediate Cleanup: If we add a whitelist item, we should remove it from indicators db
-            # This is a basic exact match cleanup. For CIDR, we'd need a heavier scan.
             delete_whitelisted_indicators([item])
             
     return redirect(url_for('index'))
 
-@app.route('/remove_whitelist/<int:item_id>', methods=['GET']) # Using GET for simple link, POST better for safety
+@app.route('/remove_whitelist/<int:item_id>', methods=['GET'])
 @login_required
 def remove_whitelist(item_id):
     remove_whitelist_item(item_id)
@@ -393,7 +361,6 @@ def change_admin_password():
         flash('New passwords do not match or are empty.', 'danger')
         return redirect(url_for('index'))
     
-    # Update password in DB
     success, message = set_admin_password(new_password)
     if success:
         flash('Admin password updated successfully. Please re-login with your new password.', 'success')
@@ -418,22 +385,14 @@ def aggregation_task(update_status=True):
 
     run_aggregator(source_urls)
     
-    current_stats = read_stats()
-    current_stats["last_updated"] = datetime.now(timezone.utc).isoformat()
-    write_stats(current_stats)
-    
-    # Also update the output files after a full run
     indicators_data = get_all_indicators()
-    processed_data = list(indicators_data.keys())
     
-    palo_alto_output = format_for_palo_alto(processed_data)
-    palo_alto_file_path = os.path.join(DATA_DIR, "palo_alto_edl.txt")
-    with open(palo_alto_file_path, "w") as f:
+    palo_alto_output = format_for_palo_alto(indicators_data)
+    with open(os.path.join(DATA_DIR, "palo_alto_edl.txt"), "w") as f:
         f.write(palo_alto_output)
 
-    fortinet_output = format_for_fortinet(processed_data)
-    fortinet_file_path = os.path.join(DATA_DIR, "fortinet_edl.txt")
-    with open(fortinet_file_path, "w") as f:
+    fortinet_output = format_for_fortinet(indicators_data)
+    with open(os.path.join(DATA_DIR, "fortinet_edl.txt"), "w") as f:
         f.write(fortinet_output)
 
     if update_status:
@@ -465,3 +424,12 @@ def status():
 @login_required
 def download_file(filename):
     return send_from_directory(DATA_DIR, filename, as_attachment=True)
+
+# Start scheduler when app loads
+if not scheduler.running:
+    scheduler.start()
+    update_scheduled_jobs()
+
+if __name__ == '__main__':
+    cert_file, key_file = get_cert_paths()
+    app.run(debug=True, use_reloader=False, ssl_context=(cert_file, key_file), host='0.0.0.0', port=443)

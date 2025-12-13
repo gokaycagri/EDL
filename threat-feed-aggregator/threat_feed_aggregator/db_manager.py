@@ -26,27 +26,19 @@ def init_db():
                 indicator TEXT PRIMARY KEY,
                 last_seen TEXT NOT NULL,
                 country TEXT,
-                type TEXT NOT NULL DEFAULT 'ip' -- New column: 'type'
+                type TEXT NOT NULL DEFAULT 'ip'
             )
         ''')
         
-        # Check if country column exists, if not add it
+        # Check schemas (simplified for brevity, ensuring columns exist)
         cursor = conn.execute("PRAGMA table_info(indicators)")
         columns = [info[1] for info in cursor.fetchall()]
         if 'country' not in columns:
-            try:
-                conn.execute('ALTER TABLE indicators ADD COLUMN country TEXT')
-                logger.info("Added 'country' column to indicators table.")
-            except Exception as e:
-                logger.error(f"Error adding country column: {e}")
-        
-        # Check if type column exists, if not add it
+            try: conn.execute('ALTER TABLE indicators ADD COLUMN country TEXT')
+            except Exception: pass
         if 'type' not in columns:
-            try:
-                conn.execute("ALTER TABLE indicators ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
-                logger.info("Added 'type' column to indicators table with default 'ip'.")
-            except Exception as e:
-                logger.error(f"Error adding type column: {e}")
+            try: conn.execute("ALTER TABLE indicators ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
+            except Exception: pass
 
         # Create Whitelist Table
         conn.execute('''
@@ -58,17 +50,76 @@ def init_db():
             )
         ''')
 
-        # Create Users Table for admin password
+        # Create Users Table
         conn.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL
             )
         ''')
+
+        # Create Job History Table (NEW)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS job_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_name TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                status TEXT NOT NULL, -- 'running', 'success', 'failure'
+                items_processed INTEGER DEFAULT 0,
+                message TEXT
+            )
+        ''')
         
         conn.commit()
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
+    finally:
+        conn.close()
+
+# --- Job History Functions (NEW) ---
+
+def log_job_start(source_name):
+    """Starts a new job log entry."""
+    conn = get_db_connection()
+    try:
+        start_time = datetime.now(timezone.utc).isoformat()
+        cursor = conn.execute(
+            'INSERT INTO job_history (source_name, start_time, status) VALUES (?, ?, ?)',
+            (source_name, start_time, 'running')
+        )
+        conn.commit()
+        return cursor.lastrowid
+    except Exception as e:
+        logger.error(f"Error logging job start: {e}")
+        return None
+    finally:
+        conn.close()
+
+def log_job_end(job_id, status, items_processed=0, message=None):
+    """Updates a job log entry with completion details."""
+    if not job_id:
+        return
+    conn = get_db_connection()
+    try:
+        end_time = datetime.now(timezone.utc).isoformat()
+        conn.execute('''
+            UPDATE job_history 
+            SET end_time = ?, status = ?, items_processed = ?, message = ?
+            WHERE id = ?
+        ''', (end_time, status, items_processed, message, job_id))
+        conn.commit()
+    except Exception as e:
+        logger.error(f"Error logging job end: {e}")
+    finally:
+        conn.close()
+
+def get_job_history(limit=50):
+    """Retrieves recent job history."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.execute('SELECT * FROM job_history ORDER BY start_time DESC LIMIT ?', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -80,7 +131,6 @@ def set_admin_password(password):
         conn.execute('INSERT OR REPLACE INTO users (username, password_hash) VALUES (?, ?)', 
                      ('admin', hashed_password))
         conn.commit()
-        logger.info("Admin password set/updated successfully.")
         return True, "Admin password set/updated."
     except Exception as e:
         logger.error(f"Error setting admin password: {e}")
@@ -104,10 +154,6 @@ def check_admin_credentials(password):
     return False
 
 def upsert_indicators_bulk(indicators):
-    """
-    Bulk upsert for a list of indicators.
-    Indicators should be a list of tuples: (indicator_value, country, type).
-    """
     conn = get_db_connection()
     try:
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -126,11 +172,11 @@ def upsert_indicators_bulk(indicators):
         conn.commit()
     except Exception as e:
         logger.error(f"Error bulk upserting indicators: {e}")
+        raise # Re-raise to catch in aggregator
     finally:
         conn.close()
 
 def get_all_indicators():
-    """Retrieves all indicators with their type."""
     conn = get_db_connection()
     try:
         cursor = conn.execute('SELECT indicator, last_seen, country, type FROM indicators')
@@ -138,11 +184,33 @@ def get_all_indicators():
     finally:
         conn.close()
 
+def remove_old_indicators(lifetime_days):
+    conn = get_db_connection()
+    try:
+        cursor = conn.execute('SELECT indicator, last_seen FROM indicators')
+        to_delete = []
+        now = datetime.now(timezone.utc)
+        
+        for row in cursor:
+            try:
+                last_seen = datetime.fromisoformat(row['last_seen'])
+                if (now - last_seen).days > lifetime_days:
+                    to_delete.append(row['indicator'])
+            except ValueError:
+                pass
+                
+        if to_delete:
+            conn.executemany('DELETE FROM indicators WHERE indicator = ?', [(x,) for x in to_delete])
+            conn.commit()
+            
+        return len(to_delete)
+    except Exception as e:
+        logger.error(f"Error removing old indicators: {e}")
+        return 0
+    finally:
+        conn.close()
+
 def get_unique_indicator_count(indicator_type=None):
-    """
-    Returns the count of unique indicators.
-    If indicator_type is provided, filters by type.
-    """
     conn = get_db_connection()
     try:
         if indicator_type:
@@ -154,7 +222,6 @@ def get_unique_indicator_count(indicator_type=None):
         conn.close()
 
 def get_indicator_counts_by_type():
-    """Returns a dictionary with counts for each indicator type."""
     conn = get_db_connection()
     try:
         cursor = conn.execute('SELECT type, COUNT(*) as count FROM indicators GROUP BY type')
@@ -163,10 +230,8 @@ def get_indicator_counts_by_type():
         conn.close()
 
 def get_country_stats():
-    """Returns a list of dictionaries (country_code, count) for IP indicators ordered by count descending."""
     conn = get_db_connection()
     try:
-        # Group by country for 'ip' type indicators only
         cursor = conn.execute('''
             SELECT COALESCE(country, 'Unknown') as country_code, COUNT(*) as count 
             FROM indicators 
@@ -221,9 +286,6 @@ def remove_whitelist_item(item_id):
         conn.close()
 
 def delete_whitelisted_indicators(items_to_delete):
-    """
-    Deletes indicators from the main table that match the provided list of items.
-    """
     conn = get_db_connection()
     try:
         if items_to_delete:
