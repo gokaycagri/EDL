@@ -59,6 +59,31 @@ def _cleanup_whitelisted_items_from_db():
             chunk = indicators_to_delete[i:i + chunk_size]
             db_delete_whitelisted_indicators(chunk)
 
+def regenerate_edl_files():
+    """
+    Regenerates the Palo Alto and Fortinet EDL text files based on the current
+    content of the indicators database.
+    """
+    logger.info("Regenerating EDL files from database...")
+    try:
+        indicators_data = get_all_indicators()
+        
+        from .output_formatter import format_for_palo_alto, format_for_fortinet
+
+        palo_alto_output = format_for_palo_alto(indicators_data)
+        with open(os.path.join(DATA_DIR, "palo_alto_edl.txt"), "w") as f:
+            f.write(palo_alto_output)
+
+        fortinet_output = format_for_fortinet(indicators_data)
+        with open(os.path.join(DATA_DIR, "fortinet_edl.txt"), "w") as f:
+            f.write(fortinet_output)
+            
+        logger.info("EDL files regenerated successfully.")
+        return True, "Lists regenerated successfully."
+    except Exception as e:
+        logger.error(f"Error regenerating EDL files: {e}")
+        return False, str(e)
+
 def aggregate_single_source(source_config):
     name = source_config["name"]
     url = source_config["url"]
@@ -83,7 +108,6 @@ def aggregate_single_source(source_config):
             items_with_type = []
             
             if data_format == "text":
-                # Pass source name for logging inside parser
                 items_with_type = parse_mixed_text(raw_data, source_name=name)
             elif data_format == "json":
                 items = parse_json(raw_data, key=key_or_column)
@@ -147,15 +171,13 @@ def aggregate_single_source(source_config):
                             msg = f"Written batch {current_batch_num}/{total_batches} ({len(batch)} items)"
                             logger.info(f"[{name}] {msg}")
                             update_job_status(name, "Saving", msg)
-                            break # Success, exit retry loop
+                            break # Success
                         except Exception as e:
                             if attempt < max_retries - 1:
                                 logger.warning(f"[{name}] Error writing batch {current_batch_num} (Attempt {attempt+1}): {e}. Retrying...")
-                                time.sleep(2 * (attempt + 1)) # Exponential backoff
+                                time.sleep(2 * (attempt + 1))
                             else:
                                 logger.error(f"[{name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}")
-                                # Don't raise here to allow other batches to proceed, but log error
-
                 
             count = len(data_for_upsert)
             
@@ -188,20 +210,7 @@ def fetch_and_process_single_feed(source_config):
     try:
         aggregate_single_source(source_config)
         _cleanup_whitelisted_items_from_db()
-
-        # Update output files
-        indicators_data = get_all_indicators()
-        
-        from .output_formatter import format_for_palo_alto, format_for_fortinet
-
-        palo_alto_output = format_for_palo_alto(indicators_data)
-        with open(os.path.join(DATA_DIR, "palo_alto_edl.txt"), "w") as f:
-            f.write(palo_alto_output)
-
-        fortinet_output = format_for_fortinet(indicators_data)
-        with open(os.path.join(DATA_DIR, "fortinet_edl.txt"), "w") as f:
-            f.write(fortinet_output)
-        
+        regenerate_edl_files() # Use the new function
         logger.info(f"Completed scheduled fetch for {name}.")
     except Exception as e:
         logger.error(f"Scheduled fetch failed for {name}: {e}")
@@ -248,5 +257,5 @@ def main(source_urls):
     current_stats["last_updated"] = datetime.now(timezone.utc).isoformat()
     write_stats(current_stats)
 
-    all_indicators = get_all_indicators()
-    return {"url_counts": all_url_counts, "processed_data": list(all_indicators.keys())}
+    regenerate_edl_files() # Use the new function
+    return {"url_counts": all_url_counts, "processed_data": []} # Return empty list to save memory

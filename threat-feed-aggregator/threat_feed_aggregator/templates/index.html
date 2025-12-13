@@ -262,7 +262,12 @@
 
                 <!-- Downloads -->
                 <div class="card">
-                    <div class="card-header"><i class="fas fa-download me-2"></i> Export Lists</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-download me-2"></i> Export Lists</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="regenerateLists()">
+                            <i class="fas fa-sync me-1"></i> Regenerate
+                        </button>
+                    </div>
                     <div class="card-body">
                         <div class="d-grid gap-2">
                             <a href="{{ url_for('download_file', filename='palo_alto_edl.txt') }}" class="btn btn-outline-primary text-start"><i class="fas fa-file-alt me-2"></i> Palo Alto EDL</a>

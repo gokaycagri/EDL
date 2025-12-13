@@ -16,7 +16,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from flask_wtf.csrf import CSRFProtect
 
 from .config_manager import read_config, write_config, read_stats, write_stats, BASE_DIR, DATA_DIR, CONFIG_FILE, STATS_FILE
-from .aggregator import main as run_aggregator, fetch_and_process_single_feed, CURRENT_JOB_STATUS
+from .aggregator import main as run_aggregator, fetch_and_process_single_feed, CURRENT_JOB_STATUS, regenerate_edl_files
 from .output_formatter import format_for_palo_alto, format_for_fortinet
 from .db_manager import (
     init_db,
@@ -233,6 +233,16 @@ def clear_history_route():
 def live_logs():
     """Returns the latest logs from memory."""
     return jsonify(get_live_logs())
+
+@app.route('/api/regenerate_lists', methods=['POST'])
+@login_required
+def regenerate_lists_route():
+    """Regenerates EDL output files from the database."""
+    success, message = regenerate_edl_files()
+    if success:
+        return jsonify({'status': 'success', 'message': message})
+    else:
+        return jsonify({'status': 'error', 'message': message}), 500
 
 @app.route('/add', methods=['POST'])
 @login_required
