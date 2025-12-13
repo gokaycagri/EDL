@@ -28,7 +28,7 @@
     ],
     "auth": {
         "ldap": {
-            "enabled": true,
+            "enabled": false,
             "server": "openldap",
             "domain": "dc=threataggregator,dc=local"
         }

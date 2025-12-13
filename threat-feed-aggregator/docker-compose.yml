@@ -1,12 +1,5 @@
 version: '3.8'
 
-networks:
-  app-network:
-    ipam:
-      driver: default
-      config:
-        - subnet: 172.20.0.0/24
-
 services:
   aggregator:
     build: .
@@ -33,28 +26,3 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    depends_on:
-      - openldap # Ensure LDAP is up before aggregator
-    networks:
-      app-network:
-        ipv4_address: 172.20.0.10 # Assign a static IP to aggregator
-
-  openldap:
-    image: osixia/openldap:1.5.0
-    container_name: openldap
-    ports:
-      - "389:389"
-      - "636:636"
-    volumes:
-      - ./ldap/data:/var/lib/ldap # Persistent LDAP data
-      - ./ldap/config:/etc/ldap/slapd.d # Persistent LDAP config
-    environment:
-      - LDAP_ORGANISATION=Threat Aggregator Test
-      - LDAP_DOMAIN=threataggregator.local
-      - LDAP_ADMIN_PASSWORD=adminpassword
-      - LDAP_USER_PASSWORD=testuserpass
-      - LDAP_BASE_DN=dc=threataggregator,dc=local
-    restart: unless-stopped
-    networks:
-      app-network:
-        ipv4_address: 172.20.0.20 # Assign a static IP to openldap

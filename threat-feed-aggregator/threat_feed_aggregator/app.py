@@ -5,7 +5,8 @@ import threading
 from datetime import datetime, timezone
 from functools import wraps
 
-# Configure root logger immediately
+# --- LOGGING SETUP ---
+# Configure basic logging first
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 
 from flask import Flask, render_template, redirect, url_for, send_from_directory, request, jsonify, session, flash
@@ -31,10 +32,14 @@ from .db_manager import (
     check_admin_credentials,
     get_admin_password_hash,
     get_indicator_counts_by_type,
-    get_job_history # NEW
+    get_job_history
 )
 from .cert_manager import generate_self_signed_cert, process_pfx_upload, get_cert_paths
 from .auth_manager import check_credentials
+from .log_manager import setup_memory_logging, get_live_logs # NEW IMPORTS
+
+# Initialize Memory Logging to capture logs for GUI
+setup_memory_logging()
 
 app = Flask(__name__)
 
@@ -212,6 +217,12 @@ def job_history():
         except Exception:
             pass
     return jsonify(history)
+
+@app.route('/api/live_logs')
+@login_required
+def live_logs():
+    """Returns the latest logs from memory."""
+    return jsonify(get_live_logs())
 
 @app.route('/add', methods=['POST'])
 @login_required
