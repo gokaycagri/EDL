@@ -32,11 +32,12 @@ from .db_manager import (
     get_admin_password_hash,
     get_indicator_counts_by_type,
     get_job_history,
-    clear_job_history # NEW IMPORT
+    clear_job_history
 )
 from .cert_manager import generate_self_signed_cert, process_pfx_upload, get_cert_paths
 from .auth_manager import check_credentials
 from .log_manager import setup_memory_logging, get_live_logs
+from .utils import SAFE_ITEMS, add_to_safe_list, remove_from_safe_list # Updated imports
 
 # Initialize Memory Logging to capture logs for GUI
 setup_memory_logging()
@@ -156,6 +157,9 @@ def index():
     country_stats = get_country_stats()
     whitelist = get_whitelist()
     
+    # Sort safe list for display
+    safe_list_sorted = sorted(list(SAFE_ITEMS))
+    
     local_tz = get_localzone()
 
     # Format timestamps
@@ -176,8 +180,6 @@ def index():
                     formatted_stats[key] = value
             else:
                 formatted_stats[key] = value
-        else:
-            formatted_stats[key] = value
 
     scheduled_jobs = scheduler.get_jobs()
     jobs_for_template = []
@@ -189,7 +191,7 @@ def index():
             'interval': f"{job.trigger.interval.total_seconds() / 60} minutes" if isinstance(job.trigger, IntervalTrigger) else 'N/A'
         })
 
-    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, total_indicator_count=total_indicator_count, indicator_counts_by_type=indicator_counts_by_type, whitelist=whitelist, country_stats=country_stats)
+    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, total_indicator_count=total_indicator_count, indicator_counts_by_type=indicator_counts_by_type, whitelist=whitelist, country_stats=country_stats, safe_list=safe_list_sorted)
 
 @app.route('/api/status_detailed')
 @login_required
@@ -243,6 +245,30 @@ def regenerate_lists_route():
         return jsonify({'status': 'success', 'message': message})
     else:
         return jsonify({'status': 'error', 'message': message}), 500
+
+@app.route('/api/safe_list/add', methods=['POST'])
+@login_required
+def add_safe_list_item():
+    item = request.form.get('item')
+    if item:
+        success, message = add_to_safe_list(item)
+        if success:
+            flash(f'Added to Safe List: {item}', 'success')
+        else:
+            flash(f'Error adding to Safe List: {message}', 'danger')
+    return redirect(url_for('index'))
+
+@app.route('/api/safe_list/remove', methods=['POST'])
+@login_required
+def remove_safe_list_item():
+    item = request.form.get('item')
+    if item:
+        success, message = remove_from_safe_list(item)
+        if success:
+            flash(f'Removed from Safe List: {item}', 'success')
+        else:
+            flash(f'Error removing from Safe List: {message}', 'danger')
+    return redirect(url_for('index'))
 
 @app.route('/add', methods=['POST'])
 @login_required
@@ -416,8 +442,15 @@ def aggregation_task(update_status=True):
 
     run_aggregator(source_urls)
     
+    # Logic for updating output files and stats is now handled within run_aggregator or separate functions
+    # to avoid duplication, but app.py needs global state update.
+    # run_aggregator updates db and returns stats.
+    # We should ensure output files are also updated after full run.
+    
     indicators_data = get_all_indicators()
     
+    from .output_formatter import format_for_palo_alto, format_for_fortinet, format_for_url_list
+
     palo_alto_output = format_for_palo_alto(indicators_data)
     with open(os.path.join(DATA_DIR, "palo_alto_edl.txt"), "w") as f:
         f.write(palo_alto_output)
@@ -425,6 +458,10 @@ def aggregation_task(update_status=True):
     fortinet_output = format_for_fortinet(indicators_data)
     with open(os.path.join(DATA_DIR, "fortinet_edl.txt"), "w") as f:
         f.write(fortinet_output)
+
+    url_list_output = format_for_url_list(indicators_data)
+    with open(os.path.join(DATA_DIR, "url_list.txt"), "w") as f:
+        f.write(url_list_output)
 
     if update_status:
         AGGREGATION_STATUS = "completed"

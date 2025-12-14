@@ -42,6 +42,58 @@ def load_safe_list():
 # Load safe list once on module import (or reload periodically if needed)
 SAFE_ITEMS, SAFE_NETWORKS = load_safe_list()
 
+def reload_safe_list():
+    """Reloads the safe list from file into global variables."""
+    global SAFE_ITEMS, SAFE_NETWORKS
+    SAFE_ITEMS, SAFE_NETWORKS = load_safe_list()
+
+def add_to_safe_list(item):
+    """Adds an item to the safe list file."""
+    if not item: return False, "Empty item"
+    
+    # Check if already exists (simple check)
+    if item in SAFE_ITEMS:
+        return False, "Item already in safe list"
+
+    try:
+        # Append to file
+        with open(SAFE_LIST_FILE, 'a') as f:
+            f.write(f"\n{item}")
+        
+        # Reload memory
+        reload_safe_list()
+        return True, "Item added to safe list"
+    except Exception as e:
+        logger.error(f"Error writing to safe list file: {e}")
+        return False, str(e)
+
+def remove_from_safe_list(item_to_remove):
+    """Removes an item from the safe list file."""
+    if not os.path.exists(SAFE_LIST_FILE):
+        return False, "Safe list file not found"
+
+    try:
+        with open(SAFE_LIST_FILE, 'r') as f:
+            lines = f.readlines()
+        
+        with open(SAFE_LIST_FILE, 'w') as f:
+            found = False
+            for line in lines:
+                if line.strip() == item_to_remove:
+                    found = True
+                    continue # Skip this line
+                f.write(line)
+        
+        if found:
+            reload_safe_list()
+            return True, "Item removed from safe list"
+        else:
+            return False, "Item not found in safe list"
+            
+    except Exception as e:
+        logger.error(f"Error removing from safe list file: {e}")
+        return False, str(e)
+
 def is_whitelisted(indicator, whitelist_db_items=None):
     """
     Checks if an indicator is in the user-defined whitelist OR the global safe list.
@@ -52,17 +104,11 @@ def is_whitelisted(indicator, whitelist_db_items=None):
         return True, "Global Safe List"
 
     # 2. Check Global Safe List (CIDR)
-    # Only try IP check if it looks like an IP
     try:
-        # If it's a network string like "192.168.1.0/24", check if it overlaps?
-        # For simplicity, let's treat input as single IP for CIDR check first.
-        # If input is CIDR, we check if it is fully contained in safe network.
-        
-        # Determine if input is IP or Network
         if '/' in indicator:
             input_net = ipaddress.ip_network(indicator, strict=False)
             for net in SAFE_NETWORKS:
-                if input_net.subnet_of(net): # Input CIDR is inside Safe CIDR
+                if input_net.subnet_of(net): 
                     return True, "Global Safe List (CIDR)"
         else:
             input_ip = ipaddress.ip_address(indicator)
@@ -70,15 +116,13 @@ def is_whitelisted(indicator, whitelist_db_items=None):
                 if input_ip in net:
                     return True, "Global Safe List (CIDR)"
     except ValueError:
-        pass # Not an IP/CIDR
+        pass 
 
     # 3. Check User DB Whitelist
     if whitelist_db_items:
-        # whitelist_db_items is a list of strings (items)
         if indicator in whitelist_db_items:
             return True, "User Whitelist"
         
-        # Check CIDR for User Whitelist
         try:
             input_obj = None
             is_input_cidr = '/' in indicator
@@ -93,11 +137,9 @@ def is_whitelisted(indicator, whitelist_db_items=None):
                     try:
                         w_net = ipaddress.ip_network(w_item, strict=False)
                         if is_input_cidr:
-                            # If whitelist is CIDR and input is CIDR, check overlap/subnet
                             if input_obj.subnet_of(w_net):
                                 return True, "User Whitelist (CIDR)"
                         else:
-                            # If whitelist is CIDR and input is IP
                             if input_obj in w_net:
                                 return True, "User Whitelist (CIDR)"
                     except ValueError:
@@ -106,14 +148,6 @@ def is_whitelisted(indicator, whitelist_db_items=None):
             pass
 
     return False, None
-
-def is_ip_whitelisted(ip_str, whitelist_items):
-    """
-    Legacy helper kept for compatibility, but redirects to is_whitelisted.
-    Only returns boolean.
-    """
-    whitelisted, _ = is_whitelisted(ip_str, whitelist_items)
-    return whitelisted
 
 def filter_whitelisted_items(items, whitelist_db_items):
     """
@@ -125,8 +159,4 @@ def filter_whitelisted_items(items, whitelist_db_items):
         whitelisted, reason = is_whitelisted(item, whitelist_db_items)
         if not whitelisted:
             filtered.append(item)
-        else:
-            # Optionally log what was filtered
-            # logger.debug(f"Filtered {item} due to: {reason}")
-            pass
     return filtered

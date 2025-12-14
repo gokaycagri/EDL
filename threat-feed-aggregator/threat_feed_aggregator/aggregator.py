@@ -13,9 +13,10 @@ from .db_manager import (
     upsert_indicators_bulk, 
     delete_whitelisted_indicators as db_delete_whitelisted_indicators,
     log_job_start,
-    log_job_end
+    log_job_end,
+    recalculate_scores
 )
-from .utils import is_ip_whitelisted
+from .utils import is_whitelisted # Import is_whitelisted for cleanup
 from .geoip_manager import get_country_code
 from .config_manager import read_config, read_stats, write_stats, BASE_DIR, DATA_DIR
 
@@ -50,7 +51,9 @@ def _cleanup_whitelisted_items_from_db():
 
     for indicator, data in all_current_indicators_dict.items():
         indicator_type = data['type']
-        if indicator_type in ['ip', 'cidr'] and is_ip_whitelisted(indicator, whitelist_filters):
+        # Check against whitelist using universal function
+        whitelisted, _ = is_whitelisted(indicator, whitelist_filters)
+        if whitelisted:
             indicators_to_delete.append(indicator)
     
     if indicators_to_delete:
@@ -129,11 +132,12 @@ def aggregate_single_source(source_config):
             
             filtered_items_with_type = []
             for item, item_type in items_with_type:
-                if item_type in ['ip', 'cidr']:
-                    if not is_ip_whitelisted(item, whitelist_filters):
-                        filtered_items_with_type.append((item, item_type))
-                else: 
+                # Universal check for all types using the improved is_whitelisted function
+                whitelisted, reason = is_whitelisted(item, whitelist_filters)
+                if not whitelisted:
                     filtered_items_with_type.append((item, item_type))
+                else:
+                    pass # Skipped
             
             # --- GeoIP Enrichment (Batch) ---
             update_job_status(name, "Enriching", f"Enriching {len(filtered_items_with_type)} items...")
@@ -169,7 +173,7 @@ def aggregate_single_source(source_config):
                     max_retries = 3
                     for attempt in range(max_retries):
                         try:
-                            upsert_indicators_bulk(batch)
+                            upsert_indicators_bulk(batch, source_name=name)
                             
                             # Log and Update Status
                             msg = f"Written batch {current_batch_num}/{total_batches} ({len(batch)} items)"
@@ -184,6 +188,10 @@ def aggregate_single_source(source_config):
                                 logger.error(f"[{name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}")
                 
             count = len(data_for_upsert)
+            
+            # Recalculate scores
+            update_job_status(name, "Scoring", "Recalculating risk scores...")
+            recalculate_scores()
             
             # DB Log Success
             log_job_end(job_id, "success", count, f"Fetch time: {fetch_duration:.2f}s")
