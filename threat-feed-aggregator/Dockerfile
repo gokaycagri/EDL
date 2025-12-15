@@ -28,11 +28,12 @@ COPY threat_feed_aggregator/ threat_feed_aggregator/
 RUN mkdir -p data
 
 # Expose the port the app runs on
-EXPOSE 5000
+EXPOSE 443
 
 # Healthcheck to ensure the service is running
+# Note: curl -k is needed for self-signed certs
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/status || exit 1
+  CMD curl -f -k https://localhost:443/status || exit 1
 
 # Run the application
 CMD ["python", "-m", "threat_feed_aggregator.app"]

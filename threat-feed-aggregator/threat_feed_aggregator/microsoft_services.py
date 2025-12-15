@@ -61,7 +61,7 @@ def process_microsoft_feeds():
         if content["ips"]:
             # Microsoft IPs are usually already CIDRs, but aggregation ensures optimization
             optimized_ips = aggregate_ips(content["ips"])
-            filename = f"ms365_{{service.lower()}}_ips.txt"
+            filename = f"ms365_{service.lower()}_ips.txt"
             file_path = os.path.join(DATA_DIR, filename)
             
             with open(file_path, 'w') as f:
@@ -72,7 +72,7 @@ def process_microsoft_feeds():
         if content["urls"]:
             # Sort and deduplicate
             unique_urls = sorted(list(set(content["urls"])))
-            filename = f"ms365_{{service.lower()}}_urls.txt"
+            filename = f"ms365_{service.lower()}_urls.txt"
             file_path = os.path.join(DATA_DIR, filename)
             
             with open(file_path, 'w') as f:

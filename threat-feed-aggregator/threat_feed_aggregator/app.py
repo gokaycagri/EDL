@@ -19,6 +19,7 @@ from .config_manager import read_config, write_config, read_stats, write_stats, 
 from .aggregator import main as run_aggregator, fetch_and_process_single_feed, CURRENT_JOB_STATUS, regenerate_edl_files
 from .microsoft_services import process_microsoft_feeds
 from .github_services import process_github_feeds
+from .azure_services import process_azure_feeds
 from .output_formatter import format_for_palo_alto, format_for_fortinet
 from .db_manager import (
     init_db,
@@ -266,6 +267,19 @@ def api_update_github():
     """Triggers the GitHub feed update."""
     try:
         success, msg = process_github_feeds()
+        if success:
+            return jsonify({'status': 'success', 'message': msg})
+        else:
+            return jsonify({'status': 'error', 'message': msg})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/update_azure', methods=['POST'])
+@login_required
+def api_update_azure():
+    """Triggers the Azure feed update."""
+    try:
+        success, msg = process_azure_feeds()
         if success:
             return jsonify({'status': 'success', 'message': msg})
         else:
@@ -551,4 +565,8 @@ if not scheduler.running:
 
 if __name__ == '__main__':
     cert_file, key_file = get_cert_paths()
-    app.run(debug=True, use_reloader=False, ssl_context=(cert_file, key_file), host='0.0.0.0', port=443)
+    # Check if running in Docker (or configured for a specific port)
+    port = int(os.environ.get("PORT", 443))
+    
+    # Run on HTTPS by default
+    app.run(debug=True, use_reloader=False, ssl_context=(cert_file, key_file), host='0.0.0.0', port=port)

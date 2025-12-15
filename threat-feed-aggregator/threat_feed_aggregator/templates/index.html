@@ -330,6 +330,25 @@
                     </div>
                 </div>
 
+                <!-- Azure Public Cloud Feeds -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-cloud me-2"></i> Azure Cloud Feeds</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="updateAzure()">
+                            <i class="fas fa-sync me-1"></i> Update
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted mb-2 d-block">Public Cloud Service Tags (Json).</small>
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('download_file', filename='azure_all_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-globe me-2"></i> All Azure IPs</a>
+                            <a href="{{ url_for('download_file', filename='azure_westeurope_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-map-marker-alt me-2"></i> West Europe (Holland)</a>
+                            <a href="{{ url_for('download_file', filename='azure_sql_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-database me-2"></i> Azure SQL</a>
+                            <a href="{{ url_for('download_file', filename='azure_storage_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-hdd me-2"></i> Azure Storage</a>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Downloads -->
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -741,6 +760,32 @@
             .catch(error => {
                 console.error('Error:', error);
                 alert('An error occurred while updating GitHub feeds.');
+            });
+        }
+
+        function updateAzure() {
+            if(!confirm('This will find and download the latest Azure Service Tags JSON. This may take a while. Continue?')) return;
+            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            fetch('/api/update_azure', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert(data.message);
+                } else {
+                    alert('Error updating Azure feeds: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating Azure feeds.');
             });
         }
 
