@@ -192,7 +192,16 @@ def aggregate_single_source(source_config, recalculate=True):
             # Recalculate scores
             if recalculate:
                 update_job_status(name, "Scoring", "Recalculating risk scores...")
-                recalculate_scores()
+                # Extract confidence map just for this source (though others might exist in DB)
+                # Ideally we should read full config, but for single source run, we might lack full context.
+                # Let's read full config to be safe.
+                try:
+                    full_config = read_config()
+                    confidence_map = {s['name']: s.get('confidence', 50) for s in full_config.get('source_urls', [])}
+                except:
+                    confidence_map = {name: source_config.get('confidence', 50)}
+                
+                recalculate_scores(confidence_map)
             
             # DB Log Success
             log_job_end(job_id, "success", count, f"Fetch time: {fetch_duration:.2f}s")
@@ -232,9 +241,14 @@ def fetch_and_process_single_feed(source_config):
 
 def main(source_urls):
     config = read_config()
-    lifetime_days = config.get("indicator_lifetime_days", 30)
+    default_lifetime = config.get("indicator_lifetime_days", 30)
     
-    remove_old_indicators(lifetime_days)
+    # Build Configuration Maps
+    confidence_map = {s['name']: s.get('confidence', 50) for s in source_urls}
+    retention_map = {s['name']: s.get('retention_days', default_lifetime) for s in source_urls}
+
+    # Perform cleanup based on per-source retention policies
+    remove_old_indicators(retention_map, default_lifetime)
 
     all_url_counts = {}
     current_stats = read_stats()
@@ -268,7 +282,9 @@ def main(source_urls):
 
     # Recalculate scores once after all sources are processed
     logger.info("Recalculating risk scores for all indicators...")
-    recalculate_scores()
+    # Build Confidence Map
+    confidence_map = {s['name']: s.get('confidence', 50) for s in source_urls}
+    recalculate_scores(confidence_map)
 
     _cleanup_whitelisted_items_from_db()
 
@@ -276,4 +292,4 @@ def main(source_urls):
     write_stats(current_stats)
 
     regenerate_edl_files() 
-    return {"url_counts": all_url_counts, "processed_data": []} 
+    return {"url_counts": all_url_counts, "processed_data": []}

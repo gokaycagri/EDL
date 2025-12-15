@@ -177,7 +177,15 @@
                                                 <input type="text" class="form-control form-control-sm" name="key_or_column" value="{{ source.key_or_column or '' }}" placeholder="Optional">
                                             </div>
                                             <div class="col-md-1">
-                                                <label class="form-label small">Interval (m)</label>
+                                                <label class="form-label small">Conf %</label>
+                                                <input type="number" class="form-control form-control-sm" name="confidence" value="{{ source.confidence or 50 }}" min="0" max="100">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label small">Ret.(d)</label>
+                                                <input type="number" class="form-control form-control-sm" name="retention_days" value="{{ source.retention_days or '' }}" placeholder="Def" min="1">
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label small">Interval</label>
                                                 <input type="number" class="form-control form-control-sm" name="schedule_interval_minutes" value="{{ source.schedule_interval_minutes }}" min="1">
                                             </div>
                                         </div>
@@ -246,8 +254,20 @@
                                         <option value="csv">CSV</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="input-group">
+                                <div class="col-md-3">
+                                    <div class="input-group" title="Confidence Score (0-100)">
+                                        <span class="input-group-text"><i class="fas fa-percent"></i></span>
+                                        <input type="number" class="form-control" name="confidence" placeholder="50" min="0" max="100" value="50">
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="input-group" title="Retention Days (Default: Global)">
+                                        <span class="input-group-text"><i class="fas fa-hourglass-half"></i></span>
+                                        <input type="number" class="form-control" name="retention_days" placeholder="Days" min="1">
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="input-group" title="Schedule Interval (Minutes)">
                                         <span class="input-group-text"><i class="fas fa-clock"></i></span>
                                         <input type="number" class="form-control" name="schedule_interval_minutes" placeholder="Mins" min="1">
                                     </div>
@@ -257,6 +277,56 @@
                                 <button type="submit" class="btn btn-success"><i class="fas fa-check me-2"></i> Add Source</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+
+                <!-- Microsoft 365 Feeds -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fab fa-microsoft me-2"></i> Microsoft 365 Feeds</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="updateMS365()">
+                            <i class="fas fa-sync me-1"></i> Update
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted mb-2 d-block">Official endpoints for Allow Lists.</small>
+                        <div class="d-grid gap-2">
+                            <div class="btn-group">
+                                <a href="{{ url_for('download_file', filename='ms365_exchange_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-envelope me-2"></i> Exchange IPs</a>
+                                <a href="{{ url_for('download_file', filename='ms365_exchange_urls.txt') }}" class="btn btn-sm btn-outline-secondary text-start">URLs</a>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{{ url_for('download_file', filename='ms365_skype_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fab fa-skype me-2"></i> Teams/Skype IPs</a>
+                                <a href="{{ url_for('download_file', filename='ms365_skype_urls.txt') }}" class="btn btn-sm btn-outline-secondary text-start">URLs</a>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{{ url_for('download_file', filename='ms365_sharepoint_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-share-alt me-2"></i> SharePoint IPs</a>
+                                <a href="{{ url_for('download_file', filename='ms365_sharepoint_urls.txt') }}" class="btn btn-sm btn-outline-secondary text-start">URLs</a>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{{ url_for('download_file', filename='ms365_common_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-globe me-2"></i> Common IPs</a>
+                                <a href="{{ url_for('download_file', filename='ms365_common_urls.txt') }}" class="btn btn-sm btn-outline-secondary text-start">URLs</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GitHub Feeds -->
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="fab fa-github me-2"></i> GitHub Feeds</span>
+                        <button class="btn btn-sm btn-outline-primary" onclick="updateGitHub()">
+                            <i class="fas fa-sync me-1"></i> Update
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted mb-2 d-block">Official endpoints for Allow Lists.</small>
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('download_file', filename='github_git_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-code-branch me-2"></i> Git Operations</a>
+                            <a href="{{ url_for('download_file', filename='github_web_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-globe me-2"></i> Web Access</a>
+                            <a href="{{ url_for('download_file', filename='github_actions_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-robot me-2"></i> Actions Runners</a>
+                            <a href="{{ url_for('download_file', filename='github_hooks_ips.txt') }}" class="btn btn-sm btn-outline-secondary text-start"><i class="fas fa-plug me-2"></i> Webhooks</a>
+                        </div>
                     </div>
                 </div>
 
@@ -619,6 +689,58 @@
             .catch(error => {
                 console.error('Error:', error);
                 alert('An error occurred while regenerating lists.');
+            });
+        }
+
+        function updateMS365() {
+            if(!confirm('This will fetch the latest Microsoft 365 endpoints and regenerate the files. This may take a few seconds. Continue?')) return;
+            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            fetch('/api/update_ms365', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert(data.message);
+                } else {
+                    alert('Error updating MS365 feeds: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating MS365 feeds.');
+            });
+        }
+
+        function updateGitHub() {
+            if(!confirm('This will fetch the latest GitHub IP ranges and regenerate the files. This may take a few seconds. Continue?')) return;
+            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+            fetch('/api/update_github', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert(data.message);
+                } else {
+                    alert('Error updating GitHub feeds: ' + (data.message || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating GitHub feeds.');
             });
         }
 

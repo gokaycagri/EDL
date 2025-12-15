@@ -68,6 +68,27 @@ Upon first running the application or after clearing `threat_feed.db`, the "Tota
 
 Alternatively, a "Run All Feeds" button may be present on the GUI under "Feeds Aggregation" to trigger a full update for all configured feeds.
 
+## Building an Executable (Windows)
+
+To create a standalone `.exe` file for easier deployment:
+
+1.  **Install PyInstaller:**
+    ```bash
+    pip install pyinstaller
+    ```
+
+2.  **Build the Executable:**
+    Run the following command from the project root:
+    ```bash
+    pyinstaller --onefile --name threat-feed-aggregator --add-data "threat-feed-aggregator/threat_feed_aggregator/templates;threat_feed_aggregator/templates" --add-data "threat-feed-aggregator/threat_feed_aggregator/config;threat_feed_aggregator/config" --hidden-import="apscheduler.schedulers.background" --hidden-import="apscheduler.triggers.interval" threat-feed-aggregator/threat_feed_aggregator/app.py
+    ```
+
+3.  **Run:**
+    The executable will be in the `dist/` folder.
+    *   Copy `threat-feed-aggregator.exe` to your desired location.
+    *   Ensure a `data/` folder exists next to it (it will be created automatically if not present).
+    *   The application will listen on port 5000 by default.
+
 ## Development Conventions
 
 - **Python Version:** The project uses Python 3.13 (inferred from `cpython-313.pyc` files).

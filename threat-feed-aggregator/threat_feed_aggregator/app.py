@@ -17,6 +17,8 @@ from flask_wtf.csrf import CSRFProtect
 
 from .config_manager import read_config, write_config, read_stats, write_stats, BASE_DIR, DATA_DIR, CONFIG_FILE, STATS_FILE
 from .aggregator import main as run_aggregator, fetch_and_process_single_feed, CURRENT_JOB_STATUS, regenerate_edl_files
+from .microsoft_services import process_microsoft_feeds
+from .github_services import process_github_feeds
 from .output_formatter import format_for_palo_alto, format_for_fortinet
 from .db_manager import (
     init_db,
@@ -238,13 +240,38 @@ def live_logs():
 
 @app.route('/api/regenerate_lists', methods=['POST'])
 @login_required
-def regenerate_lists_route():
-    """Regenerates EDL output files from the database."""
-    success, message = regenerate_edl_files()
+def api_regenerate_lists():
+    success, msg = regenerate_edl_files()
     if success:
-        return jsonify({'status': 'success', 'message': message})
+        return jsonify({'status': 'success', 'message': msg})
     else:
-        return jsonify({'status': 'error', 'message': message}), 500
+        return jsonify({'status': 'error', 'message': msg})
+
+@app.route('/api/update_ms365', methods=['POST'])
+@login_required
+def api_update_ms365():
+    """Triggers the Microsoft 365 feed update."""
+    try:
+        success, msg = process_microsoft_feeds()
+        if success:
+            return jsonify({'status': 'success', 'message': msg})
+        else:
+            return jsonify({'status': 'error', 'message': msg})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/update_github', methods=['POST'])
+@login_required
+def api_update_github():
+    """Triggers the GitHub feed update."""
+    try:
+        success, msg = process_github_feeds()
+        if success:
+            return jsonify({'status': 'success', 'message': msg})
+        else:
+            return jsonify({'status': 'error', 'message': msg})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/safe_list/add', methods=['POST'])
 @login_required
@@ -278,14 +305,24 @@ def add_url():
     data_format = request.form.get('format', 'text')
     key_or_column = request.form.get('key_or_column')
     schedule_interval_minutes = request.form.get('schedule_interval_minutes', type=int)
+    confidence = request.form.get('confidence', default=50, type=int)
+    retention_days = request.form.get('retention_days', type=int)
     
     if name and url:
         config = read_config()
-        new_source = {"name": name, "url": url, "format": data_format}
+        new_source = {
+            "name": name, 
+            "url": url, 
+            "format": data_format,
+            "confidence": confidence
+        }
         if key_or_column:
             new_source["key_or_column"] = key_or_column
         if schedule_interval_minutes:
             new_source["schedule_interval_minutes"] = schedule_interval_minutes
+        if retention_days:
+            new_source["retention_days"] = retention_days
+            
         config["source_urls"].append(new_source)
         write_config(config)
         update_scheduled_jobs()
@@ -299,11 +336,18 @@ def update_url(index):
     data_format = request.form.get('format', 'text')
     key_or_column = request.form.get('key_or_column')
     schedule_interval_minutes = request.form.get('schedule_interval_minutes', type=int)
+    confidence = request.form.get('confidence', default=50, type=int)
+    retention_days = request.form.get('retention_days', type=int)
 
     if name and url:
         config = read_config()
         if 0 <= index < len(config["source_urls"]):
-            updated_source = {"name": name, "url": url, "format": data_format}
+            updated_source = {
+                "name": name, 
+                "url": url, 
+                "format": data_format,
+                "confidence": confidence
+            }
             if key_or_column:
                 updated_source["key_or_column"] = key_or_column
             if schedule_interval_minutes:
@@ -311,6 +355,13 @@ def update_url(index):
             else:
                 if "schedule_interval_minutes" in updated_source:
                     del updated_source["schedule_interval_minutes"]
+            
+            if retention_days:
+                updated_source["retention_days"] = retention_days
+            else:
+                if "retention_days" in updated_source:
+                    del updated_source["retention_days"]
+
             config["source_urls"][index] = updated_source
             write_config(config)
             

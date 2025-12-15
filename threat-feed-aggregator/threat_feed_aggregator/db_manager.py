@@ -1,14 +1,13 @@
 import sqlite3
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import threading
 from werkzeug.security import generate_password_hash, check_password_hash
+from .config_manager import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_NAME = os.path.join(DATA_DIR, "threat_feed.db")
 
 # Global Lock for DB Writes
@@ -327,29 +326,54 @@ def get_all_indicators():
     finally:
         conn.close()
 
-def remove_old_indicators(lifetime_days):
+def remove_old_indicators(source_retention_map=None, default_retention_days=30):
+    """
+    Removes indicators based on per-source retention policies.
+    1. Removes entries from 'indicator_sources' if they are older than their source's retention period.
+    2. Removes indicators from 'indicators' table if they have no remaining sources (orphans).
+
+    Args:
+        source_retention_map (dict): {source_name: retention_days (int)}. 
+        default_retention_days (int): Fallback retention days for sources not in the map.
+    """
+    if source_retention_map is None:
+        source_retention_map = {}
+
     with DB_WRITE_LOCK:
         conn = get_db_connection()
         try:
-            cursor = conn.execute('SELECT indicator, last_seen FROM indicators')
-            to_delete = []
             now = datetime.now(timezone.utc)
+            total_deleted_sources = 0
             
-            for row in cursor:
-                try:
-                    last_seen = datetime.fromisoformat(row['last_seen'])
-                    if (now - last_seen).days > lifetime_days:
-                        to_delete.append(row['indicator'])
-                except ValueError:
-                    pass
-                    
-            if to_delete:
-                conn.executemany('DELETE FROM indicators WHERE indicator = ?', [(x,) for x in to_delete])
-                # Cascade delete will handle indicator_sources if FK is enabled, but manual delete is safer if not
-                conn.executemany('DELETE FROM indicator_sources WHERE indicator = ?', [(x,) for x in to_delete])
-                conn.commit()
+            # 1. Clean up indicator_sources per source
+            # We need to get all distinct sources from the DB to be sure we cover everything
+            cursor = conn.execute("SELECT DISTINCT source_name FROM indicator_sources")
+            db_sources = [row['source_name'] for row in cursor.fetchall()]
+
+            for source in db_sources:
+                days = source_retention_map.get(source, default_retention_days)
+                cutoff_date = now - timedelta(days=days)
                 
-            return len(to_delete)
+                # Delete old associations for this source
+                cur = conn.execute(
+                    "DELETE FROM indicator_sources WHERE source_name = ? AND last_seen < ?", 
+                    (source, cutoff_date.isoformat())
+                )
+                total_deleted_sources += cur.rowcount
+            
+            # 2. Clean up Orphans (Indicators with no sources left)
+            # This deletes indicators that exist in 'indicators' table but have no matching rows in 'indicator_sources'
+            cur = conn.execute('''
+                DELETE FROM indicators 
+                WHERE indicator NOT IN (SELECT DISTINCT indicator FROM indicator_sources)
+            ''')
+            orphans_deleted = cur.rowcount
+
+            if total_deleted_sources > 0 or orphans_deleted > 0:
+                conn.commit()
+                logger.info(f"Cleanup: Removed {total_deleted_sources} expired source links and {orphans_deleted} orphaned indicators.")
+            
+            return orphans_deleted
         except Exception as e:
             logger.error(f"Error removing old indicators: {e}")
             return 0
