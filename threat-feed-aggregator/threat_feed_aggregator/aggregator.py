@@ -91,7 +91,7 @@ def regenerate_edl_files():
         logger.error(f"Error regenerating EDL files: {e}")
         return False, str(e)
 
-def aggregate_single_source(source_config):
+def aggregate_single_source(source_config, recalculate=True):
     name = source_config["name"]
     url = source_config["url"]
     data_format = source_config.get("format", "text")
@@ -190,8 +190,9 @@ def aggregate_single_source(source_config):
             count = len(data_for_upsert)
             
             # Recalculate scores
-            update_job_status(name, "Scoring", "Recalculating risk scores...")
-            recalculate_scores()
+            if recalculate:
+                update_job_status(name, "Scoring", "Recalculating risk scores...")
+                recalculate_scores()
             
             # DB Log Success
             log_job_end(job_id, "success", count, f"Fetch time: {fetch_duration:.2f}s")
@@ -242,7 +243,8 @@ def main(source_urls):
     CURRENT_JOB_STATUS.clear()
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_source = {executor.submit(aggregate_single_source, source): source for source in source_urls}
+        # Pass recalculate=False to avoid locking DB for every source
+        future_to_source = {executor.submit(aggregate_single_source, source, recalculate=False): source for source in source_urls}
         
         for future in as_completed(future_to_source):
             source = future_to_source[future]
@@ -263,6 +265,10 @@ def main(source_urls):
                 
             except Exception as exc:
                 logger.error(f"{source['name']} generated an exception: {exc}")
+
+    # Recalculate scores once after all sources are processed
+    logger.info("Recalculating risk scores for all indicators...")
+    recalculate_scores()
 
     _cleanup_whitelisted_items_from_db()
 

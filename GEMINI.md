@@ -56,7 +56,7 @@ The application will typically be accessible at `http://127.0.0.1:5000`. You wil
 
 **4. Initial Data Aggregation:**
 
-Upon first running the application or after clearing `db.json`, the "Total Unique IPs" will show 0. To populate the data:
+Upon first running the application or after clearing `threat_feed.db`, the "Total Unique IPs" will show 0. To populate the data:
 - Go to `http://127.0.0.1:5000` in your browser.
 - Perform a **hard refresh** (`Ctrl+F5` or `Shift+F5`).
 - Go to the "Manage Sources" section.
@@ -73,7 +73,7 @@ Alternatively, a "Run All Feeds" button may be present on the GUI under "Feeds A
 - **Python Version:** The project uses Python 3.13 (inferred from `cpython-313.pyc` files).
 - **Web Framework:** Flask is used for the web interface.
 - **Scheduler:** APScheduler (with SQLAlchemyJobStore for persistence) is used for scheduling feed updates.
-- **Configuration:** `config.json` stores source URLs and application settings. `db.json` stores the aggregated unique indicators. `stats.json` stores aggregation statistics.
+- **Configuration:** `config.json` stores source URLs and application settings. `threat_feed.db` stores the aggregated unique indicators, whitelist, users, and job history.
 - **Code Structure:** The core logic is modularized within the `threat_feed_aggregator` package, with separate modules for data collection, processing, and output formatting.
-- **Testing:** Unit tests are organized under the `tests/` directory (e.g., `test_data_collector.py`, `test_data_processor.py`). To run tests, typically use `pytest` or `python -m unittest discover tests`. (Specific command to be verified).
+- **Testing:** Unit tests are organized under the `tests/` directory (e.g., `test_data_collector.py`, `test_data_processor.py`). To run tests, use `python -m pytest threat-feed-aggregator/tests`.
 - **Version Control:** Git is used for version control, with a `.gitignore` file to exclude virtual environments, IDE files, and build artifacts.
