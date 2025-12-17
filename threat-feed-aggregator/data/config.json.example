@@ -1,0 +1,19 @@
+{
+    "source_urls": [
+        {
+            "name": "Example Feed (FireHol Level 1)",
+            "url": "https://iplists.firehol.org/files/firehol_level1.netset",
+            "format": "text",
+            "confidence": 80,
+            "schedule_interval_minutes": 60
+        }
+    ],
+    "indicator_lifetime_days": 30,
+    "auth": {
+        "ldap": {
+            "enabled": false,
+            "server": "ldap://example.com",
+            "domain": "dc=example,dc=com"
+        }
+    }
+}
