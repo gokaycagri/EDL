@@ -1,5 +1,5 @@
 /* Soft UI / Modern SaaS Theme */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Offline Mode: Use system fonts as fallback for Inter */
 
 :root {
     --bg-body: #f3f4f6; /* Cool Gray 100 */
@@ -20,7 +20,8 @@
 body {
     background-color: var(--bg-body) !important;
     color: var(--text-main) !important;
-    font-family: 'Inter', sans-serif !important;
+    /* Prioritize Inter if available locally, otherwise system stack */
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
     -webkit-font-smoothing: antialiased;
 }
 
