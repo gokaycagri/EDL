@@ -1,39 +1,35 @@
-# Use an official Python runtime as a parent image
+# Use official Python runtime as a parent image
 FROM python:3.13-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV TZ=UTC
+ENV PYTHONPATH=/app
 
-# Install system dependencies (including tzdata for timezone support)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tzdata \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory in the container
+# Set work directory
 WORKDIR /app
 
-# Copy the requirements file into the container at /app
-COPY requirements.txt .
+# Install system dependencies (if any needed for ldap/crypto)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libldap2-dev \
+    libsasl2-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install any needed packages specified in requirements.txt
+# Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the application source code
-COPY threat_feed_aggregator/ threat_feed_aggregator/
+# Copy application code
+COPY . .
 
-# Create a directory for persistent data
-RUN mkdir -p data
-
-# Expose the port the app runs on
+# Expose port (Internal Flask port, we map 443 in compose)
 EXPOSE 443
 
-# Healthcheck to ensure the service is running
-# Note: curl -k is needed for self-signed certs
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f -k https://localhost:443/status || exit 1
+# Entrypoint script to handle config setup
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Run the application
-CMD ["python", "-m", "threat_feed_aggregator.app"]
+ENTRYPOINT ["/entrypoint.sh"]

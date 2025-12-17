@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  aggregator:
+    build:
+      context: ./threat-feed-aggregator
+      dockerfile: Dockerfile
+    image: threat-feed-aggregator:latest
+    container_name: threat-feed-aggregator
+    ports:
+      - "443:443"
+    volumes:
+      # Persist data (DB, config, EDLs)
+      - ./threat-feed-aggregator/data:/app/threat_feed_aggregator/data
+      # Optional: Persist logs
+      # - ./logs:/app/logs
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-changeme_in_production}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-123456}
+      - PORT=443
+    restart: unless-stopped
+    networks:
+      - threat_feed_net
+
+networks:
+  threat_feed_net:
+    driver: bridge
