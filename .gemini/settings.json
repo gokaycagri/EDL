@@ -5,7 +5,7 @@
       "args": ["-y", "@executeautomation/playwright-mcp-server"]
     },
      "deepwiki": {
-      "serverUrl": "https://mcp.deepwiki.com/mcp"
+      "serverUrl": "https://mcp.deepwiki.com/sse"
     }
   }
 }
