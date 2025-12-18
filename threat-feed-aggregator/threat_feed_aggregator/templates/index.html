@@ -27,6 +27,7 @@
     <div class="sidebar">
         <h4><i class="fas fa-shield-alt me-2"></i> ThreatFeed</h4>
         <a href="{{ url_for('dashboard.index') }}" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ url_for('tools.investigate') }}"><i class="fas fa-search-location"></i> Investigate IP</a>
         <a href="{{ url_for('system.index') }}"><i class="fas fa-cogs"></i> System Settings</a>
         <a href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
     </div>
