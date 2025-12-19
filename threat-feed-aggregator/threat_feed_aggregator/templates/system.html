@@ -73,6 +73,18 @@
                                 <label class="form-label small fw-bold">Domain / Base DN</label>
                                 <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ config.get('auth', {}).get('ldap', {}).get('domain', '') }}" placeholder="dc=example,dc=com">
                             </div>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if config.get('auth', {}).get('ldap', {}).get('ldaps_enabled') %}checked{% endif %}>
+                                <label class="form-check-label" for="ldapsEnabled">Use LDAPS</label>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">CA Certificate Path</label>
+                                <input type="text" class="form-control form-control-sm" name="ldap_cert_path" value="{{ config.get('auth', {}).get('ldap', {}).get('ldap_cert_path', '') }}" placeholder="/path/to/ca.crt">
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="ldapCertValidate" name="ldap_cert_validate" {% if config.get('auth', {}).get('ldap', {}).get('ldap_cert_validate') %}checked{% endif %}>
+                                <label class="form-check-label" for="ldapCertValidate">Validate Certificate</label>
+                            </div>
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save LDAP Settings</button>
                             </div>

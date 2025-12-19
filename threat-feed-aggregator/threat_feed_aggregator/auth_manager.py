@@ -1,7 +1,9 @@
 import os
 import json
 import logging
-from ldap3 import Server, Connection, ALL, NTLM, SIMPLE
+import ssl
+from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, Tls
+
 from .db_manager import check_admin_credentials, set_admin_password
 
 logger = logging.getLogger(__name__)
@@ -47,26 +49,31 @@ def check_credentials(username, password):
     if ldap_enabled:
         server_hostname = ldap_config.get('server')
         base_dn = ldap_config.get('domain')
-        
+        ldaps_enabled = ldap_config.get('ldaps_enabled', False)
+        ldap_cert_path = ldap_config.get('ldap_cert_path', '')
+        ldap_cert_validate = ldap_config.get('ldap_cert_validate', False)
+
         if not server_hostname or not base_dn:
             logger.warning("LDAP enabled but server hostname or Base DN is not configured.")
             return False, "LDAP not fully configured."
         
-        # Ensure server_hostname is in a format ldap3.Server expects
-        # It should just be the hostname, not a full URL
-        # The user will enter the IP 172.20.0.20
-        # If ldap3.Server expects ldap:// prefix, we add it.
-        # But usually, it expects just the hostname/IP.
-        
         try:
-            # Construct user DN
+            tls_config = None
+            if ldaps_enabled:
+                if ldap_cert_validate and ldap_cert_path:
+                    tls_config = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ldap_cert_path)
+                else:
+                    tls_config = Tls(validate=ssl.CERT_NONE)
+
+            server = Server(server_hostname, get_info=ALL, use_ssl=ldaps_enabled, tls=tls_config)
+            
             if "@" in username: # User principal name (UPN)
                 user_dn = username
             else: # For OpenLDAP, users are typically under ou=people
                 user_dn = f"uid={username},ou=people,{base_dn}"
             
             logger.debug(f"Attempting LDAP connection to {server_hostname} with user DN: {user_dn}")
-            server = Server(server_hostname, get_info=ALL)
+            
             conn = Connection(server, user=user_dn, password=password, auto_bind=True)
             
             if conn.bound:

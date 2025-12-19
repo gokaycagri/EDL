@@ -133,6 +133,9 @@ def update_ldap():
     server = request.form.get('ldap_server').replace('ldap://', '')
     domain = request.form.get('ldap_domain')
     enabled = request.form.get('ldap_enabled') == 'on'
+    ldaps_enabled = request.form.get('ldaps_enabled') == 'on'
+    ldap_cert_path = request.form.get('ldap_cert_path')
+    ldap_cert_validate = request.form.get('ldap_cert_validate') == 'on'
     
     config = read_config()
     if 'auth' not in config: config['auth'] = {}
@@ -140,7 +143,10 @@ def update_ldap():
     config['auth']['ldap'] = {
         'enabled': enabled,
         'server': server,
-        'domain': domain
+        'domain': domain,
+        'ldaps_enabled': ldaps_enabled,
+        'ldap_cert_path': ldap_cert_path,
+        'ldap_cert_validate': ldap_cert_validate
     }
     
     write_config(config)

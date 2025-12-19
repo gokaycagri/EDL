@@ -13,7 +13,10 @@
         "ldap": {
             "enabled": false,
             "server": "ldap://example.com",
-            "domain": "dc=example,dc=com"
+            "domain": "dc=example,dc=com",
+            "ldaps_enabled": false,
+            "ldap_cert_path": "",
+            "ldap_cert_validate": false
         }
     }
 }
