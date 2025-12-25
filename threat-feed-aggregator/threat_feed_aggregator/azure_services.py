@@ -3,7 +3,7 @@ import re
 import os
 import logging
 from .config_manager import DATA_DIR
-from .utils import aggregate_ips
+from .utils import aggregate_ips, get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,8 @@ def get_latest_azure_json_url():
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-        response = requests.get(DOWNLOAD_PAGE_URL, headers=headers, timeout=10)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.get(DOWNLOAD_PAGE_URL, headers=headers, timeout=10, proxies=proxies)
         response.raise_for_status()
         
         # Regex to find the JSON download link
@@ -48,7 +49,8 @@ def process_azure_feeds():
 
     try:
         logger.info(f"Downloading Azure data from: {json_url}")
-        response = requests.get(json_url, timeout=30)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.get(json_url, timeout=30, proxies=proxies)
         response.raise_for_status()
         data = response.json()
     except Exception as e:

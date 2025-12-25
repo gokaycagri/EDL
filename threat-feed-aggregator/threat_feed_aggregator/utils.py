@@ -197,3 +197,41 @@ def aggregate_ips(ip_list):
     # Convert back to strings
     result = [str(net) for net in collapsed_v4] + [str(net) for net in collapsed_v6]
     return result
+
+def get_proxy_settings():
+    """
+    Retrieves proxy settings from config and formats them for requests/aiohttp.
+    Returns:
+        tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, auth_for_aiohttp)
+    """
+    from .config_manager import read_config
+    config = read_config()
+    proxy_config = config.get('proxy', {})
+    
+    if not proxy_config.get('enabled'):
+        return None, None, None
+        
+    server = proxy_config.get('server')
+    port = proxy_config.get('port')
+    username = proxy_config.get('username')
+    password = proxy_config.get('password')
+    
+    if not server or not port:
+        return None, None, None
+        
+    # Format: http://user:pass@host:port or http://host:port
+    auth_string = ""
+    if username and password:
+        auth_string = f"{username}:{password}@"
+        
+    proxy_url = f"http://{auth_string}{server}:{port}"
+    
+    # Requests format
+    proxies = {
+        "http": proxy_url,
+        "https": proxy_url
+    }
+    
+    # Aiohttp Auth (if separate auth object needed, though URL encoding usually works)
+    # Usually returning just the URL is enough for aiohttp if auth is embedded
+    return proxies, proxy_url, None

@@ -2,7 +2,7 @@ import requests
 import os
 import logging
 from .config_manager import DATA_DIR
-from .utils import aggregate_ips
+from .utils import aggregate_ips, get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,8 @@ def fetch_github_data():
     Fetches the official GitHub IP ranges JSON.
     """
     try:
-        response = requests.get(GITHUB_META_URL, timeout=20)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.get(GITHUB_META_URL, timeout=20, proxies=proxies)
         response.raise_for_status()
         return response.json()
     except Exception as e:

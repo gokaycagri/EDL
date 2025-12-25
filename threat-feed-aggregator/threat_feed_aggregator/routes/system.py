@@ -126,12 +126,89 @@ def update_settings():
         write_config(config)
     return redirect(url_for('dashboard.index'))
 
+@bp_system.route('/api_client/add', methods=['POST'])
+@login_required
+def add_api_client():
+    import secrets
+    import string
+    import uuid
+    from datetime import datetime
+    
+    name = request.form.get('name')
+    allowed_ips_str = request.form.get('allowed_ips', '')
+    
+    if name:
+        config = read_config()
+        if 'api_clients' not in config:
+            config['api_clients'] = []
+            
+        # Parse IPs
+        allowed_ips = [ip.strip() for ip in allowed_ips_str.split(',') if ip.strip()]
+        
+        # Generate Key
+        alphabet = string.ascii_letters + string.digits
+        new_key = ''.join(secrets.choice(alphabet) for i in range(32))
+        
+        new_client = {
+            "id": str(uuid.uuid4()),
+            "name": name,
+            "api_key": new_key,
+            "allowed_ips": allowed_ips,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        config['api_clients'].append(new_client)
+        write_config(config)
+        flash(f'API Client "{name}" added successfully.', 'success')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/api_client/regenerate_key', methods=['POST'])
+@login_required
+def regenerate_api_client_key():
+    import secrets
+    import string
+    
+    client_id = request.form.get('client_id')
+    
+    if client_id:
+        config = read_config()
+        if 'api_clients' in config:
+            for client in config['api_clients']:
+                if client['id'] == client_id:
+                    alphabet = string.ascii_letters + string.digits
+                    new_key = ''.join(secrets.choice(alphabet) for i in range(32))
+                    client['api_key'] = new_key
+                    write_config(config)
+                    flash(f'API Key for "{client["name"]}" regenerated successfully.', 'success')
+                    break
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/api_client/remove', methods=['POST'])
+@login_required
+def remove_api_client():
+    client_id = request.form.get('client_id')
+    
+    if client_id:
+        config = read_config()
+        if 'api_clients' in config:
+            original_len = len(config['api_clients'])
+            config['api_clients'] = [c for c in config['api_clients'] if c['id'] != client_id]
+            
+            if len(config['api_clients']) < original_len:
+                write_config(config)
+                flash('API Client removed.', 'success')
+            
+    return redirect(url_for('system.index'))
+
 @bp_system.route('/update_ldap', methods=['POST'])
 @login_required
 def update_ldap():
     # Note: In app.py this was /update_ldap_settings
     server = request.form.get('ldap_server').replace('ldap://', '')
     domain = request.form.get('ldap_domain')
+    admin_group = request.form.get('ldap_admin_group')
     enabled = request.form.get('ldap_enabled') == 'on'
     ldaps_enabled = request.form.get('ldaps_enabled') == 'on'
     ldap_cert_path = request.form.get('ldap_cert_path')
@@ -144,6 +221,7 @@ def update_ldap():
         'enabled': enabled,
         'server': server,
         'domain': domain,
+        'admin_group': admin_group,
         'ldaps_enabled': ldaps_enabled,
         'ldap_cert_path': ldap_cert_path,
         'ldap_cert_validate': ldap_cert_validate
@@ -152,24 +230,52 @@ def update_ldap():
     write_config(config)
     return redirect(url_for('dashboard.index'))
 
+@bp_system.route('/update_proxy', methods=['POST'])
+@login_required
+def update_proxy():
+    enabled = request.form.get('proxy_enabled') == 'on'
+    server = request.form.get('proxy_server')
+    port = request.form.get('proxy_port')
+    username = request.form.get('proxy_username')
+    password = request.form.get('proxy_password')
+    
+    config = read_config()
+    
+    config['proxy'] = {
+        'enabled': enabled,
+        'server': server,
+        'port': port,
+        'username': username,
+        'password': password
+    }
+    
+    write_config(config)
+    flash('Proxy settings updated successfully.', 'success')
+    return redirect(url_for('system.index'))
+
 @bp_system.route('/upload_cert', methods=['POST'])
 @login_required
 def upload_cert():
     if 'pfx_file' not in request.files:
-        flash('No file part')
-        return redirect(url_for('dashboard.index'))
+        flash('No file part', 'danger')
+        return redirect(url_for('system.index'))
     
     file = request.files['pfx_file']
     password = request.form.get('password', '')
 
     if file.filename == '':
-        flash('No selected file')
-        return redirect(url_for('dashboard.index'))
+        flash('No selected file', 'danger')
+        return redirect(url_for('system.index'))
 
     if file:
         file_content = file.read()
         success, message = process_pfx_upload(file_content, password)
-    return redirect(url_for('dashboard.index'))
+        if success:
+            flash(f"{message} Note: You must restart the Docker container for changes to take effect.", 'success')
+        else:
+            flash(f"Error uploading certificate: {message}", 'danger')
+            
+    return redirect(url_for('system.index'))
 
 @bp_system.route('/whitelist/add', methods=['POST'])
 @login_required

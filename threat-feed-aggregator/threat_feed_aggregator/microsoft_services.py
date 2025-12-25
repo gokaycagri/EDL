@@ -3,7 +3,7 @@ import uuid
 import os
 import logging
 from .config_manager import DATA_DIR
-from .utils import aggregate_ips
+from .utils import aggregate_ips, get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,8 @@ def fetch_microsoft_data():
     url = MS_ENDPOINT_URL.format(request_id)
     
     try:
-        response = requests.get(url, timeout=20)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.get(url, timeout=20, proxies=proxies)
         response.raise_for_status()
         return response.json()
     except Exception as e:

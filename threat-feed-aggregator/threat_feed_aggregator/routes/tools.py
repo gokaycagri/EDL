@@ -3,6 +3,7 @@ from .auth import login_required
 import requests
 import logging
 import whois # Added for WHOIS lookup
+from ..utils import get_proxy_settings
 
 bp_tools = Blueprint('tools', __name__, url_prefix='/tools')
 logger = logging.getLogger(__name__)
@@ -47,7 +48,8 @@ def lookup_ip():
         }
         
         # We need to verify SSL? ip.thc.org likely has valid certs.
-        response = requests.post(target_url, json=payload, headers=headers, timeout=10)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.post(target_url, json=payload, headers=headers, timeout=10, proxies=proxies)
         
         if response.status_code == 200:
             thc_data = response.json()

@@ -55,6 +55,89 @@
                     </div>
                 </div>
 
+                <!-- API Access / Clients -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light fw-bold"><i class="fas fa-key me-2 text-primary"></i> API Clients & Access</div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">Create unique API keys for different systems (SOAR, SIEM, etc.) and restrict them to specific IPs.</p>
+                        
+                        <!-- Client List -->
+                        <div class="table-responsive mb-3 border rounded bg-white">
+                            <table class="table table-sm table-hover mb-0 align-middle">
+                                <thead class="bg-light text-muted">
+                                    <tr>
+                                        <th class="ps-3">Client Name</th>
+                                        <th>Trusted IPs</th>
+                                        <th>API Key</th>
+                                        <th class="text-end pe-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if config.get('api_clients') %}
+                                        {% for client in config.get('api_clients') %}
+                                        <tr>
+                                            <td class="ps-3 fw-bold">{{ client.name }}</td>
+                                            <td>
+                                                {% if client.allowed_ips %}
+                                                    {% for ip in client.allowed_ips %}
+                                                        <span class="badge bg-secondary text-white fw-normal mb-1">{{ ip }}</span>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <span class="badge bg-warning text-dark fw-normal">Any IP</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <div class="input-group input-group-sm" style="width: 170px;">
+                                                    <input type="password" class="form-control" value="{{ client.api_key }}" id="key-{{ loop.index }}" readonly>
+                                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('key-{{ loop.index }}')" title="Show/Hide"><i class="fas fa-eye"></i></button>
+                                                    <button class="btn btn-outline-primary" type="button" onclick="copyToClipboard('key-{{ loop.index }}')" title="Copy"><i class="fas fa-copy"></i></button>
+                                                    <form action="{{ url_for('system.regenerate_api_client_key') }}" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="client_id" value="{{ client.id }}">
+                                                        <button type="submit" class="btn btn-outline-warning" onclick="return confirm('Regenerate key for {{ client.name }}? The old key will stop working immediately.')" title="Regenerate Key"><i class="fas fa-sync-alt"></i></button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <form action="{{ url_for('system.remove_api_client') }}" method="POST" class="d-inline">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="client_id" value="{{ client.id }}">
+                                                    <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete this client?')"><i class="fas fa-trash"></i></button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="4" class="text-center text-muted py-3">No API clients configured.</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Add Client Form -->
+                        <div class="bg-light p-3 rounded border">
+                            <h6 class="small fw-bold mb-2">Generate New Key</h6>
+                            <form action="{{ url_for('system.add_api_client') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <input type="text" class="form-control form-control-sm" name="name" placeholder="Client Name (e.g. SOAR)" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control form-control-sm" name="allowed_ips" placeholder="Allowed IPs (comma separated)">
+                                    </div>
+                                    <div class="col-md-2 d-grid">
+                                        <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-plus"></i> Add</button>
+                                    </div>
+                                </div>
+                                <div class="form-text text-muted" style="font-size: 0.7rem;">Leave "Allowed IPs" empty to allow access from anywhere.</div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- LDAP Settings -->
                 <div class="card mb-4">
                     <div class="card-header bg-light fw-bold"><i class="fas fa-users-cog me-2"></i> LDAP / Active Directory</div>
@@ -72,6 +155,11 @@
                             <div class="mb-3">
                                 <label class="form-label small fw-bold">Domain / Base DN</label>
                                 <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ config.get('auth', {}).get('ldap', {}).get('domain', '') }}" placeholder="dc=example,dc=com">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Admin Group DN (Optional)</label>
+                                <input type="text" class="form-control form-control-sm" name="ldap_admin_group" value="{{ config.get('auth', {}).get('ldap', {}).get('admin_group', '') }}" placeholder="cn=admins,ou=groups,dc=example,dc=com">
+                                <div class="form-text text-muted" style="font-size: 0.7rem;">If set, users must be a member of this group to login.</div>
                             </div>
                             <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if config.get('auth', {}).get('ldap', {}).get('ldaps_enabled') %}checked{% endif %}>
@@ -122,6 +210,48 @@
             <!-- Right Column -->
             <div class="col-md-6">
                 
+                <!-- Proxy Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light fw-bold"><i class="fas fa-network-wired me-2 text-primary"></i> Proxy Settings</div>
+                    <div class="card-body">
+                        <form action="{{ url_for('system.update_proxy') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
+                                <label class="form-check-label" for="proxyEnabled">Enable Proxy</label>
+                            </div>
+                            
+                            <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-8">
+                                        <label class="form-label small fw-bold">Proxy Server (FQDN/IP)</label>
+                                        <input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold">Port</label>
+                                        <input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold">Username (Optional)</label>
+                                        <input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold">Password (Optional)</label>
+                                        <input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save Proxy Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
                 <!-- System Maintenance -->
                 <div class="card mb-4">
                     <div class="card-header bg-dark text-white fw-bold"><i class="fas fa-database me-2"></i> Backup & Restore</div>
@@ -173,6 +303,52 @@
 
     <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
     <script>
+        function toggleProxyFields() {
+            var isEnabled = document.getElementById('proxyEnabled').checked;
+            var fields = document.getElementById('proxyFields');
+            if (isEnabled) {
+                fields.style.display = 'block';
+            } else {
+                fields.style.display = 'none';
+            }
+        }
+        
+        function toggleKeyVisibility(elementId) {
+            var x = document.getElementById(elementId);
+            if (x.type === "password") {
+                x.type = "text";
+            } else {
+                x.type = "password";
+            }
+        }
+
+        function copyToClipboard(elementId) {
+            // If no ID provided, default to old behavior (though UI removed)
+            var copyText = document.getElementById(elementId || "apiKeyField");
+            if (!copyText) return;
+            
+            // If masked, temporarily unmask to copy
+            var originalType = copyText.type;
+            copyText.type = "text";
+            
+            copyText.select();
+            copyText.setSelectionRange(0, 99999); // For mobile devices
+            navigator.clipboard.writeText(copyText.value).then(function() {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'API Key copied!',
+                    showConfirmButton: false,
+                    timer: 1500
+                });
+                copyText.type = originalType;
+            }, function(err) {
+                console.error('Async: Could not copy text: ', err);
+                copyText.type = originalType;
+            });
+        }
+
         // Check if there are flash messages and display them with SweetAlert
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}

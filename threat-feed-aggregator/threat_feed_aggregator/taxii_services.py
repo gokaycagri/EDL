@@ -3,6 +3,7 @@ import logging
 import re
 import json
 from requests.auth import HTTPBasicAuth
+from .utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,11 @@ class SimpleTAXIIClient:
         self.password = password
         self.verify_ssl = verify_ssl
         self.session = requests.Session()
+        
+        # Configure Proxy
+        proxies, _, _ = get_proxy_settings()
+        if proxies:
+            self.session.proxies.update(proxies)
         
         if self.username and self.password:
             self.session.auth = HTTPBasicAuth(self.username, self.password)

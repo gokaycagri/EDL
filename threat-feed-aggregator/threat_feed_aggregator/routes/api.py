@@ -12,12 +12,22 @@ from ..aggregator import CURRENT_JOB_STATUS, regenerate_edl_files, test_feed_sou
 from ..microsoft_services import process_microsoft_feeds
 from ..github_services import process_github_feeds
 from ..azure_services import process_azure_feeds
-from ..db_manager import get_historical_stats, get_job_history, clear_job_history
+from ..db_manager import (
+    get_historical_stats, 
+    get_job_history, 
+    clear_job_history, 
+    add_api_blacklist_item, 
+    remove_api_blacklist_item,
+    add_whitelist_item,
+    remove_whitelist_item,
+    get_whitelist,
+    get_api_blacklist_items
+)
 from ..log_manager import get_live_logs
 from ..utils import add_to_safe_list, remove_from_safe_list
 
 from . import bp_api
-from .auth import login_required
+from .auth import login_required, api_key_required
 
 logger = logging.getLogger(__name__)
 
@@ -292,3 +302,121 @@ def api_test_feed():
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
+
+# --- SOAR Integration Endpoints ---
+
+@bp_api.route('/indicators', methods=['POST'])
+@api_key_required
+def add_indicator():
+    """
+    Add an indicator via API (SOAR).
+    Payload:
+    {
+        "type": "whitelist" | "blacklist",
+        "value": "1.2.3.4",
+        "comment": "Optional comment",
+        "item_type": "ip" | "domain" | "url" (optional, default ip)
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+        
+        action_type = data.get('type') # whitelist or blacklist
+        value = data.get('value')
+        comment = data.get('comment', 'Added via API')
+        item_type = data.get('item_type', 'ip')
+        
+        if not value or not action_type:
+            return jsonify({'status': 'error', 'message': 'Missing value or type'}), 400
+            
+        if action_type.lower() == 'whitelist':
+            # Whitelist Logic
+            success, msg = add_whitelist_item(value, description=comment)
+        
+        elif action_type.lower() == 'blacklist':
+            # Blacklist Logic
+            success, msg = add_api_blacklist_item(value, item_type=item_type, comment=comment)
+            # Trigger immediate background regeneration if needed? 
+            # Ideally we should, but for performance maybe just let it be picked up on next run 
+            # or we can force a quick update of the files.
+            if success:
+                # Regenerate files to reflect changes immediately
+                # Note: This doesn't run the full fetch, just DB -> File generation
+                try:
+                    regenerate_edl_files()
+                except:
+                    pass
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid type. Use whitelist or blacklist'}), 400
+            
+        if success:
+            return jsonify({'status': 'success', 'message': msg})
+        else:
+            return jsonify({'status': 'error', 'message': msg}), 400
+            
+    except Exception as e:
+        logger.error(f"API Error adding indicator: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@bp_api.route('/indicators', methods=['DELETE'])
+@api_key_required
+def remove_indicator():
+    """
+    Remove an indicator via API.
+    Payload:
+    {
+        "value": "1.2.3.4",
+        "type": "whitelist" | "blacklist" (optional hint, otherwise tries both)
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+            
+        value = data.get('value')
+        type_hint = data.get('type')
+        
+        if not value:
+             return jsonify({'status': 'error', 'message': 'Missing value'}), 400
+        
+        deleted = False
+        msgs = []
+        
+        # Try Blacklist
+        if not type_hint or type_hint == 'blacklist':
+            if remove_api_blacklist_item(value):
+                deleted = True
+                msgs.append("Removed from Blacklist")
+        
+        # Try Whitelist
+        if not type_hint or type_hint == 'whitelist':
+            # Whitelist removal by value requires finding ID first or modifying DB function
+            # Since our DB function `remove_whitelist_item` takes ID, let's look it up.
+            w_list = get_whitelist()
+            found_id = None
+            for item in w_list:
+                if item['item'] == value:
+                    found_id = item['id']
+                    break
+            
+            if found_id:
+                if remove_whitelist_item(found_id):
+                    deleted = True
+                    msgs.append("Removed from Whitelist")
+        
+        if deleted:
+            # Regenerate files
+            try:
+                regenerate_edl_files()
+            except:
+                pass
+            return jsonify({'status': 'success', 'message': ", ".join(msgs)})
+        else:
+            return jsonify({'status': 'error', 'message': 'Item not found'}), 404
+
+    except Exception as e:
+        logger.error(f"API Error removing indicator: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500

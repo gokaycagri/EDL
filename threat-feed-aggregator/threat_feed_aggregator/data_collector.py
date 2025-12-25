@@ -1,6 +1,7 @@
 import requests
 import aiohttp
 import logging
+from .utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,8 @@ def fetch_data_from_url(url):
         str: The content of the response, or None if the request fails.
     """
     try:
-        response = requests.get(url, timeout=30)
+        proxies, _, _ = get_proxy_settings()
+        response = requests.get(url, timeout=30, proxies=proxies)
         response.raise_for_status()
         return response.text
     except requests.exceptions.RequestException as e:
@@ -33,8 +35,9 @@ async def fetch_data_from_url_async(url):
         str: The content of the response, or None if the request fails.
     """
     try:
+        _, proxy_url, _ = get_proxy_settings()
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=30) as response:
+            async with session.get(url, timeout=30, proxy=proxy_url) as response:
                 response.raise_for_status()
                 return await response.text()
     except Exception as e:

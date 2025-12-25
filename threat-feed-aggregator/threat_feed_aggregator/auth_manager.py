@@ -49,6 +49,7 @@ def check_credentials(username, password):
     if ldap_enabled:
         server_hostname = ldap_config.get('server')
         base_dn = ldap_config.get('domain')
+        admin_group = ldap_config.get('admin_group')
         ldaps_enabled = ldap_config.get('ldaps_enabled', False)
         ldap_cert_path = ldap_config.get('ldap_cert_path', '')
         ldap_cert_validate = ldap_config.get('ldap_cert_validate', False)
@@ -69,17 +70,66 @@ def check_credentials(username, password):
             
             if "@" in username: # User principal name (UPN)
                 user_dn = username
-            else: # For OpenLDAP, users are typically under ou=people
+                search_filter = f"(userPrincipalName={username})"
+                search_base = base_dn
+            else: # For OpenLDAP/Standard
                 user_dn = f"uid={username},ou=people,{base_dn}"
+                search_filter = f"(uid={username})"
+                search_base = f"ou=people,{base_dn}"
             
             logger.debug(f"Attempting LDAP connection to {server_hostname} with user DN: {user_dn}")
             
+            # Bind as the user
             conn = Connection(server, user=user_dn, password=password, auto_bind=True)
             
             if conn.bound:
-                conn.unbind()
-                logger.info(f"LDAP login successful for user: {username}")
-                return True, "LDAP login successful."
+                # Auth successful, now check group if configured
+                if admin_group:
+                    try:
+                        # Search for the user object to get attributes
+                        # We need to find the user's entry to read memberOf
+                        # Note: user_dn might be a simple string (UPN), so we search.
+                        # If user_dn is a full DN, we can just read the object, but search is safer.
+                        
+                        conn.search(search_base, search_filter, attributes=['memberOf'])
+                        
+                        if len(conn.entries) > 0:
+                            entry = conn.entries[0]
+                            # memberOf is usually a list of DNs
+                            member_of = entry['memberOf'].values if 'memberOf' in entry else []
+                            
+                            # Normalize for comparison (case-insensitive usually good for DNs)
+                            admin_group_lower = admin_group.lower()
+                            member_of_lower = [str(g).lower() for g in member_of]
+                            
+                            is_member = False
+                            for group in member_of_lower:
+                                if admin_group_lower in group: # Partial match (DN contains CN) or exact
+                                    is_member = True
+                                    break
+                            
+                            if is_member:
+                                logger.info(f"LDAP login successful for user: {username} (Group verified)")
+                                conn.unbind()
+                                return True, "LDAP login successful."
+                            else:
+                                logger.warning(f"LDAP user {username} is authenticated but not a member of {admin_group}")
+                                conn.unbind()
+                                return False, "Not a member of the required Admin Group."
+                        else:
+                            logger.warning(f"LDAP user {username} authenticated but object not found in search.")
+                            conn.unbind()
+                            return False, "User object not found."
+                            
+                    except Exception as e:
+                        logger.error(f"Error checking LDAP group: {e}")
+                        conn.unbind()
+                        return False, "Error verifying group membership."
+                else:
+                    # No group check required
+                    conn.unbind()
+                    logger.info(f"LDAP login successful for user: {username}")
+                    return True, "LDAP login successful."
             else:
                 logger.warning(f"LDAP bind failed for user: {username}. Error: {conn.result}")
                 return False, "Invalid LDAP credentials."

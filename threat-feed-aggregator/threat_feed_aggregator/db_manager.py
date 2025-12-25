@@ -83,6 +83,17 @@ def init_db(conn=None):
                     )
                 ''')
 
+                # API Blacklist Table (For SOAR Integration)
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS api_blacklist (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        item TEXT NOT NULL UNIQUE,
+                        type TEXT NOT NULL DEFAULT 'ip',
+                        comment TEXT,
+                        added_at TEXT NOT NULL
+                    )
+                ''')
+
                 # Users Table
                 db.execute('''
                     CREATE TABLE IF NOT EXISTS users (
@@ -404,6 +415,42 @@ def remove_whitelist_item(item_id, conn=None):
                 return True
             except Exception as e:
                 logger.error(f"Error removing from whitelist: {e}")
+                return False
+
+# --- API Blacklist Functions ---
+def add_api_blacklist_item(item, item_type='ip', comment="", conn=None):
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                db.execute('INSERT INTO api_blacklist (item, type, comment, added_at) VALUES (?, ?, ?, ?)', 
+                             (item.strip(), item_type, comment, now_iso))
+                db.commit()
+                return True, "Item added to blacklist."
+            except sqlite3.IntegrityError:
+                return False, "Item already in blacklist."
+            except Exception as e:
+                logger.error(f"Error adding to api_blacklist: {e}")
+                return False, str(e)
+
+def get_api_blacklist_items(conn=None):
+    with db_transaction(conn) as db:
+        cursor = db.execute('SELECT * FROM api_blacklist ORDER BY added_at DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+def remove_api_blacklist_item(item, conn=None):
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                # Can remove by ID or exact item string
+                if isinstance(item, int) or (isinstance(item, str) and item.isdigit()):
+                    db.execute('DELETE FROM api_blacklist WHERE id = ?', (item,))
+                else:
+                    db.execute('DELETE FROM api_blacklist WHERE item = ?', (item,))
+                db.commit()
+                return True
+            except Exception as e:
+                logger.error(f"Error removing from api_blacklist: {e}")
                 return False
 
 def delete_whitelisted_indicators(items_to_delete, conn=None):

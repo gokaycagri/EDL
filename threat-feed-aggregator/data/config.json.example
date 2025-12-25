@@ -9,6 +9,7 @@
         }
     ],
     "indicator_lifetime_days": 30,
+    "api_key": "CHANGE_ME_TO_A_SECURE_RANDOM_STRING",
     "auth": {
         "ldap": {
             "enabled": false,

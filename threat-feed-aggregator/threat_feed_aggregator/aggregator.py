@@ -17,7 +17,8 @@ from .db_manager import (
     log_job_end,
     recalculate_scores,
     save_historical_stats,
-    db_transaction
+    db_transaction,
+    get_api_blacklist_items
 )
 from .utils import is_whitelisted
 from .geoip_manager import get_country_code
@@ -73,6 +74,23 @@ def regenerate_edl_files():
     try:
         indicators_data = get_all_indicators()
         
+        # --- Merge API Blacklist Items ---
+        # Treat them as high-confidence (Risk Score 100) items
+        api_blacklist_items = get_api_blacklist_items()
+        for item in api_blacklist_items:
+            ind = item['item']
+            if ind not in indicators_data:
+                indicators_data[ind] = {
+                    'last_seen': item['added_at'],
+                    'country': 'Unknown', # Could try to enrich if needed
+                    'type': item['type'],
+                    'risk_score': 100, # Max risk for manually added items
+                    'source_count': 1
+                }
+            else:
+                # Override existing score if lower
+                indicators_data[ind]['risk_score'] = 100
+
         from .output_formatter import format_for_palo_alto, format_for_fortinet, format_for_url_list
 
         palo_alto_output = format_for_palo_alto(indicators_data)

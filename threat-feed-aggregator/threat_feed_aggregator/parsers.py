@@ -90,6 +90,23 @@ def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
             continue
         
         indicator_type = identify_indicator_type(stripped_line)
+        
+        # Normalization for De-duplication
+        if indicator_type == 'domain':
+            stripped_line = stripped_line.lower()
+        elif indicator_type == 'cidr':
+            try:
+                # Normalize CIDR (e.g., 192.168.1.1/24 -> 192.168.1.0/24)
+                stripped_line = str(ipaddress.ip_network(stripped_line, strict=False))
+            except ValueError:
+                pass
+        elif indicator_type == 'ip':
+            try:
+                # Normalize IP (e.g., remove leading zeros)
+                stripped_line = str(ipaddress.ip_address(stripped_line))
+            except ValueError:
+                pass
+
         parsed_items.append((stripped_line, indicator_type))
         
         # Log progress every 50,000 lines
@@ -103,7 +120,21 @@ def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
 
 def parse_json_with_type(raw_data, key=None, **kwargs):
     items = parse_json(raw_data, key)
-    return [(item, identify_indicator_type(item)) for item in items]
+    normalized_items = []
+    for item in items:
+        itype = identify_indicator_type(item)
+        if itype == 'domain':
+            item = item.lower()
+        elif itype == 'cidr':
+            try:
+                item = str(ipaddress.ip_network(item, strict=False))
+            except: pass
+        elif itype == 'ip':
+            try:
+                item = str(ipaddress.ip_address(item))
+            except: pass
+        normalized_items.append((item, itype))
+    return normalized_items
 
 def parse_csv_with_type(raw_data, column=0, **kwargs):
     # Ensure column is an integer
@@ -112,7 +143,21 @@ def parse_csv_with_type(raw_data, column=0, **kwargs):
     except (ValueError, TypeError):
         column = 0
     items = parse_csv(raw_data, column)
-    return [(item, identify_indicator_type(item)) for item in items]
+    normalized_items = []
+    for item in items:
+        itype = identify_indicator_type(item)
+        if itype == 'domain':
+            item = item.lower()
+        elif itype == 'cidr':
+            try:
+                item = str(ipaddress.ip_network(item, strict=False))
+            except: pass
+        elif itype == 'ip':
+            try:
+                item = str(ipaddress.ip_address(item))
+            except: pass
+        normalized_items.append((item, itype))
+    return normalized_items
 
 def get_parser(format_type):
     """

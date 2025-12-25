@@ -15,6 +15,21 @@ This project is a web-based Threat Feed Aggregator built with Flask. Its purpose
 *   **Output Formatting:** Generates downloadable External Dynamic Lists (EDLs) for Palo Alto Networks and Fortinet.
 *   **User Authentication:** Basic login functionality with optional LDAP integration.
 
+## Recent Major Updates (v1.5 - Enterprise Security Features)
+
+### 1. Advanced API Management (Multi-Client & IP Restriction)
+*   **Per-Client API Keys:** Replaced the single global API key with a robust client management system. Administrators can now generate unique API keys for different consumers (e.g., SOAR, SIEM, Monitor).
+*   **Trusted Host Enforcement:** Each API client can be restricted to specific source IP addresses. This provides an additional layer of security, ensuring that valid keys cannot be misused from unauthorized networks.
+*   **Key Rotation:** Added one-click key regeneration for individual clients, allowing for seamless key rotation without affecting other integrations.
+
+### 2. Enhanced Authentication & Networking
+*   **LDAP Group Authorization:** Extended LDAP integration to support "Admin Group DN". Login can now be restricted to members of a specific Active Directory/LDAP group.
+*   **System-Wide Proxy:** Implemented a centralized Proxy configuration (Server, Port, Auth) in System Settings. All outbound connections (Feed fetching, Microsoft/Azure/GitHub services, Investigation tools) now automatically route through the configured proxy.
+*   **SSL Certificate Feedback:** Improved the UI feedback loop when uploading custom SSL certificates (.pfx), reminding users to restart the container.
+
+### 3. Data Integrity & Deduplication
+*   **Stricter Normalization:** Updated data parsers to strictly normalize incoming data before database insertion. Domains are lowercased, and IPs/CIDRs are standardized. This ensures the database's unique constraints work effectively, preventing duplicate entries across multiple feed sources.
+
 ## Recent Major Updates (v1.4 - IP Investigation Tool)
 
 ### 1. New Investigation Capabilities
