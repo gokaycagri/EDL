@@ -739,10 +739,18 @@ def add_whitelist():
     description = request.form.get('description')
     
     if item:
+        from ..utils import validate_indicator
+        is_valid, _ = validate_indicator(item)
+        
+        if not is_valid:
+            flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
+            return redirect(url_for('dashboard.index'))
+
         success, message = add_whitelist_item(item, description)
         if not success:
-            flash(f'Error: {message}')
+            flash(f'Error: {message}', 'danger')
         else:
+            flash(f'Success: {item} added to safe list.', 'success')
             delete_whitelisted_indicators([item])
             
     return redirect(url_for('dashboard.index'))

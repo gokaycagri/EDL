@@ -280,6 +280,12 @@ def restore_system():
 def add_safe_list_item():
     item = request.form.get('item')
     if item:
+        from ..utils import validate_indicator
+        is_valid, _ = validate_indicator(item)
+        if not is_valid:
+            flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
+            return redirect(url_for('dashboard.index'))
+
         success, message = add_to_safe_list(item)
         if success:
             flash(f'Added to Safe List: {item}', 'success')
@@ -357,6 +363,12 @@ def add_indicator():
         if not value or not action_type:
             return jsonify({'status': 'error', 'message': 'Missing value or type'}), 400
             
+        # Validation
+        from ..utils import validate_indicator
+        is_valid, _ = validate_indicator(value)
+        if not is_valid:
+            return jsonify({'status': 'error', 'message': f'"{value}" is not a valid IP, CIDR, or Domain/URL'}), 400
+
         if action_type.lower() == 'whitelist':
             # Whitelist Logic
             success, msg = add_whitelist_item(value, description=comment)

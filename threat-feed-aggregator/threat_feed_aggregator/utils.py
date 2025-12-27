@@ -215,6 +215,40 @@ def aggregate_ips(ip_list):
     result = [str(net) for net in collapsed_v4] + [str(net) for net in collapsed_v6]
     return result
 
+def validate_indicator(item):
+    """
+    Validates if an item is a valid IP address, CIDR, or URL.
+    Returns: (bool, type_string)
+    """
+    if not item:
+        return False, "Empty"
+
+    # 1. Check IP/CIDR
+    try:
+        ipaddress.ip_network(item, strict=False)
+        return True, "ip/cidr"
+    except ValueError:
+        pass
+
+    # 2. Check URL / Domain
+    # Very basic validation for domains/urls
+    from urllib.parse import urlparse
+    parsed = urlparse(item)
+    
+    # If it has a scheme (http/https), check if it has a netloc (domain)
+    if parsed.scheme in ('http', 'https'):
+        if parsed.netloc:
+            return True, "url"
+    
+    # If no scheme, check if it looks like a domain (has a dot, no spaces)
+    if '.' in item and ' ' not in item and not item.startswith('.'):
+        # Basic check for common domain characters
+        import re
+        if re.match(r'^[a-zA-Z0-9\-\.]+$', item):
+            return True, "domain"
+
+    return False, "invalid"
+
 def get_proxy_settings():
     """
     Retrieves proxy settings from config and formats them for requests/aiohttp.
