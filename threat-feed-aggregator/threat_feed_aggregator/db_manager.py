@@ -337,6 +337,12 @@ def verify_local_user(username, password, conn=None):
             return True
         return False
 
+def local_user_exists(username, conn=None):
+    """Checks if a user exists in the local database."""
+    with db_transaction(conn) as db:
+        cursor = db.execute("SELECT 1 FROM users WHERE username = ?", (username,))
+        return cursor.fetchone() is not None
+
 # --- SCORING & UPSERT LOGIC (UPDATED) ---
 
 def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
@@ -522,6 +528,14 @@ def get_country_stats(conn=None):
 
 # --- Whitelist Functions ---
 def add_whitelist_item(item, description="", conn=None):
+    if not item:
+        return False, "Item is empty."
+    
+    from .utils import validate_indicator
+    is_valid, _ = validate_indicator(item)
+    if not is_valid:
+        return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
+
     with DB_WRITE_LOCK:
         with db_transaction(conn) as db:
             try:
@@ -554,6 +568,14 @@ def remove_whitelist_item(item_id, conn=None):
 
 # --- API Blacklist Functions ---
 def add_api_blacklist_item(item, item_type='ip', comment="", conn=None):
+    if not item:
+        return False, "Item is empty."
+
+    from .utils import validate_indicator
+    is_valid, _ = validate_indicator(item)
+    if not is_valid:
+        return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
+
     with DB_WRITE_LOCK:
         with db_transaction(conn) as db:
             try:

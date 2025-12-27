@@ -9,7 +9,8 @@ from .db_manager import (
     set_admin_password, 
     verify_local_user, 
     get_profile_by_ldap_groups,
-    get_user_permissions
+    get_user_permissions,
+    local_user_exists
 )
 
 logger = logging.getLogger(__name__)
@@ -57,9 +58,12 @@ def check_credentials(username, password):
     Returns: (bool, message, info_dict)
     """
     # 1. Check Local DB (Admin + Other Local Users)
-    if verify_local_user(username, password):
-        perms = get_user_permissions(username)
-        return True, "Local login successful.", {"username": username, "source": "local", "permissions": perms}
+    if local_user_exists(username):
+        if verify_local_user(username, password):
+            perms = get_user_permissions(username)
+            return True, "Local login successful.", {"username": username, "source": "local", "permissions": perms}
+        else:
+            return False, "Invalid credentials.", None
 
     # 2. Check LDAP if enabled
     from .config_manager import read_config
