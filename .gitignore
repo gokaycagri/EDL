@@ -25,6 +25,11 @@ Python.h
 db.json
 stats.json
 
+# Local Data & Config (Runtime artifacts)
+threat-feed-aggregator/data/config.json
+threat-feed-aggregator/data/*.txt
+threat-feed-aggregator/data/*.mmdb
+
 # Dependencies
 /node_modules
 
