@@ -144,39 +144,87 @@
                     <div class="card-body">
                         <form action="{{ url_for('system.update_ldap') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
                             <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap', {}).get('enabled') %}checked{% endif %}>
+                                <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap_enabled') %}checked{% endif %}>
                                 <label class="form-check-label" for="ldapEnabled">Enable LDAP Authentication</label>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold">Server URL</label>
-                                <input type="text" class="form-control form-control-sm" name="ldap_server" value="{{ config.get('auth', {}).get('ldap', {}).get('server', '') }}" placeholder="ldap://domain.com">
+
+                            <div id="ldapConfigContainer">
+                                <h6 class="small fw-bold text-muted mb-3">LDAP Server Cluster</h6>
+                                
+                                <label class="form-label small fw-bold">Server Hostnames</label>
+                                <div id="serverHostnamesList">
+                                    {% set servers = config.get('auth', {}).get('ldap_servers', []) %}
+                                    <!-- Fallback for old config or empty -->
+                                    {% if not servers and config.get('auth', {}).get('ldap', {}).get('server') %}
+                                        {% set servers = [{'server': config.get('auth', {}).get('ldap', {}).get('server')}] %}
+                                    {% endif %}
+                                    
+                                    {% for srv in servers %}
+                                    <div class="input-group input-group-sm mb-2 hostname-row">
+                                        <input type="text" class="form-control" name="ldap_server[]" value="{{ srv.server }}" placeholder="dc01.example.com" required>
+                                        <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                    </div>
+                                    {% else %}
+                                    <div class="input-group input-group-sm mb-2 hostname-row">
+                                        <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
+                                        <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="addHostnameRow()"><i class="fas fa-plus me-1"></i> Add Server</button>
+
+                                <hr>
+                                <h6 class="small fw-bold text-muted mb-3">Common Configuration</h6>
+
+                                {% set common = config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {}) %}
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-bold">Port</label>
+                                        <input type="number" class="form-control form-control-sm" name="ldap_port" value="{{ common.port or 389 }}" placeholder="389" required>
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-end">
+                                        <div class="form-check form-switch mb-2">
+                                            <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if common.ldaps_enabled %}checked{% endif %} onchange="autoUpdatePort(this)">
+                                            <label class="form-check-label small" for="ldapsEnabled">Use LDAPS (SSL)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Base DN</label>
+                                    <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ common.domain }}" placeholder="dc=example,dc=com" required>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Admin Group DN</label>
+                                    <input type="text" class="form-control form-control-sm" name="ldap_admin_group" value="{{ common.admin_group or '' }}" placeholder="cn=admins,ou=groups,dc=example,dc=com">
+                                </div>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Domain / Base DN</label>
-                                <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ config.get('auth', {}).get('ldap', {}).get('domain', '') }}" placeholder="dc=example,dc=com">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Admin Group DN (Optional)</label>
-                                <input type="text" class="form-control form-control-sm" name="ldap_admin_group" value="{{ config.get('auth', {}).get('ldap', {}).get('admin_group', '') }}" placeholder="cn=admins,ou=groups,dc=example,dc=com">
-                                <div class="form-text text-muted" style="font-size: 0.7rem;">If set, users must be a member of this group to login.</div>
-                            </div>
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if config.get('auth', {}).get('ldap', {}).get('ldaps_enabled') %}checked{% endif %}>
-                                <label class="form-check-label" for="ldapsEnabled">Use LDAPS</label>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold">CA Certificate Path</label>
-                                <input type="text" class="form-control form-control-sm" name="ldap_cert_path" value="{{ config.get('auth', {}).get('ldap', {}).get('ldap_cert_path', '') }}" placeholder="/path/to/ca.crt">
-                            </div>
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="ldapCertValidate" name="ldap_cert_validate" {% if config.get('auth', {}).get('ldap', {}).get('ldap_cert_validate') %}checked{% endif %}>
-                                <label class="form-check-label" for="ldapCertValidate">Validate Certificate</label>
-                            </div>
+
                             <div class="d-grid">
                                 <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save LDAP Settings</button>
                             </div>
                         </form>
+                        
+                        <hr class="my-3">
+                        
+                        <!-- LDAP Test -->
+                        <h6 class="small fw-bold mb-2"><i class="fas fa-vial me-1"></i> Test LDAP Login</h6>
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-5">
+                                <input type="text" class="form-control form-control-sm" id="ldapTestUser" placeholder="Username">
+                            </div>
+                            <div class="col-md-5">
+                                <input type="password" class="form-control form-control-sm" id="ldapTestPass" placeholder="Password">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="testLdapLogin()"><i class="fas fa-check"></i></button>
+                            </div>
+                        </div>
+                        <div id="ldapTestResult" class="form-text mt-2 d-none"></div>
                     </div>
                 </div>
 
@@ -245,8 +293,34 @@
                                 </div>
                             </div>
 
-                            <div class="d-grid">
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="testProxySettings()"><i class="fas fa-network-wired me-2"></i> Test Connection</button>
                                 <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save Proxy Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- DNS Settings -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light fw-bold"><i class="fas fa-search me-2 text-primary"></i> DNS Configuration</div>
+                    <div class="card-body">
+                        <form action="{{ url_for('system.update_dns') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            
+                            <p class="text-muted small mb-3">Custom DNS servers for threat feed lookups and system resolution.</p>
+                            
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold">Primary DNS</label>
+                                <input type="text" class="form-control form-control-sm" name="dns_primary" value="{{ config.get('dns', {}).get('primary', '') }}" placeholder="8.8.8.8">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold">Secondary DNS</label>
+                                <input type="text" class="form-control form-control-sm" name="dns_secondary" value="{{ config.get('dns', {}).get('secondary', '') }}" placeholder="8.8.4.4">
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save DNS Settings</button>
                             </div>
                         </form>
                     </div>
@@ -290,6 +364,19 @@
                                 <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-upload me-2"></i> Upload & Restart</button>
                             </div>
                         </form>
+                        
+                        <hr>
+                        
+                        <!-- Root CA -->
+                        <h6 class="small fw-bold mb-2">Trust Custom Root CA</h6>
+                        <form action="{{ url_for('system.upload_root_ca') }}" method="POST" enctype="multipart/form-data">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="input-group input-group-sm">
+                                <input type="file" class="form-control" name="ca_file" accept=".crt,.pem,.cer" required>
+                                <button class="btn btn-outline-secondary" type="submit">Trust CA</button>
+                            </div>
+                            <div class="form-text text-muted" style="font-size: 0.7rem;">Upload .crt/.pem file. Required for internal proxies or private CAs.</div>
+                        </form>
                     </div>
                 </div>
 
@@ -303,6 +390,150 @@
 
     <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
     <script>
+        function addHostnameRow() {
+            const container = document.getElementById('serverHostnamesList');
+            const newRow = document.createElement('div');
+            newRow.className = 'input-group input-group-sm mb-2 hostname-row';
+            newRow.innerHTML = `
+                <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
+                <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+            `;
+            container.appendChild(newRow);
+        }
+
+        function removeHostnameRow(btn) {
+            const row = btn.closest('.hostname-row');
+            if (document.querySelectorAll('.hostname-row').length > 1) {
+                row.remove();
+            } else {
+                row.querySelector('input').value = '';
+            }
+        }
+
+        function autoUpdatePort(checkbox) {
+            const portInput = document.querySelector('input[name="ldap_port"]');
+            if (portInput) {
+                if (checkbox.checked && portInput.value == '389') {
+                    portInput.value = '636';
+                } else if (!checkbox.checked && portInput.value == '636') {
+                    portInput.value = '389';
+                }
+            }
+        }
+
+        function testProxySettings() {
+            const form = document.querySelector('form[action="{{ url_for("system.update_proxy") }}"]');
+            const server = form.querySelector('[name="proxy_server"]').value;
+            const port = form.querySelector('[name="proxy_port"]').value;
+            const username = form.querySelector('[name="proxy_username"]').value;
+            const password = form.querySelector('[name="proxy_password"]').value;
+            const enabled = form.querySelector('[name="proxy_enabled"]').checked;
+            
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            
+            Swal.fire({
+                title: 'Testing Proxy...',
+                text: 'Attempting to connect to google.com via proxy...',
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            fetch('/system/proxy/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({
+                    enabled: enabled,
+                    server: server,
+                    port: port,
+                    username: username,
+                    password: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire('Success', data.message, 'success');
+                } else {
+                    Swal.fire('Connection Failed', data.message, 'error');
+                }
+            })
+            .catch(error => {
+                Swal.fire('Error', 'An error occurred: ' + error, 'error');
+            });
+        }
+
+        function testLdapLogin() {
+            const user = document.getElementById('ldapTestUser').value;
+            const pass = document.getElementById('ldapTestPass').value;
+            const resultDiv = document.getElementById('ldapTestResult');
+            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+            
+            if (!user || !pass) {
+                Swal.fire('Error', 'Please enter both username and password.', 'error');
+                return;
+            }
+
+            // Scrape settings from form to test current configuration
+            const serverInputs = document.querySelectorAll('input[name="ldap_server[]"]');
+            const port = document.querySelector('input[name="ldap_port"]').value;
+            const domain = document.querySelector('input[name="ldap_domain"]').value;
+            const adminGroup = document.querySelector('input[name="ldap_admin_group"]').value;
+            const ldapsEnabled = document.getElementById('ldapsEnabled').checked;
+            
+            let servers = [];
+            serverInputs.forEach(input => {
+                if(input.value.trim()) {
+                    servers.push({
+                        server: input.value.trim(),
+                        port: parseInt(port),
+                        domain: domain,
+                        admin_group: adminGroup,
+                        ldaps_enabled: ldapsEnabled
+                    });
+                }
+            });
+
+            if (servers.length === 0) {
+                 Swal.fire('Error', 'Please configure at least one LDAP server host.', 'warning');
+                 return;
+            }
+            
+            resultDiv.className = 'form-text mt-2 text-muted';
+            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            resultDiv.classList.remove('d-none');
+            
+            fetch('/system/ldap/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ 
+                    username: user, 
+                    password: pass,
+                    servers: servers
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    resultDiv.className = 'form-text mt-2 text-success fw-bold';
+                    resultDiv.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
+                } else {
+                    resultDiv.className = 'form-text mt-2 text-danger fw-bold';
+                    resultDiv.innerHTML = '<i class="fas fa-times-circle"></i> ' + data.message;
+                }
+            })
+            .catch(error => {
+                resultDiv.className = 'form-text mt-2 text-danger';
+                resultDiv.innerText = 'Error: ' + error;
+            });
+        }
+
         function toggleProxyFields() {
             var isEnabled = document.getElementById('proxyEnabled').checked;
             var fields = document.getElementById('proxyFields');

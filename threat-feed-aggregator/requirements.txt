@@ -15,3 +15,4 @@ geoip2
 ldap3
 gunicorn
 tzlocal
+dnspython

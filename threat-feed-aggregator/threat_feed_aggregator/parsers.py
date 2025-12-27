@@ -10,25 +10,29 @@ logger = logging.getLogger(__name__)
 # Pre-compile regex patterns for performance
 URL_PATTERN = re.compile(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
 DOMAIN_PATTERN = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$")
+# Simple check for IP candidates (digits and dots or colons)
+IP_CANDIDATE_PATTERN = re.compile(r"^[0-9a-fA-F:./]+$")
 
 def identify_indicator_type(indicator):
     """
     Identifies the type of the given indicator (IP, CIDR, Domain, URL, or Unknown).
+    Optimized with pre-checks.
     """
     indicator = indicator.strip()
     if not indicator:
         return "unknown"
 
-    # Check for IP address or CIDR
-    try:
-        if '/' in indicator:
-            ipaddress.ip_network(indicator, strict=False)
-            return "cidr"
-        else:
-            ipaddress.ip_address(indicator)
-            return "ip"
-    except ValueError:
-        pass # Not an IP or CIDR
+    # Optimization: Only try parsing as IP if it looks like one
+    if IP_CANDIDATE_PATTERN.match(indicator):
+        try:
+            if '/' in indicator:
+                ipaddress.ip_network(indicator, strict=False)
+                return "cidr"
+            else:
+                ipaddress.ip_address(indicator)
+                return "ip"
+        except ValueError:
+            pass # Not a valid IP/CIDR despite matching basic char pattern
 
     # Check for URL
     if URL_PATTERN.match(indicator):

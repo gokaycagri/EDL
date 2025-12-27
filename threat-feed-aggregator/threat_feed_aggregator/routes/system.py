@@ -1,4 +1,4 @@
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, jsonify
 import threading
 from ..config_manager import read_config, write_config
 from ..db_manager import (
@@ -8,7 +8,7 @@ from ..db_manager import (
     check_admin_credentials,
     set_admin_password
 )
-from ..cert_manager import process_pfx_upload
+from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..aggregator import fetch_and_process_single_feed
 
 from . import bp_system
@@ -205,53 +205,169 @@ def remove_api_client():
 @bp_system.route('/update_ldap', methods=['POST'])
 @login_required
 def update_ldap():
-    # Note: In app.py this was /update_ldap_settings
-    server = request.form.get('ldap_server').replace('ldap://', '')
-    domain = request.form.get('ldap_domain')
-    admin_group = request.form.get('ldap_admin_group')
     enabled = request.form.get('ldap_enabled') == 'on'
-    ldaps_enabled = request.form.get('ldaps_enabled') == 'on'
-    ldap_cert_path = request.form.get('ldap_cert_path')
-    ldap_cert_validate = request.form.get('ldap_cert_validate') == 'on'
+    
+    # Get list of servers
+    servers = request.form.getlist('ldap_server[]')
+    
+    # Get common configuration
+    port = request.form.get('ldap_port', type=int) or 389
+    domain = request.form.get('ldap_domain')
+    group = request.form.get('ldap_admin_group')
+    is_ldaps = request.form.get('ldaps_enabled') == 'on'
+    
+    ldap_servers_config = []
+    
+    # Iterate and construct config objects
+    for server in servers:
+        server = server.strip().replace('ldap://', '').replace('ldaps://', '')
+        if not server: continue # Skip empty
+        
+        ldap_servers_config.append({
+            'server': server,
+            'port': port,
+            'domain': domain,
+            'admin_group': group,
+            'ldaps_enabled': is_ldaps
+        })
     
     config = read_config()
     if 'auth' not in config: config['auth'] = {}
     
-    config['auth']['ldap'] = {
-        'enabled': enabled,
-        'server': server,
-        'domain': domain,
-        'admin_group': admin_group,
-        'ldaps_enabled': ldaps_enabled,
-        'ldap_cert_path': ldap_cert_path,
-        'ldap_cert_validate': ldap_cert_validate
-    }
+    config['auth']['ldap_enabled'] = enabled
+    config['auth']['ldap_servers'] = ldap_servers_config
+    
+    # Backward compatibility: Save first server/common settings to old fields
+    if ldap_servers_config:
+        first = ldap_servers_config[0]
+        config['auth']['ldap'] = {
+            'enabled': enabled, # Keep this synced
+            'server': first['server'],
+            'port': first['port'],
+            'domain': first['domain'],
+            'admin_group': first['admin_group'],
+            'ldaps_enabled': first['ldaps_enabled']
+        }
     
     write_config(config)
+    flash('LDAP settings updated successfully.', 'success')
     return redirect(url_for('dashboard.index'))
+
+@bp_system.route('/ldap/test', methods=['POST'])
+@login_required
+def test_ldap_connection():
+    from ..auth_manager import authenticate_ldap_user, check_credentials
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    
+    # Check if we have override config in the request
+    # Expected format from frontend if we update it: 
+    # { username, password, servers: [{server, port, ...}], enabled: true }
+    servers_override = data.get('servers')
+    
+    if not username or not password:
+        return jsonify({'status': 'error', 'message': 'Username and password required.'})
+        
+    logger.info(f"LDAP Test initiated for user: {username}")
+    
+    if servers_override:
+        # Direct test with provided config
+        success, message = authenticate_ldap_user(username, password, servers_override)
+    else:
+        # Fallback to saved config logic (via check_credentials, but we just want the LDAP part)
+        # Using check_credentials might try local admin which is not desired for an LDAP test button.
+        # So let's reproduce the config reading logic briefly or better yet, make check_credentials smarter?
+        # No, let's just use check_credentials for backward compatibility if frontend isn't updated,
+        # BUT check_credentials checks local admin too. 
+        # Ideally, we should read config here and call authenticate_ldap_user.
+        
+        from ..config_manager import read_config
+        config = read_config()
+        auth_config = config.get('auth', {})
+        ldap_enabled = auth_config.get('ldap_enabled')
+        if ldap_enabled is None:
+            ldap_config = auth_config.get('ldap', {})
+            ldap_enabled = ldap_config.get('enabled', False)
+            servers_list = [ldap_config] if ldap_enabled else []
+        else:
+            servers_list = auth_config.get('ldap_servers', [])
+            
+        if not ldap_enabled and not servers_override:
+             return jsonify({'status': 'error', 'message': 'LDAP is disabled in settings. Enable it or provide settings to test.'})
+             
+        success, message = authenticate_ldap_user(username, password, servers_list)
+    
+    if success:
+        logger.info(f"LDAP Test SUCCESS for user: {username}")
+        return jsonify({'status': 'success', 'message': f'Success: {message}'})
+    else:
+        logger.warning(f"LDAP Test FAILED for user {username}: {message}")
+        return jsonify({'status': 'error', 'message': f'Failed: {message}'})
 
 @bp_system.route('/update_proxy', methods=['POST'])
 @login_required
 def update_proxy():
-    enabled = request.form.get('proxy_enabled') == 'on'
-    server = request.form.get('proxy_server')
-    port = request.form.get('proxy_port')
-    username = request.form.get('proxy_username')
-    password = request.form.get('proxy_password')
+    # ... existing code ...
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/update_dns', methods=['POST'])
+@login_required
+def update_dns():
+    primary = request.form.get('dns_primary')
+    secondary = request.form.get('dns_secondary')
     
     config = read_config()
-    
-    config['proxy'] = {
-        'enabled': enabled,
-        'server': server,
-        'port': port,
-        'username': username,
-        'password': password
+    config['dns'] = {
+        'primary': primary,
+        'secondary': secondary
     }
     
     write_config(config)
-    flash('Proxy settings updated successfully.', 'success')
+    flash('DNS settings updated successfully.', 'success')
     return redirect(url_for('system.index'))
+
+@bp_system.route('/proxy/test', methods=['POST'])
+@login_required
+def test_proxy_connection():
+    import requests
+    
+    data = request.get_json()
+    enabled = data.get('enabled', False)
+    server = data.get('server')
+    port = data.get('port')
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not enabled:
+        return jsonify({'status': 'error', 'message': 'Proxy is disabled. Please enable it to test.'})
+        
+    if not server or not port:
+        return jsonify({'status': 'error', 'message': 'Server and Port are required.'})
+        
+    # Construct Proxy URL
+    auth_string = ""
+    if username and password:
+        auth_string = f"{username}:{password}@"
+        
+    proxy_url = f"http://{auth_string}{server}:{port}"
+    proxies = {"http": proxy_url, "https": proxy_url}
+    
+    try:
+        # Test connection to a reliable external site
+        test_url = "https://www.google.com"
+        response = requests.get(test_url, proxies=proxies, timeout=10)
+        
+        if response.status_code == 200:
+            return jsonify({'status': 'success', 'message': f'Successfully connected to {test_url} via proxy.'})
+        else:
+            return jsonify({'status': 'error', 'message': f'Proxy connected but returned status code: {response.status_code}'})
+            
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Connection failed: {str(e)}'})
 
 @bp_system.route('/upload_cert', methods=['POST'])
 @login_required
@@ -274,6 +390,31 @@ def upload_cert():
             flash(f"{message} Note: You must restart the Docker container for changes to take effect.", 'success')
         else:
             flash(f"Error uploading certificate: {message}", 'danger')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/upload_root_ca', methods=['POST'])
+@login_required
+def upload_root_ca():
+    if 'ca_file' not in request.files:
+        flash('No file part', 'danger')
+        return redirect(url_for('system.index'))
+        
+    file = request.files['ca_file']
+    if file.filename == '':
+        flash('No selected file', 'danger')
+        return redirect(url_for('system.index'))
+        
+    if file:
+        try:
+            content = file.read()
+            success, message = process_root_ca_upload(content)
+            if success:
+                flash(f"{message} Please restart the application for this to apply to all connections.", 'success')
+            else:
+                flash(f"Error trusting CA: {message}", 'danger')
+        except Exception as e:
+            flash(f"Error: {str(e)}", 'danger')
             
     return redirect(url_for('system.index'))
 

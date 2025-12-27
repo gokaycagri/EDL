@@ -8,26 +8,101 @@ from .db_manager import check_admin_credentials, set_admin_password
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONFIG_FILE = os.path.join(BASE_DIR, "threat_feed_aggregator", "config", "config.json")
+def authenticate_ldap_user(username, password, servers_list):
+    """
+    Attempts to authenticate a user against a list of LDAP server configurations.
+    Returns: (bool, message)
+    """
+    if not servers_list:
+        return False, "LDAP server list is empty."
 
-# Initialize admin password from ENV if DB is empty
-initial_admin_password = os.environ.get('ADMIN_PASSWORD')
-if initial_admin_password and not check_admin_credentials(initial_admin_password):
-    success, msg = set_admin_password(initial_admin_password)
-    if success:
-        logger.info("Admin password initialized from ADMIN_PASSWORD environment variable.")
-    else:
-        logger.error(f"Failed to set initial admin password from ENV: {msg}")
+    from .cert_manager import get_ca_bundle_path
+    ca_bundle = get_ca_bundle_path()
+    last_error = "No LDAP servers responded."
 
-def read_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {}
-    with open(CONFIG_FILE, "r") as f:
+    for srv_config in servers_list:
+        server_hostname = srv_config.get('server')
+        server_port = srv_config.get('port', 389)
+        base_dn = srv_config.get('domain')
+        admin_group = srv_config.get('admin_group')
+        ldaps_enabled = srv_config.get('ldaps_enabled', False)
+
+        if not server_hostname or not base_dn:
+            continue
+        
+        logger.warning(f"[v1.5.1] LDAP CHECK: Trying {server_hostname}:{server_port} (SSL: {ldaps_enabled})")
+        
         try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return {}
+            tls_config = None
+            if ldaps_enabled:
+                if ca_bundle:
+                    tls_config = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ca_bundle)
+                else:
+                    tls_config = Tls(validate=ssl.CERT_NONE)
+
+            server = Server(server_hostname, port=server_port, get_info=ALL, use_ssl=ldaps_enabled, tls=tls_config, connect_timeout=5)
+            
+            # Formats to try for Active Directory / LDAP
+            possible_dns = []
+            if "@" in username or "," in username or "\\" in username:
+                possible_dns.append(username)
+            else:
+                # 1. UPN (user@domain.local) derived from Base DN
+                domain_parts = [p.split('=')[1] for p in base_dn.lower().split(',') if p.startswith('dc=')]
+                if domain_parts:
+                    domain_suffix = ".".join(domain_parts)
+                    possible_dns.append(f"{username}@{domain_suffix}")
+                # 2. Standard DN pattern
+                possible_dns.append(f"uid={username},ou=people,{base_dn}")
+                # 3. Standard Users container
+                possible_dns.append(f"cn={username},cn=users,{base_dn}")
+
+            for test_dn in possible_dns:
+                logger.warning(f"[v1.5.1] LDAP BIND TRY: {test_dn}")
+                try:
+                    # For NTLM (DOMAIN\user), ldap3 needs specific handling sometimes, but auto_bind handles SIMPLE by default
+                    conn = Connection(server, user=test_dn, password=password, auto_bind=True)
+                    if conn.bound:
+                        logger.warning(f"[v1.5.1] LDAP BIND SUCCESS: {test_dn}")
+                        
+                        if admin_group:
+                            # Group membership check - Searching for user object to get memberOf
+                            # Split by backslash to handle DOMAIN\user format, take the last part (username)
+                            safe_username = username.split('\\')[-1]
+                            search_filter = f"( |(sAMAccountName={safe_username})(uid={safe_username})(cn={safe_username})(userPrincipalName={test_dn}))"
+                            conn.search(base_dn, search_filter, attributes=['memberOf', 'distinguishedName'])
+                            
+                            if len(conn.entries) > 0:
+                                user_entry = conn.entries[0]
+                                member_of = [str(g).lower() for g in user_entry['memberOf'].values]
+                                logger.warning(f"[v1.5.1] User groups found: {len(member_of)}")
+                                
+                                if any(admin_group.lower() in g for g in member_of):
+                                    logger.warning(f"[v1.5.1] LDAP GROUP OK: {username} is member of {admin_group}")
+                                    conn.unbind()
+                                    return True, "LDAP Login Successful."
+                                else:
+                                    last_error = f"User authenticated but NOT a member of required group: {admin_group}"
+                                    logger.warning(f"[v1.5.1] LDAP GROUP FAIL: {username} NOT in {admin_group}")
+                            else:
+                                last_error = "User object found but attributes (memberOf) are unreadable."
+                                logger.warning(f"[v1.5.1] LDAP ATTR FAIL: {last_error}")
+                            
+                            conn.unbind()
+                            continue # Try next DN if group check failed for this one
+                        
+                        conn.unbind()
+                        return True, "LDAP Login Successful."
+                except Exception as bind_e:
+                    last_error = str(bind_e)
+                    logger.warning(f"[v1.5.1] LDAP BIND FAIL for {test_dn}: {last_error}")
+                    continue
+
+        except Exception as conn_e:
+            last_error = f"Connection failed: {str(conn_e)}"
+            logger.error(f"[v1.5.1] LDAPCONN ERROR: {last_error}")
+
+    return False, f"LDAP Auth Failed: {last_error}"
 
 def check_credentials(username, password):
     """
@@ -42,99 +117,19 @@ def check_credentials(username, password):
             return False, "Invalid admin password."
 
     # 2. Check LDAP if enabled
+    from .config_manager import read_config
     config = read_config()
-    ldap_config = config.get('auth', {}).get('ldap', {})
-    ldap_enabled = ldap_config.get('enabled', False)
+    auth_config = config.get('auth', {})
+    
+    ldap_enabled = auth_config.get('ldap_enabled')
+    if ldap_enabled is None:
+        ldap_config = auth_config.get('ldap', {})
+        ldap_enabled = ldap_config.get('enabled', False)
+        servers_list = [ldap_config] if ldap_enabled else []
+    else:
+        servers_list = auth_config.get('ldap_servers', [])
             
-    if ldap_enabled:
-        server_hostname = ldap_config.get('server')
-        base_dn = ldap_config.get('domain')
-        admin_group = ldap_config.get('admin_group')
-        ldaps_enabled = ldap_config.get('ldaps_enabled', False)
-        ldap_cert_path = ldap_config.get('ldap_cert_path', '')
-        ldap_cert_validate = ldap_config.get('ldap_cert_validate', False)
+    if not ldap_enabled:
+        return False, "LDAP authentication is disabled."
 
-        if not server_hostname or not base_dn:
-            logger.warning("LDAP enabled but server hostname or Base DN is not configured.")
-            return False, "LDAP not fully configured."
-        
-        try:
-            tls_config = None
-            if ldaps_enabled:
-                if ldap_cert_validate and ldap_cert_path:
-                    tls_config = Tls(validate=ssl.CERT_REQUIRED, ca_certs_file=ldap_cert_path)
-                else:
-                    tls_config = Tls(validate=ssl.CERT_NONE)
-
-            server = Server(server_hostname, get_info=ALL, use_ssl=ldaps_enabled, tls=tls_config)
-            
-            if "@" in username: # User principal name (UPN)
-                user_dn = username
-                search_filter = f"(userPrincipalName={username})"
-                search_base = base_dn
-            else: # For OpenLDAP/Standard
-                user_dn = f"uid={username},ou=people,{base_dn}"
-                search_filter = f"(uid={username})"
-                search_base = f"ou=people,{base_dn}"
-            
-            logger.debug(f"Attempting LDAP connection to {server_hostname} with user DN: {user_dn}")
-            
-            # Bind as the user
-            conn = Connection(server, user=user_dn, password=password, auto_bind=True)
-            
-            if conn.bound:
-                # Auth successful, now check group if configured
-                if admin_group:
-                    try:
-                        # Search for the user object to get attributes
-                        # We need to find the user's entry to read memberOf
-                        # Note: user_dn might be a simple string (UPN), so we search.
-                        # If user_dn is a full DN, we can just read the object, but search is safer.
-                        
-                        conn.search(search_base, search_filter, attributes=['memberOf'])
-                        
-                        if len(conn.entries) > 0:
-                            entry = conn.entries[0]
-                            # memberOf is usually a list of DNs
-                            member_of = entry['memberOf'].values if 'memberOf' in entry else []
-                            
-                            # Normalize for comparison (case-insensitive usually good for DNs)
-                            admin_group_lower = admin_group.lower()
-                            member_of_lower = [str(g).lower() for g in member_of]
-                            
-                            is_member = False
-                            for group in member_of_lower:
-                                if admin_group_lower in group: # Partial match (DN contains CN) or exact
-                                    is_member = True
-                                    break
-                            
-                            if is_member:
-                                logger.info(f"LDAP login successful for user: {username} (Group verified)")
-                                conn.unbind()
-                                return True, "LDAP login successful."
-                            else:
-                                logger.warning(f"LDAP user {username} is authenticated but not a member of {admin_group}")
-                                conn.unbind()
-                                return False, "Not a member of the required Admin Group."
-                        else:
-                            logger.warning(f"LDAP user {username} authenticated but object not found in search.")
-                            conn.unbind()
-                            return False, "User object not found."
-                            
-                    except Exception as e:
-                        logger.error(f"Error checking LDAP group: {e}")
-                        conn.unbind()
-                        return False, "Error verifying group membership."
-                else:
-                    # No group check required
-                    conn.unbind()
-                    logger.info(f"LDAP login successful for user: {username}")
-                    return True, "LDAP login successful."
-            else:
-                logger.warning(f"LDAP bind failed for user: {username}. Error: {conn.result}")
-                return False, "Invalid LDAP credentials."
-        except Exception as e:
-            logger.error(f"LDAP authentication error for user {username}: {e}")
-            return False, "LDAP authentication error."
-
-    return False, "Invalid Credentials." # Fallback if no auth method succeeds
+    return authenticate_ldap_user(username, password, servers_list)

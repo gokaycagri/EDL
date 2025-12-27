@@ -1,8 +1,11 @@
+import logging
 from flask import render_template, request, session, redirect, url_for, flash, jsonify
 from functools import wraps
 from ..auth_manager import check_credentials
 from ..config_manager import read_config
 from . import bp_auth
+
+logger = logging.getLogger(__name__)
 
 def login_required(f):
     @wraps(f)
@@ -24,7 +27,7 @@ def api_key_required(f):
         # Check against API Clients list
         api_clients = config.get("api_clients", [])
         
-        # Backward compatibility for single key (optional, but good for transition)
+        # Backward compatibility for single key
         old_global_key = config.get("api_key")
         old_allowed_hosts = config.get("api_allowed_hosts", [])
         
@@ -36,7 +39,7 @@ def api_key_required(f):
                 valid_client = client
                 break
         
-        # 2. Fallback to Old Config if no client matched and old key exists
+        # 2. Fallback to Old Config
         if not valid_client and old_global_key and request_key == old_global_key:
              valid_client = {"name": "Legacy Global", "allowed_ips": [h['ip'] for h in old_allowed_hosts]}
 
@@ -47,8 +50,6 @@ def api_key_required(f):
         allowed_ips = valid_client.get("allowed_ips", [])
         if allowed_ips:
             client_ip = request.remote_addr
-            
-            # Support for proxies (X-Forwarded-For) if behind one
             if request.headers.getlist("X-Forwarded-For"):
                  client_ip = request.headers.getlist("X-Forwarded-For")[0]
 
@@ -65,14 +66,17 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
+        logger.info(f"Login attempt received for user: {username}")
         success, message = check_credentials(username, password)
         
         if success:
+            logger.info(f"Login SUCCESS for user: {username}")
             session['logged_in'] = True
             session['username'] = username
             session.modified = True
             return redirect(url_for('dashboard.index'))
         else:
+            logger.warning(f"Login FAILED for user {username}: {message}")
             error = message if message else 'Invalid Credentials.'
 
     return render_template('login.html', error=error)

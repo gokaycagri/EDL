@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.5.1] - 2025-12-27
+
+### Fixed
+- **LDAP Syntax Error:** Fixed a critical `SyntaxError` in `auth_manager.py` related to backslash escaping in f-strings that caused the container to crash loop during startup.
+- **Active Directory Parsing:** Corrected the username parsing logic for `DOMAIN\User` formats.
+
+### Added
+- **Live LDAP Testing:** Updated the System Settings UI and Backend to allow testing LDAP credentials and server configurations instantly, without needing to save them first.
+- **Enhanced Debugging:** Added verbose `[v1.5.1]` logging for LDAP connection attempts to aid in troubleshooting authentication issues.
+
 ## [1.5.0] - 2025-12-25
 
 ### Added

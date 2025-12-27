@@ -8,14 +8,21 @@ from flask_wtf.csrf import CSRFProtect
 
 from .config_manager import DATA_DIR, read_config
 from .db_manager import init_db, set_admin_password, get_admin_password_hash
-from .cert_manager import generate_self_signed_cert, get_cert_paths
+from .cert_manager import generate_self_signed_cert, get_cert_paths, get_ca_bundle_path
 from .log_manager import setup_memory_logging
-from .aggregator import fetch_and_process_single_feed
+from .aggregator import fetch_and_process_single_feed, run_aggregator
 from .version import __version__
 
 # Initialize Memory Logging
 setup_memory_logging()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+
+# Set CA Bundle if exists (for requests/aiohttp)
+custom_ca_bundle = get_ca_bundle_path()
+if custom_ca_bundle:
+    os.environ['REQUESTS_CA_BUNDLE'] = custom_ca_bundle
+    os.environ['SSL_CERT_FILE'] = custom_ca_bundle
+    logging.info(f"Using custom CA bundle at: {custom_ca_bundle}")
 
 app = Flask(__name__)
 

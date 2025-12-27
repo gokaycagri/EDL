@@ -7,12 +7,18 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 import datetime
+import certifi
 
 # Define certificate paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CERTS_DIR = os.path.join(BASE_DIR, "threat_feed_aggregator", "certs")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 CERT_FILE = os.path.join(CERTS_DIR, "cert.pem")
 KEY_FILE = os.path.join(CERTS_DIR, "key.pem")
+
+# Paths for Root CA
+EXTRA_CA_FILE = os.path.join(DATA_DIR, "extra_ca.pem")
+TRUSTED_BUNDLE_FILE = os.path.join(DATA_DIR, "trusted_bundle.pem")
 
 # Ensure certs directory exists
 if not os.path.exists(CERTS_DIR):
@@ -106,10 +112,60 @@ def process_pfx_upload(pfx_data, password):
                 for cert in additional_certificates:
                     f.write(cert.public_bytes(serialization.Encoding.PEM))
         
-        return True, "Certificate uploaded successfully. Please restart the application."
+        return True, "Certificate uploaded successfully."
     except Exception as e:
         logging.error(f"Error processing PFX: {e}")
         return False, str(e)
 
+def process_root_ca_upload(cert_content):
+    """
+    Saves a Root CA certificate and updates the trusted bundle.
+    """
+    try:
+        # 1. Save the extra CA
+        with open(EXTRA_CA_FILE, "wb") as f:
+            f.write(cert_content)
+            
+        # 2. Update the bundle
+        update_trusted_bundle()
+        
+        return True, "Root CA uploaded and trust store updated."
+    except Exception as e:
+        logging.error(f"Error processing Root CA: {e}")
+        return False, str(e)
+
+def update_trusted_bundle():
+    """
+    Concatenates certifi's bundle with our extra CA.
+    """
+    try:
+        # Read default certifi bundle
+        with open(certifi.where(), "r", encoding="utf-8") as f:
+            default_ca = f.read()
+            
+        # Read our extra CA if it exists
+        extra_ca = ""
+        if os.path.exists(EXTRA_CA_FILE):
+            with open(EXTRA_CA_FILE, "r", encoding="utf-8") as f:
+                extra_ca = f.read()
+                
+        # Write combined
+        with open(TRUSTED_BUNDLE_FILE, "w", encoding="utf-8") as f:
+            f.write(default_ca)
+            if extra_ca:
+                f.write("\n\n# --- Custom Root CA ---\n")
+                f.write(extra_ca)
+        
+        logging.info(f"Trusted certificate bundle updated at {TRUSTED_BUNDLE_FILE}")
+        return TRUSTED_BUNDLE_FILE
+    except Exception as e:
+        logging.error(f"Failed to update trusted bundle: {e}")
+        return None
+
 def get_cert_paths():
     return CERT_FILE, KEY_FILE
+
+def get_ca_bundle_path():
+    if os.path.exists(TRUSTED_BUNDLE_FILE):
+        return TRUSTED_BUNDLE_FILE
+    return None

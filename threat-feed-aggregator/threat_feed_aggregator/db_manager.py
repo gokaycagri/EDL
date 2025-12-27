@@ -73,6 +73,10 @@ def init_db(conn=None):
                     )
                 ''')
 
+                # Indexes for Performance
+                db.execute('CREATE INDEX IF NOT EXISTS idx_indicators_type ON indicators(type)')
+                db.execute('CREATE INDEX IF NOT EXISTS idx_indicator_sources_name_seen ON indicator_sources(source_name, last_seen)')
+
                 # Whitelist Table
                 db.execute('''
                     CREATE TABLE IF NOT EXISTS whitelist (
