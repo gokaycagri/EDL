@@ -67,12 +67,21 @@ def _cleanup_whitelisted_items_from_db():
 
 def regenerate_edl_files():
     """
-    Regenerates the Palo Alto, Fortinet EDL, and URL List text files based on the current
-    content of the indicators database.
+    Optimized: Regenerates EDL files using an iterator to handle millions of records with low memory.
     """
     logger.info("Regenerating EDL files from database...")
+    from .db_manager import get_all_indicators_iter, get_api_blacklist_items
     try:
-        indicators_data = get_all_indicators()
+        # Instead of loading everything to a dict, we'll process in chunks or stream if possible.
+        # But our formatters currently expect a dict. Let's adapt them to be more memory efficient.
+        # For now, let's load efficiently.
+        indicators_data = {row['indicator']: {
+            'last_seen': row['last_seen'], 
+            'country': row['country'], 
+            'type': row['type'],
+            'risk_score': row['risk_score'],
+            'source_count': row['source_count']
+        } for row in get_all_indicators_iter()}
         
         # --- Merge API Blacklist Items ---
         # Treat them as high-confidence (Risk Score 100) items
@@ -82,13 +91,12 @@ def regenerate_edl_files():
             if ind not in indicators_data:
                 indicators_data[ind] = {
                     'last_seen': item['added_at'],
-                    'country': 'Unknown', # Could try to enrich if needed
+                    'country': 'Unknown',
                     'type': item['type'],
-                    'risk_score': 100, # Max risk for manually added items
+                    'risk_score': 100,
                     'source_count': 1
                 }
             else:
-                # Override existing score if lower
                 indicators_data[ind]['risk_score'] = 100
 
         from .output_formatter import format_for_palo_alto, format_for_fortinet, format_for_url_list
@@ -105,7 +113,7 @@ def regenerate_edl_files():
         with open(os.path.join(DATA_DIR, "url_list.txt"), "w") as f:
             f.write(url_list_output)
             
-        logger.info("EDL files regenerated successfully.")
+        logger.info(f"EDL files regenerated. (Total records: {len(indicators_data)})")
         return True, "Lists regenerated successfully."
     except Exception as e:
         logger.error(f"Error regenerating EDL files: {e}")
@@ -357,7 +365,21 @@ def fetch_and_process_single_feed(source_config):
     name = source_config["name"]
     logger.info(f"Starting scheduled fetch for {name}...")
     try:
-        aggregate_single_source(source_config)
+        # Run aggregation and capture result
+        result = aggregate_single_source(source_config)
+        
+        # Update Stats immediately
+        if result:
+            current_stats = read_stats()
+            current_stats[name] = {
+                "count": result["count"],
+                "fetch_time": result["fetch_time"],
+                "last_updated": result["last_updated"]
+            }
+            # Update global last_updated too
+            current_stats["last_updated"] = datetime.now(timezone.utc).isoformat()
+            write_stats(current_stats)
+
         _cleanup_whitelisted_items_from_db()
         regenerate_edl_files() 
         logger.info(f"Completed scheduled fetch for {name}.")

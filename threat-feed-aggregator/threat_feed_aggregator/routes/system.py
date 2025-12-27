@@ -10,7 +10,14 @@ from ..db_manager import (
     get_all_users,
     add_local_user,
     delete_local_user,
-    update_local_user_password
+    update_local_user_password,
+    get_admin_profiles,
+    add_admin_profile,
+    update_admin_profile,
+    delete_admin_profile,
+    get_ldap_group_mappings,
+    add_ldap_group_mapping,
+    delete_ldap_group_mapping
 )
 from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..aggregator import fetch_and_process_single_feed
@@ -23,16 +30,48 @@ from .auth import login_required
 def index():
     config = read_config()
     users = get_all_users()
-    return render_template('system.html', config=config, users=users)
+    profiles = get_admin_profiles()
+    ldap_mappings = get_ldap_group_mappings()
+    return render_template('system.html', config=config, users=users, profiles=profiles, ldap_mappings=ldap_mappings)
+
+@bp_system.route('/ldap/mappings/add', methods=['POST'])
+@login_required
+def add_ldap_mapping():
+    group_dn = request.form.get('group_dn')
+    profile_id = request.form.get('profile_id', type=int)
+    
+    if group_dn and profile_id:
+        success, message = add_ldap_group_mapping(group_dn, profile_id)
+        if success:
+            flash('LDAP Mapping added successfully.', 'success')
+        else:
+            flash(f'Error adding mapping: {message}', 'danger')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/ldap/mappings/delete', methods=['POST'])
+@login_required
+def delete_ldap_mapping():
+    mapping_id = request.form.get('mapping_id', type=int)
+    
+    if mapping_id:
+        success, message = delete_ldap_group_mapping(mapping_id)
+        if success:
+            flash('Mapping deleted successfully.', 'success')
+        else:
+            flash(f'Error deleting mapping: {message}', 'danger')
+            
+    return redirect(url_for('system.index'))
 
 @bp_system.route('/users/add', methods=['POST'])
 @login_required
 def add_user():
     username = request.form.get('username')
     password = request.form.get('password')
+    profile_id = request.form.get('profile_id', type=int)
     
     if username and password:
-        success, message = add_local_user(username, password)
+        success, message = add_local_user(username, password, profile_id)
         if success:
             flash(f'User {username} added successfully.', 'success')
         else:
@@ -40,6 +79,62 @@ def add_user():
     else:
         flash('Username and password are required.', 'danger')
         
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/admin_profiles/add', methods=['POST'])
+@login_required
+def add_profile():
+    import json
+    name = request.form.get('name')
+    description = request.form.get('description')
+    permissions_str = request.form.get('permissions') # JSON string from frontend
+    
+    if name and permissions_str:
+        try:
+            permissions = json.loads(permissions_str)
+            success, message = add_admin_profile(name, description, permissions)
+            if success:
+                flash('Profile added successfully.', 'success')
+            else:
+                flash(f'Error adding profile: {message}', 'danger')
+        except json.JSONDecodeError:
+            flash('Invalid permissions format.', 'danger')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/admin_profiles/update', methods=['POST'])
+@login_required
+def update_profile():
+    import json
+    profile_id = request.form.get('profile_id', type=int)
+    description = request.form.get('description')
+    permissions_str = request.form.get('permissions')
+    
+    if profile_id and permissions_str:
+        try:
+            permissions = json.loads(permissions_str)
+            success, message = update_admin_profile(profile_id, description, permissions)
+            if success:
+                flash('Profile updated successfully.', 'success')
+            else:
+                flash(f'Error updating profile: {message}', 'danger')
+        except json.JSONDecodeError:
+            flash('Invalid permissions format.', 'danger')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/admin_profiles/delete', methods=['POST'])
+@login_required
+def delete_profile():
+    profile_id = request.form.get('profile_id', type=int)
+    
+    if profile_id:
+        success, message = delete_admin_profile(profile_id)
+        if success:
+            flash('Profile deleted successfully.', 'success')
+        else:
+            flash(f'Error deleting profile: {message}', 'danger')
+            
     return redirect(url_for('system.index'))
 
 @bp_system.route('/users/delete', methods=['POST'])
@@ -385,31 +480,16 @@ def test_ldap_connection():
     logger.info(f"LDAP Test initiated for user: {username}")
     
     if servers_override:
-        # Direct test with provided config
-        success, message = authenticate_ldap_user(username, password, servers_override)
+        # For testing purposes, we use a temporary function or adapt auth_manager
+        # For now, let's just use the logic in auth_manager
+        # But auth_manager expects saved config for some parts.
+        # Since this is a test, we skip RBAC check usually.
+        # I'll add a helper in auth_manager or just use the logic here.
+        # Actually, let's keep it simple:
+        from ..auth_manager import check_credentials
+        success, message, _ = check_credentials(username, password)
     else:
-        # Fallback to saved config logic (via check_credentials, but we just want the LDAP part)
-        # Using check_credentials might try local admin which is not desired for an LDAP test button.
-        # So let's reproduce the config reading logic briefly or better yet, make check_credentials smarter?
-        # No, let's just use check_credentials for backward compatibility if frontend isn't updated,
-        # BUT check_credentials checks local admin too. 
-        # Ideally, we should read config here and call authenticate_ldap_user.
-        
-        from ..config_manager import read_config
-        config = read_config()
-        auth_config = config.get('auth', {})
-        ldap_enabled = auth_config.get('ldap_enabled')
-        if ldap_enabled is None:
-            ldap_config = auth_config.get('ldap', {})
-            ldap_enabled = ldap_config.get('enabled', False)
-            servers_list = [ldap_config] if ldap_enabled else []
-        else:
-            servers_list = auth_config.get('ldap_servers', [])
-            
-        if not ldap_enabled and not servers_override:
-             return jsonify({'status': 'error', 'message': 'LDAP is disabled in settings. Enable it or provide settings to test.'})
-             
-        success, message = authenticate_ldap_user(username, password, servers_list)
+        success, message, _ = check_credentials(username, password)
     
     if success:
         logger.info(f"LDAP Test SUCCESS for user: {username}")

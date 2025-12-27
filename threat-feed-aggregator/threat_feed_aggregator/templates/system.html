@@ -1,874 +1,492 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Settings - Threat Feed Aggregator</title>
-    <!-- Bootstrap CSS -->
-    <link href="{{ url_for('static', filename='vendor/css/bootstrap.min.css') }}" rel="stylesheet">
-    <!-- FontAwesome -->
-    <link href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}" rel="stylesheet">
-    <!-- Theme CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
-    <!-- SweetAlert2 -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/sweetalert2.min.css') }}">
-    <script src="{{ url_for('static', filename='vendor/js/sweetalert2.all.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</head>
-<body>
+{% extends "base.html" %}
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h4><i class="fas fa-shield-alt me-2"></i> ThreatFeed</h4>
-        <a href="{{ url_for('dashboard.index') }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-        <a href="{{ url_for('tools.investigate') }}"><i class="fas fa-search-location"></i> Investigate IP</a>
-        <a href="{{ url_for('system.index') }}" class="active"><i class="fas fa-cogs"></i> System Settings</a>
-        <a href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+{% block title %}System Settings{% endblock %}
+
+{% block extra_head %}
+<style>
+    .nav-tabs-custom { border-bottom: 2px solid #f1f5f9; }
+    .nav-tabs-custom .nav-link { border: none; color: #64748b; font-weight: 600; padding: 1rem 1.5rem; transition: all 0.2s; }
+    .nav-tabs-custom .nav-link:hover { color: #4f46e5; }
+    .nav-tabs-custom .nav-link.active { color: #4f46e5; background: none; border-bottom: 3px solid #4f46e5; }
+    .badge-authority { font-size: 0.65rem; padding: 0.35em 0.65em; border-radius: 2rem; }
+    .bg-soft-info { background-color: #e0f2fe; color: #0369a1; }
+    .bg-soft-success { background-color: #dcfce7; color: #15803d; }
+    .bg-soft-danger { background-color: #fee2e2; color: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set perms = session.get('permissions', {}) %}
+{% set sys_perm = perms.get('system', 'rw') %}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-dark mb-0">System Configuration</h3>
+        {% if sys_perm == 'r' %}
+            <span class="badge bg-warning text-dark shadow-sm px-3"><i class="fas fa-eye me-1"></i> Read-Only Mode</span>
+        {% endif %}
     </div>
 
-    <!-- Content -->
-    <div class="content">
-        <!-- Header -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="fw-bold mb-0">System Configuration</h3>
-        </div>
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs nav-tabs-custom mb-4" id="settingsTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab"><i class="fas fa-sliders-h me-2"></i>General</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="auth-tab" data-bs-toggle="tab" href="#auth" role="tab"><i class="fas fa-users-shield me-2"></i>Authentication</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="network-tab" data-bs-toggle="tab" href="#network" role="tab"><i class="fas fa-network-wired me-2"></i>Network</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="security-tab" data-bs-toggle="tab" href="#security" role="tab"><i class="fas fa-lock me-2"></i>Security</a>
+        </li>
+    </ul>
 
+    <div class="tab-content" id="settingsTabsContent">
+        
+    <!-- Tab: General -->
+    <div class="tab-pane fade show active" id="general" role="tabpanel">
         <div class="row">
-            <!-- Left Column -->
-            <div class="col-md-6">
-                
-                <!-- General Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold"><i class="fas fa-clock me-2 text-primary"></i> General Settings</div>
-                    <div class="card-body">
-                        <form action="{{ url_for('system.update_settings') }}" method="POST">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Indicator Lifetime (Days)</label>
-                                <div class="input-group">
-                                    <input type="number" class="form-control" name="indicator_lifetime_days" value="{{ config.get('indicator_lifetime_days', 30) }}" min="0">
-                                    <button class="btn btn-outline-primary" type="submit">Save</button>
-                                </div>
-                                <div class="form-text text-muted">Indicators older than this will be removed.</div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- API Access / Clients -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold"><i class="fas fa-key me-2 text-primary"></i> API Clients & Access</div>
-                    <div class="card-body">
-                        <p class="text-muted small mb-3">Create unique API keys for different systems (SOAR, SIEM, etc.) and restrict them to specific IPs.</p>
-                        
-                        <!-- Client List -->
-                        <div class="table-responsive mb-3 border rounded bg-white">
-                            <table class="table table-sm table-hover mb-0 align-middle">
-                                <thead class="bg-light text-muted">
-                                    <tr>
-                                        <th class="ps-3">Client Name</th>
-                                        <th>Trusted IPs</th>
-                                        <th>API Key</th>
-                                        <th class="text-end pe-3">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if config.get('api_clients') %}
-                                        {% for client in config.get('api_clients') %}
-                                        <tr>
-                                            <td class="ps-3 fw-bold">{{ client.name }}</td>
-                                            <td>
-                                                {% if client.allowed_ips %}
-                                                    {% for ip in client.allowed_ips %}
-                                                        <span class="badge bg-secondary text-white fw-normal mb-1">{{ ip }}</span>
-                                                    {% endfor %}
-                                                {% else %}
-                                                    <span class="badge bg-warning text-dark fw-normal">Any IP</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <div class="input-group input-group-sm" style="width: 170px;">
-                                                    <input type="password" class="form-control" value="{{ client.api_key }}" id="key-{{ loop.index }}" readonly>
-                                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleKeyVisibility('key-{{ loop.index }}')" title="Show/Hide"><i class="fas fa-eye"></i></button>
-                                                    <button class="btn btn-outline-primary" type="button" onclick="copyToClipboard('key-{{ loop.index }}')" title="Copy"><i class="fas fa-copy"></i></button>
-                                                    <form action="{{ url_for('system.regenerate_api_client_key') }}" method="POST" class="d-inline">
-                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <input type="hidden" name="client_id" value="{{ client.id }}">
-                                                        <button type="submit" class="btn btn-outline-warning" onclick="return confirm('Regenerate key for {{ client.name }}? The old key will stop working immediately.')" title="Regenerate Key"><i class="fas fa-sync-alt"></i></button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                            <td class="text-end pe-3">
-                                                <form action="{{ url_for('system.remove_api_client') }}" method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="client_id" value="{{ client.id }}">
-                                                    <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete this client?')"><i class="fas fa-trash"></i></button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="4" class="text-center text-muted py-3">No API clients configured.</td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Add Client Form -->
-                        <div class="bg-light p-3 rounded border">
-                            <h6 class="small fw-bold mb-2">Generate New Key</h6>
-                            <form action="{{ url_for('system.add_api_client') }}" method="POST">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <input type="text" class="form-control form-control-sm" name="name" placeholder="Client Name (e.g. SOAR)" required>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <input type="text" class="form-control form-control-sm" name="allowed_ips" placeholder="Allowed IPs (comma separated)">
-                                    </div>
-                                    <div class="col-md-2 d-grid">
-                                        <button class="btn btn-success btn-sm" type="submit"><i class="fas fa-plus"></i> Add</button>
-                                    </div>
-                                </div>
-                                <div class="form-text text-muted" style="font-size: 0.7rem;">Leave "Allowed IPs" empty to allow access from anywhere.</div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- LDAP Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
-                        <div><i class="fas fa-users-cog me-2"></i> LDAP / Active Directory</div>
-                        <span id="ldapServerStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
-                    </div>
-                    <div class="card-body">
-                        <form action="{{ url_for('system.update_ldap') }}" method="POST">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap_enabled') %}checked{% endif %}>
-                                <label class="form-check-label" for="ldapEnabled">Enable LDAP Authentication</label>
-                            </div>
-
-                            <div id="ldapConfigContainer">
-                                <h6 class="small fw-bold text-muted mb-3">LDAP Server Cluster</h6>
-                                
-                                <label class="form-label small fw-bold">Server Hostnames</label>
-                                <div id="serverHostnamesList">
-                                    {% set servers = config.get('auth', {}).get('ldap_servers', []) %}
-                                    <!-- Fallback for old config or empty -->
-                                    {% if not servers and config.get('auth', {}).get('ldap', {}).get('server') %}
-                                        {% set servers = [{'server': config.get('auth', {}).get('ldap', {}).get('server')}] %}
-                                    {% endif %}
-                                    
-                                    {% for srv in servers %}
-                                    <div class="input-group input-group-sm mb-2 hostname-row">
-                                        <input type="text" class="form-control" name="ldap_server[]" value="{{ srv.server }}" placeholder="dc01.example.com" required>
-                                        <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
-                                    </div>
-                                    {% else %}
-                                    <div class="input-group input-group-sm mb-2 hostname-row">
-                                        <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
-                                        <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                <button type="button" class="btn btn-outline-primary btn-sm mb-3" onclick="addHostnameRow()"><i class="fas fa-plus me-1"></i> Add Server</button>
-
-                                <hr>
-                                <h6 class="small fw-bold text-muted mb-3">Common Configuration</h6>
-
-                                {% set common = config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {}) %}
-
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-6">
-                                        <label class="form-label small fw-bold">Port</label>
-                                        <input type="number" class="form-control form-control-sm" name="ldap_port" value="{{ common.port or 389 }}" placeholder="389" required>
-                                    </div>
-                                    <div class="col-md-6 d-flex align-items-end">
-                                        <div class="form-check form-switch mb-2">
-                                            <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if common.ldaps_enabled %}checked{% endif %} onchange="autoUpdatePort(this)">
-                                            <label class="form-check-label small" for="ldapsEnabled">Use LDAPS (SSL)</label>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="mb-2">
-                                    <label class="form-label small fw-bold">Base DN</label>
-                                    <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ common.domain }}" placeholder="dc=example,dc=com" required>
-                                </div>
-                                
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Admin Group DN</label>
-                                    <input type="text" class="form-control form-control-sm" name="ldap_admin_group" value="{{ common.admin_group or '' }}" placeholder="cn=admins,ou=groups,dc=example,dc=com">
-                                </div>
-                            </div>
-
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save LDAP Settings</button>
-                            </div>
-                        </form>
-                        
-                        <hr class="my-3">
-                        
-                        <!-- LDAP Test -->
-                        <h6 class="small fw-bold mb-2"><i class="fas fa-vial me-1"></i> Test LDAP Login</h6>
-                        <div class="row g-2 align-items-center">
-                            <div class="col-md-5">
-                                <input type="text" class="form-control form-control-sm" id="ldapTestUser" placeholder="Username">
-                            </div>
-                            <div class="col-md-5">
-                                <input type="password" class="form-control form-control-sm" id="ldapTestPass" placeholder="Password">
-                            </div>
-                            <div class="col-md-2 d-grid">
-                                <button type="button" class="btn btn-outline-info btn-sm" onclick="testLdapLogin()"><i class="fas fa-check"></i></button>
-                            </div>
-                        </div>
-                        <div id="ldapTestResult" class="form-text mt-2 d-none"></div>
-                    </div>
-                </div>
-
-                <!-- Local User Management -->
-                <div class="card mb-4">
-                    <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
-                        <div><i class="fas fa-users-cog me-2"></i> Local Users</div>
-                        <button class="btn btn-sm btn-light text-danger fw-bold" onclick="showAddUserModal()">
-                            <i class="fas fa-user-plus me-1"></i> Add User
+            <div class="col-md-12">
+                <!-- Source URLs Management (RESTORED) -->
+                <div class="card settings-card shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-list me-2 text-primary"></i> Configured Threat Sources</div>
+                        <button class="btn btn-sm btn-primary" onclick="showAddSourceModal()" {{ 'disabled' if sys_perm == 'r' }}>
+                            <i class="fas fa-plus me-1"></i> Add New Source
                         </button>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-hover mb-0 align-middle">
                                 <thead class="table-light">
-                                    <tr>
-                                        <th class="ps-3">Username</th>
-                                        <th class="text-end pe-3">Actions</th>
+                                    <tr style="font-size: 0.75rem;">
+                                        <th class="ps-4">Source Name & URL</th>
+                                        <th>Format</th>
+                                        <th>Interval</th>
+                                        <th>Conf.</th>
+                                        <th class="text-end pe-4">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    {% if users %}
-                                        {% for user in users %}
-                                        <tr>
-                                            <td class="ps-3 fw-bold">
-                                                <i class="fas fa-user{{ '-shield' if user == 'admin' else '' }} me-2 text-secondary"></i>
-                                                {{ user }}
-                                            </td>
-                                            <td class="text-end pe-3">
-                                                <button class="btn btn-sm btn-outline-warning" onclick="showChangePasswordModal('{{ user }}')" title="Change Password">
-                                                    <i class="fas fa-key"></i>
-                                                </button>
-                                                {% if user != 'admin' %}
-                                                <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                    <input type="hidden" name="username" value="{{ user }}">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete user {{ user }}?')" title="Delete User">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </form>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr><td colspan="2" class="text-center">No users found.</td></tr>
-                                    {% endif %}
+                                <tbody style="font-size: 0.85rem;">
+                                    {% for source in config.source_urls %}
+                                    <tr>
+                                        <td class="ps-4 py-3">
+                                            <div class="fw-bold text-dark">{{ source.name }}</div>
+                                            <small class="text-muted">{{ source.url }}</small>
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ source.format|upper }}</span></td>
+                                        <td>{{ source.schedule_interval_minutes }}m</td>
+                                        <td><span class="badge bg-soft-info">{{ source.confidence }}%</span></td>
+                                        <td class="text-end pe-4">
+                                            <button class="btn btn-link btn-sm text-primary p-0 me-2" onclick='showEditSourceModal({{ loop.index0 }}, {{ source|tojson }})' {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-edit"></i></button>
+                                            <a href="{{ url_for('system.remove_source', index=loop.index0) }}" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Remove source?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
                                 </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-
             </div>
-
-            <!-- Right Column -->
             <div class="col-md-6">
-                
-                <!-- Proxy Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
-                        <div><i class="fas fa-network-wired me-2 text-primary"></i> Proxy Settings</div>
-                        <span id="proxyStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
-                    </div>
-                    <div class="card-body">
-                        <form id="proxyForm" action="{{ url_for('system.update_proxy') }}" method="POST" onsubmit="showSavingAlert()">
+                <div class="card settings-card shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-history me-2 text-primary"></i> Data Retention</div>
+                    <div class="card-body pt-0">
+                        <form action="{{ url_for('system.update_settings') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            
-                            <div class="form-check form-switch mb-3">
-                                <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
-                                <label class="form-check-label" for="proxyEnabled">Enable Proxy</label>
-                            </div>
-                            
-                            <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}">
-                                <div class="row g-2 mb-2">
-                                    <div class="col-md-8">
-                                        <label class="form-label small fw-bold">Proxy Server (FQDN/IP)</label>
-                                        <input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold">Port</label>
-                                        <input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080">
-                                    </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">Indicator Lifetime (Days)</label>
+                                <div class="input-group shadow-sm">
+                                    <input type="number" class="form-control" name="indicator_lifetime_days" value="{{ config.get('indicator_lifetime_days', 30) }}" min="0" {{ 'readonly' if sys_perm == 'r' }}>
+                                    {% if sys_perm == 'rw' %}
+                                        <button class="btn btn-primary px-4" type="submit">Update</button>
+                                    {% endif %}
                                 </div>
-                                <div class="row g-2 mb-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label small fw-bold">Username (Optional)</label>
-                                        <input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}">
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label small fw-bold">Password (Optional)</label>
-                                        <input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="d-grid gap-2">
-                                <button type="button" class="btn btn-outline-info btn-sm" onclick="testProxySettings()"><i class="fas fa-network-wired me-2"></i> Test Connection</button>
-                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save Proxy Settings</button>
+                                <div class="form-text mt-2 small">Indicators older than this will be removed.</div>
                             </div>
                         </form>
                     </div>
                 </div>
-
-                <!-- DNS Settings -->
-                <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
-                        <div><i class="fas fa-search me-2 text-primary"></i> DNS Configuration</div>
-                        <span id="dnsStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
-                    </div>
-                    <div class="card-body">
-                        <form action="{{ url_for('system.update_dns') }}" method="POST">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            
-                            <p class="text-muted small mb-3">Custom DNS servers for threat feed lookups and system resolution.</p>
-                            
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold">Primary DNS</label>
-                                <input type="text" class="form-control form-control-sm" name="dns_primary" value="{{ config.get('dns', {}).get('primary', '') }}" placeholder="8.8.8.8">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Secondary DNS</label>
-                                <input type="text" class="form-control form-control-sm" name="dns_secondary" value="{{ config.get('dns', {}).get('secondary', '') }}" placeholder="8.8.4.4">
-                            </div>
-
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-save me-2"></i> Save DNS Settings</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- System Maintenance -->
-                <div class="card mb-4">
-                    <div class="card-header bg-dark text-white fw-bold"><i class="fas fa-database me-2"></i> Backup & Restore</div>
-                    <div class="card-body">
-                        <div class="d-grid mb-3">
-                            <a href="{{ url_for('api.backup_system') }}" class="btn btn-outline-dark"><i class="fas fa-download me-2"></i> Backup System (ZIP)</a>
-                        </div>
-                        <hr>
-                        <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <label class="form-label small fw-bold">Restore from Backup</label>
-                            <div class="input-group">
-                                <input type="file" class="form-control form-control-sm" name="backup_file" accept=".zip" required>
-                                <button class="btn btn-warning btn-sm" type="submit">Restore</button>
-                            </div>
-                            <div class="form-text text-danger small">Warning: This will overwrite current data!</div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- SSL Certs -->
-                <div class="card mb-4">
-                    <div class="card-header bg-secondary text-white fw-bold"><i class="fas fa-shield-alt me-2"></i> SSL Certificates</div>
-                    <div class="card-body">
-                        <form action="{{ url_for('system.upload_cert') }}" method="POST" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">Upload .pfx Certificate</label>
-                                <input type="file" class="form-control form-control-sm" name="pfx_file">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold">PFX Password</label>
-                                <input type="password" class="form-control form-control-sm" name="password">
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-secondary btn-sm"><i class="fas fa-upload me-2"></i> Upload & Restart</button>
-                            </div>
-                        </form>
-                        
-                        <hr>
-                        
-                        <!-- Root CA -->
-                        <h6 class="small fw-bold mb-2">Trust Custom Root CA</h6>
-                        <form action="{{ url_for('system.upload_root_ca') }}" method="POST" enctype="multipart/form-data">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="input-group input-group-sm">
-                                <input type="file" class="form-control" name="ca_file" accept=".crt,.pem,.cer" required>
-                                <button class="btn btn-outline-secondary" type="submit">Trust CA</button>
-                            </div>
-                            <div class="form-text text-muted" style="font-size: 0.7rem;">Upload .crt/.pem file. Required for internal proxies or private CAs.</div>
-                        </form>
-                    </div>
-                </div>
-
             </div>
         </div>
-        
-        <footer class="mt-5 text-center text-muted small">
-            <p>Threat Feed Aggregator v{{ version }}</p>
-        </footer>
     </div>
 
-    <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            checkLdapServerStatus();
-            checkDnsStatus();
-            checkProxyStatus();
-        });
+        <!-- Tab: Authentication -->
+        <div class="tab-pane fade" id="auth" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-7">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-server me-2 text-info"></i> LDAP / Active Directory</div>
+                            <span id="ldapServerStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form action="{{ url_for('system.update_ldap') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="form-check form-switch mb-4">
+                                    <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap_enabled') %}checked{% endif %}>
+                                    <label class="form-check-label fw-bold" for="ldapEnabled">Enable LDAP Authentication</label>
+                                </div>
+                                <div id="ldapConfigContainer" class="bg-light p-3 rounded-3 mb-4 border">
+                                    <label class="form-label-custom">LDAP Server Cluster</label>
+                                    <div id="serverHostnamesList">
+                                        {% set servers = config.get('auth', {}).get('ldap_servers', []) %}
+                                        {% if not servers and config.get('auth', {}).get('ldap', {}).get('server') %}
+                                            {% set servers = [{'server': config.get('auth', {}).get('ldap', {}).get('server')}] %}
+                                        {% endif %}
+                                        {% for srv in servers %}
+                                        <div class="input-group input-group-sm mb-2 hostname-row">
+                                            <input type="text" class="form-control" name="ldap_server[]" value="{{ srv.server }}" placeholder="dc01.example.com" required>
+                                            <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                        </div>
+                                        {% else %}
+                                        <div class="input-group input-group-sm mb-2 hostname-row">
+                                            <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
+                                            <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 mb-3 text-decoration-none" onclick="addHostnameRow()"><i class="fas fa-plus-circle me-1"></i>Add Another Server</button>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label-custom">Port</label>
+                                            <input type="number" class="form-control form-control-sm" name="ldap_port" value="{{ (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).port or 389 }}" required>
+                                        </div>
+                                        <div class="col-md-8 d-flex align-items-end">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).ldaps_enabled %}checked{% endif %} onchange="autoUpdatePort(this)">
+                                                <label class="form-check-label small fw-bold" for="ldapsEnabled">Use LDAPS (SSL)</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label-custom">Base DN</label>
+                                            <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).domain }}" placeholder="dc=example,dc=com" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% if sys_perm == 'rw' %}
+                                <div class="d-grid mb-4"><button type="submit" class="btn btn-dark btn-sm py-2 shadow-sm"><i class="fas fa-save me-2 text-warning"></i>Save LDAP Connection</button></div>
+                                {% endif %}
+                            </form>
+                            <div class="border-top pt-4">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="form-label-custom mb-0 text-primary"><i class="fas fa-sitemap me-2"></i>Group Role Mappings</h6>
+                                    <button type="button" class="btn btn-xs btn-outline-primary" onclick="showAddLdapMappingModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus me-1"></i>Add</button>
+                                </div>
+                                <div class="table-responsive border rounded-3 overflow-hidden bg-white mb-4">
+                                    <table class="table table-sm table-hover mb-0 align-middle">
+                                        <thead class="table-light"><tr><th class="ps-3 py-2">LDAP GROUP DN</th><th>PROFILE</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                        <tbody style="font-size: 0.85rem;">
+                                            {% if ldap_mappings %}
+                                                {% for map in ldap_mappings %}
+                                                <tr>
+                                                    <td class="ps-3 fw-bold text-dark text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
+                                                    <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
+                                                    <td class="text-end pe-3">
+                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                            <input type="hidden" name="mapping_id" value="{{ map.id }}">
+                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            {% else %}
+                                                <tr><td colspan="3" class="text-center py-3 text-muted small">No mappings configured.</td></tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="bg-soft-warning p-3 rounded-3 mt-4">
+                                <h6 class="form-label-custom mb-3"><i class="fas fa-vial me-2"></i>Test LDAP Connectivity</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-5"><input type="text" class="form-control form-control-sm" id="ldapTestUser" placeholder="Username"></div>
+                                    <div class="col-md-5"><input type="password" class="form-control form-control-sm" id="ldapTestPass" placeholder="Password"></div>
+                                    <div class="col-md-2 d-grid"><button type="button" class="btn btn-info btn-sm text-white" onclick="testLdapLogin()"><i class="fas fa-check"></i></button></div>
+                                </div>
+                                <div id="ldapTestResult" class="form-text mt-2 d-none"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-id-card-alt me-2 text-primary"></i> Admin Profiles</div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="showProfileModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light"><tr><th class="ps-3">NAME</th><th>RIGHTS</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                    <tbody style="font-size: 0.85rem;">
+                                        {% if profiles %}
+                                            {% for profile in profiles %}
+                                            {% set p_perms = profile.permissions|from_json if profile.permissions is string else profile.permissions %}
+                                            <tr>
+                                                <td class="ps-3 fw-bold">{{ profile.name }}</td>
+                                                <td>
+                                                    <span class="badge {{ 'bg-success' if p_perms.dashboard == 'rw' else ('bg-info' if p_perms.dashboard == 'r' else 'bg-secondary') }}" title="Dashboard">D</span>
+                                                    <span class="badge {{ 'bg-success' if p_perms.system == 'rw' else ('bg-info' if p_perms.system == 'r' else 'bg-secondary') }}" title="System">S</span>
+                                                    <span class="badge {{ 'bg-success' if p_perms.tools == 'rw' else ('bg-info' if p_perms.tools == 'r' else 'bg-secondary') }}" title="Tools">T</span>
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <button class="btn btn-link btn-sm p-0 me-2" onclick='showProfileModal({{ profile|tojson }})' {{ 'disabled' if sys_perm == 'r' or profile.id == 1 }}><i class="fas fa-edit"></i></button>
+                                                    {% if profile.id > 3 %}
+                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                    </form>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-user-lock me-2 text-danger"></i> Local Accounts</div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="showAddUserModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-user-plus"></i></button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light"><tr><th class="ps-3">USER</th><th>PROFILE</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                    <tbody style="font-size: 0.85rem;">
+                                        {% if users %}
+                                            {% for user in users %}
+                                            <tr>
+                                                <td class="ps-3 fw-bold">{{ user.username }}</td>
+                                                <td><span class="badge bg-light text-dark border">{{ user.profile_name }}</span></td>
+                                                <td class="text-end pe-3">
+                                                    <button class="btn btn-link btn-sm text-warning p-0 me-2" onclick="showChangePasswordModal('{{ user.username }}')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-key"></i></button>
+                                                    {% if user.username != 'admin' %}
+                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        function checkProxyStatus() {
-            const badge = document.getElementById('proxyStatus');
-            
-            badge.className = 'badge bg-secondary rounded-pill';
-            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-            
-            fetch('/system/proxy/status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'online') {
-                    badge.className = 'badge bg-success rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Working';
-                    badge.title = data.message;
-                } else if (data.status === 'offline') {
-                    badge.className = 'badge bg-danger rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Failed';
-                    badge.title = data.message;
-                } else if (data.status === 'disabled') {
-                    badge.className = 'badge bg-secondary rounded-pill';
-                    badge.innerHTML = 'Disabled';
-                } else {
-                    badge.className = 'badge bg-warning text-dark rounded-pill';
-                    badge.innerHTML = 'Config Error';
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                badge.className = 'badge bg-warning text-dark rounded-pill';
-                badge.innerHTML = 'Error';
-            });
-        }
+        <!-- Tab: Network -->
+        <div class="tab-pane fade" id="network" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-globe me-2 text-primary"></i> Proxy Settings</div>
+                            <span id="proxyStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form id="proxyForm" action="{{ url_for('system.update_proxy') }}" method="POST" onsubmit="showSavingAlert()">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
+                                    <label class="form-check-label fw-bold" for="proxyEnabled">Enable System Proxy</label>
+                                </div>
+                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}" class="bg-light p-3 rounded-3 mb-3 border">
+                                    <div class="row g-2 mb-3"><div class="col-md-8"><label class="form-label-custom">Server Address</label><input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com"></div><div class="col-md-4"><label class="form-label-custom">Port</label><input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080"></div></div>
+                                    <div class="row g-2"><div class="col-md-6"><label class="form-label-custom">Auth Username</label><input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}"></div><div class="col-md-6"><label class="form-label-custom">Auth Password</label><input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}"></div></div>
+                                </div>
+                                {% if sys_perm == 'rw' %}<div class="d-grid gap-2"><button type="button" class="btn btn-outline-info btn-sm py-2" onclick="testProxySettings()"><i class="fas fa-vial me-2"></i>Test Connection</button><button type="submit" class="btn btn-primary btn-sm py-2"><i class="fas fa-save me-2"></i>Save Proxy</button></div>{% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-search me-2 text-success"></i> DNS Configuration</div>
+                            <span id="dnsStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form action="{{ url_for('system.update_dns') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-3"><label class="form-label-custom">Primary DNS Server</label><input type="text" class="form-control" name="dns_primary" value="{{ config.get('dns', {}).get('primary', '') }}" placeholder="8.8.8.8"></div>
+                                <div class="mb-4"><label class="form-label-custom">Secondary DNS Server</label><input type="text" class="form-control" name="dns_secondary" value="{{ config.get('dns', {}).get('secondary', '') }}" placeholder="8.8.4.4"></div>
+                                {% if sys_perm == 'rw' %}<div class="d-grid"><button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Update DNS</button></div>{% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        function checkDnsStatus() {
-            const badge = document.getElementById('dnsStatus');
-            
-            badge.className = 'badge bg-secondary rounded-pill';
-            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-            
-            fetch('/system/dns/status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'online') {
-                    badge.className = 'badge bg-success rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Working';
-                    badge.title = data.details;
-                } else if (data.status === 'offline') {
-                    badge.className = 'badge bg-danger rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Failed';
-                    badge.title = data.details;
-                } else if (data.status === 'disabled') {
-                    badge.className = 'badge bg-secondary rounded-pill';
-                    badge.innerHTML = 'Default';
-                    badge.title = 'Using System DNS';
-                } else {
-                    badge.className = 'badge bg-warning text-dark rounded-pill';
-                    badge.innerHTML = 'Unknown';
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                badge.className = 'badge bg-warning text-dark rounded-pill';
-                badge.innerHTML = 'Error';
-            });
-        }
+        <!-- Tab: Security -->
+        <div class="tab-pane fade" id="security" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-database me-2 text-dark"></i> Backup & Disaster Recovery</div>
+                        <div class="card-body pt-0">
+                            <div class="d-grid mb-4"><a href="{{ url_for('api.backup_system') }}" class="btn btn-outline-dark py-2"><i class="fas fa-download me-2"></i>Download Backup (ZIP)</a></div>
+                            <hr><form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label-custom text-danger">Restore from File</label><div class="input-group"><input type="file" class="form-control" name="backup_file" accept=".zip" required><button class="btn btn-danger px-4" type="submit" onclick="return confirm('Overwrite ALL data?')">Restore</button></div></form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-certificate me-2 text-warning"></i> HTTPS & Certificates</div>
+                        <div class="card-body pt-0">
+                            <form action="{{ url_for('system.upload_cert') }}" method="POST" enctype="multipart/form-data" class="mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label-custom">Web Certificate (.PFX)</label>
+                                <div class="row g-2"><div class="col-md-12 mb-2"><input type="file" class="form-control" name="pfx_file"></div><div class="col-md-8"><input type="password" class="form-control" name="password" placeholder="PFX Password"></div><div class="col-md-4 d-grid"><button type="submit" class="btn btn-secondary shadow-sm">Upload</button></div></div>
+                            </form>
+                            <hr><form action="{{ url_for('system.upload_root_ca') }}" method="POST" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="form-label-custom">Trust Root CA (PEM/CRT)</label><div class="input-group"><input type="file" class="form-control" name="ca_file" accept=".crt,.pem,.cer" required><button class="btn btn-outline-primary" type="submit">Import</button></div></form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-        function checkLdapServerStatus() {
-            const badge = document.getElementById('ldapServerStatus');
-            // If LDAP section isn't enabled/visible, maybe skip? 
-            // But user might want to know why it's disabled.
-            
-            badge.className = 'badge bg-secondary rounded-pill';
-            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
-            
-            fetch('/system/ldap/status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'online') {
-                    badge.className = 'badge bg-success rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Connected';
-                    badge.title = data.details.join('\n');
-                } else if (data.status === 'offline') {
-                    badge.className = 'badge bg-danger rounded-pill';
-                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Unreachable';
-                    badge.title = data.details.join('\n');
-                } else if (data.status === 'disabled') {
-                    badge.className = 'badge bg-secondary rounded-pill';
-                    badge.innerHTML = 'Disabled';
-                } else {
-                    badge.className = 'badge bg-warning text-dark rounded-pill';
-                    badge.innerHTML = 'Unknown';
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                badge.className = 'badge bg-warning text-dark rounded-pill';
-                badge.innerHTML = 'Error';
-            });
-        }
+<footer class="mt-5 text-center text-muted small pb-4"><p>Threat Feed Aggregator v{{ version }} &bull; Enterprise RBAC Edition</p></footer>
+{% endblock %}
 
-        function addHostnameRow() {
-            const container = document.getElementById('serverHostnamesList');
-            const newRow = document.createElement('div');
-            newRow.className = 'input-group input-group-sm mb-2 hostname-row';
-            newRow.innerHTML = `
-                <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
-                <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
-            `;
-            container.appendChild(newRow);
-        }
-
-        function removeHostnameRow(btn) {
-            const row = btn.closest('.hostname-row');
-            if (document.querySelectorAll('.hostname-row').length > 1) {
-                row.remove();
-            } else {
-                row.querySelector('input').value = '';
-            }
-        }
-
-        function autoUpdatePort(checkbox) {
-            const portInput = document.querySelector('input[name="ldap_port"]');
-            if (portInput) {
-                if (checkbox.checked && portInput.value == '389') {
-                    portInput.value = '636';
-                } else if (!checkbox.checked && portInput.value == '636') {
-                    portInput.value = '389';
-                }
-            }
-        }
-
-        function testProxySettings() {
-            const form = document.querySelector('form[action="{{ url_for("system.update_proxy") }}"]');
-            const server = form.querySelector('[name="proxy_server"]').value;
-            const port = form.querySelector('[name="proxy_port"]').value;
-            const username = form.querySelector('[name="proxy_username"]').value;
-            const password = form.querySelector('[name="proxy_password"]').value;
-            const enabled = form.querySelector('[name="proxy_enabled"]').checked;
-            
-            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-            
-            Swal.fire({
-                title: 'Testing Proxy...',
-                text: 'Attempting to connect to google.com via proxy...',
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-            
-            fetch('/system/proxy/test', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({
-                    enabled: enabled,
-                    server: server,
-                    port: port,
-                    username: username,
-                    password: password
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    Swal.fire('Success', data.message, 'success');
-                } else {
-                    Swal.fire('Connection Failed', data.message, 'error');
-                }
-            })
-            .catch(error => {
-                Swal.fire('Error', 'An error occurred: ' + error, 'error');
-            });
-        }
-
-        function testLdapLogin() {
-            const user = document.getElementById('ldapTestUser').value;
-            const pass = document.getElementById('ldapTestPass').value;
-            const resultDiv = document.getElementById('ldapTestResult');
-            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
-            
-            if (!user || !pass) {
-                Swal.fire('Error', 'Please enter both username and password.', 'error');
-                return;
-            }
-
-            // Scrape settings from form to test current configuration
-            const serverInputs = document.querySelectorAll('input[name="ldap_server[]"]');
-            const port = document.querySelector('input[name="ldap_port"]').value;
-            const domain = document.querySelector('input[name="ldap_domain"]').value;
-            const adminGroup = document.querySelector('input[name="ldap_admin_group"]').value;
-            const ldapsEnabled = document.getElementById('ldapsEnabled').checked;
-            
-            let servers = [];
-            serverInputs.forEach(input => {
-                if(input.value.trim()) {
-                    servers.push({
-                        server: input.value.trim(),
-                        port: parseInt(port),
-                        domain: domain,
-                        admin_group: adminGroup,
-                        ldaps_enabled: ldapsEnabled
-                    });
-                }
-            });
-
-            if (servers.length === 0) {
-                 Swal.fire('Error', 'Please configure at least one LDAP server host.', 'warning');
-                 return;
-            }
-            
-            resultDiv.className = 'form-text mt-2 text-muted';
-            resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-            resultDiv.classList.remove('d-none');
-            
-            fetch('/system/ldap/test', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({ 
-                    username: user, 
-                    password: pass,
-                    servers: servers
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    resultDiv.className = 'form-text mt-2 text-success fw-bold';
-                    resultDiv.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
-                } else {
-                    resultDiv.className = 'form-text mt-2 text-danger fw-bold';
-                    resultDiv.innerHTML = '<i class="fas fa-times-circle"></i> ' + data.message;
-                }
-            })
-            .catch(error => {
-                resultDiv.className = 'form-text mt-2 text-danger';
-                resultDiv.innerText = 'Error: ' + error;
-            });
-        }
-
-        function showSavingAlert() {
-            Swal.fire({
-                title: 'Saving...',
-                text: 'Updating configuration...',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-            // Form submission continues naturally
-        }
-
-        function toggleProxyFields() {
-            var isEnabled = document.getElementById('proxyEnabled').checked;
-            var fields = document.getElementById('proxyFields');
-            if (isEnabled) {
-                fields.style.display = 'block';
-            } else {
-                fields.style.display = 'none';
-            }
-        }
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        checkLdapServerStatus(); checkDnsStatus(); checkProxyStatus();
         
-        function toggleKeyVisibility(elementId) {
-            var x = document.getElementById(elementId);
-            if (x.type === "password") {
-                x.type = "text";
-            } else {
-                x.type = "password";
+        // Auto-open edit modal if parameter exists
+        const urlParams = new URLSearchParams(window.location.search);
+        const editIndex = urlParams.get('edit');
+        if (editIndex !== null) {
+            const sources = {{ config.source_urls|tojson }};
+            if (sources[editIndex]) {
+                showEditSourceModal(editIndex, sources[editIndex]);
             }
         }
 
-        function copyToClipboard(elementId) {
-            // If no ID provided, default to old behavior (though UI removed)
-            var copyText = document.getElementById(elementId || "apiKeyField");
-            if (!copyText) return;
-            
-            // If masked, temporarily unmask to copy
-            var originalType = copyText.type;
-            copyText.type = "text";
-            
-            copyText.select();
-            copyText.setSelectionRange(0, 99999); // For mobile devices
-            navigator.clipboard.writeText(copyText.value).then(function() {
-                Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: 'API Key copied!',
-                    showConfirmButton: false,
-                    timer: 1500
-                });
-                copyText.type = originalType;
-            }, function(err) {
-                console.error('Async: Could not copy text: ', err);
-                copyText.type = originalType;
-            });
-        }
+        var activeTab = localStorage.getItem('activeTab');
+        if (activeTab) { var tabEl = document.querySelector('#settingsTabs a[href="' + activeTab + '"]'); if (tabEl) { var tab = new bootstrap.Tab(tabEl); tab.show(); } }
+        document.querySelectorAll('#settingsTabs a').forEach(link => { link.addEventListener('shown.bs.tab', e => localStorage.setItem('activeTab', e.target.getAttribute('href'))); });
+    });
 
-        function showAddUserModal() {
-            Swal.fire({
-                title: 'Add New User',
-                html: `
-                    <input type="text" id="newUsername" class="swal2-input" placeholder="Username">
-                    <input type="password" id="newPassword" class="swal2-input" placeholder="Password">
-                `,
-                confirmButtonText: 'Add User',
-                showCancelButton: true,
-                preConfirm: () => {
-                    const username = Swal.getPopup().querySelector('#newUsername').value;
-                    const password = Swal.getPopup().querySelector('#newPassword').value;
-                    if (!username || !password) {
-                        Swal.showValidationMessage(`Please enter both username and password`);
-                    }
-                    return { username: username, password: password };
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '{{ url_for("system.add_user") }}';
-                    
-                    const userField = document.createElement('input');
-                    userField.type = 'hidden';
-                    userField.name = 'username';
-                    userField.value = result.value.username;
-                    form.appendChild(userField);
-                    
-                    const passField = document.createElement('input');
-                    passField.type = 'hidden';
-                    passField.name = 'password';
-                    passField.value = result.value.password;
-                    form.appendChild(passField);
-                    
-                    const csrfField = document.createElement('input');
-                    csrfField.type = 'hidden';
-                    csrfField.name = 'csrf_token';
-                    csrfField.value = '{{ csrf_token() }}';
-                    form.appendChild(csrfField);
-                    
-                    document.body.appendChild(form);
-                    form.submit();
-                }
-            });
-        }
-
-        function showChangePasswordModal(username) {
-            // Different logic for admin (needs current password check usually, but let's simplify for now or handle via specific route)
-            // If user is admin, we might want to ask for old password.
-            // But the generic route just updates hash. 
-            // Ideally for admin self-change we use the old route.
-            
-            if (username === 'admin') {
-                // Admin change logic (complex with old pass) or simple force reset?
-                // Let's keep it simple: Force reset logic for consistency, 
-                // BUT better to redirect to a secure form or ask for old pass.
-                // Let's create a custom HTML form in swal for admin.
-                Swal.fire({
-                    title: `Change Password for ${username}`,
-                    html: `
-                        <input type="password" id="currentPass" class="swal2-input" placeholder="Current Password">
-                        <input type="password" id="newPass" class="swal2-input" placeholder="New Password">
-                        <input type="password" id="confirmPass" class="swal2-input" placeholder="Confirm New Password">
-                    `,
-                    confirmButtonText: 'Update',
-                    showCancelButton: true,
-                    preConfirm: () => {
-                        const current = Swal.getPopup().querySelector('#currentPass').value;
-                        const newP = Swal.getPopup().querySelector('#newPass').value;
-                        const confirmP = Swal.getPopup().querySelector('#confirmPass').value;
-                        
-                        if (!current || !newP || !confirmP) {
-                            Swal.showValidationMessage(`All fields are required`);
-                        }
-                        if (newP !== confirmP) {
-                            Swal.showValidationMessage(`New passwords do not match`);
-                        }
-                        return { current: current, new: newP, confirm: confirmP };
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        // Submit to old admin change route
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '{{ url_for("system.change_password") }}';
-                        
-                        const c = document.createElement('input'); c.type='hidden'; c.name='current_password'; c.value=result.value.current; form.appendChild(c);
-                        const n = document.createElement('input'); n.type='hidden'; n.name='new_password'; n.value=result.value.new; form.appendChild(n);
-                        const cn = document.createElement('input'); cn.type='hidden'; cn.name='confirm_new_password'; cn.value=result.value.confirm; form.appendChild(cn);
-                        const csrf = document.createElement('input'); csrf.type='hidden'; csrf.name='csrf_token'; csrf.value='{{ csrf_token() }}'; form.appendChild(csrf);
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                    }
-                });
-            } else {
-                // Regular user force reset (Admin doing it)
-                Swal.fire({
-                    title: `Reset Password for ${username}`,
-                    html: `<input type="password" id="newPass" class="swal2-input" placeholder="New Password">`,
-                    confirmButtonText: 'Reset Password',
-                    showCancelButton: true,
-                    preConfirm: () => {
-                        const password = Swal.getPopup().querySelector('#newPass').value;
-                        if (!password) Swal.showValidationMessage(`Password required`);
-                        return password;
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '{{ url_for("system.change_user_password") }}';
-                        
-                        const u = document.createElement('input'); u.type='hidden'; u.name='username'; u.value=username; form.appendChild(u);
-                        const p = document.createElement('input'); p.type='hidden'; p.name='password'; p.value=result.value; form.appendChild(p);
-                        const csrf = document.createElement('input'); csrf.type='hidden'; csrf.name='csrf_token'; csrf.value='{{ csrf_token() }}'; form.appendChild(csrf);
-                        
-                        document.body.appendChild(form);
-                        form.submit();
-                    }
-                });
+    function showAddSourceModal() {
+        Swal.fire({
+            title: 'Add New Threat Source',
+            html: `
+                <div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="sName" class="form-control" placeholder="e.g. AlienVault"></div>
+                <div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="sUrl" class="form-control" placeholder="https://..."></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="small fw-bold">Format</label><select id="sFormat" class="form-select"><option value="text">Text</option><option value="json">JSON</option><option value="csv">CSV</option></select></div>
+                    <div class="col-6"><label class="small fw-bold">Interval (Min)</label><input type="number" id="sInterval" class="form-control" value="60"></div>
+                </div>
+                <div class="text-start"><label class="small fw-bold">Confidence (0-100)</label><input type="number" id="sConf" class="form-control" value="50" min="0" max="100"></div>
+            `,
+            showCancelButton: true, confirmButtonText: 'Add',
+            preConfirm: () => {
+                const name = document.getElementById('sName').value;
+                const url = document.getElementById('sUrl').value;
+                if (!name || !url) Swal.showValidationMessage(`Required fields missing`);
+                return { name, url, format: document.getElementById('sFormat').value, schedule_interval_minutes: document.getElementById('sInterval').value, confidence: document.getElementById('sConf').value };
             }
-        }
+        }).then(res => { if (res.isConfirmed) submitForm('{{ url_for("system.add_source") }}', res.value); });
+    }
 
-        // Check if there are flash messages and display them with SweetAlert
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              Swal.fire({
-                title: '{{ category|title }}',
-                text: '{{ message }}',
-                icon: '{{ category if category != "danger" else "error" }}',
-                confirmButtonColor: '#4f46e5'
-              });
-            {% endfor %}
-          {% endif %}
-        {% endwith %}
-    </script>
-</body>
-</html>
+    function showEditSourceModal(index, source) {
+        Swal.fire({
+            title: `Edit Source: ${source.name}`,
+            html: `
+                <div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="eName" class="form-control" value="${source.name}"></div>
+                <div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="eUrl" class="form-control" value="${source.url}"></div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6"><label class="small fw-bold">Format</label><select id="eFormat" class="form-select"><option value="text" ${source.format==='text'?'selected':''}>Text</option><option value="json" ${source.format==='json'?'selected':''}>JSON</option><option value="csv" ${source.format==='csv'?'selected':''}>CSV</option></select></div>
+                    <div class="col-6"><label class="small fw-bold">Interval</label><input type="number" id="eInterval" class="form-control" value="${source.schedule_interval_minutes}"></div>
+                </div>
+                <div class="text-start"><label class="small fw-bold">Confidence</label><input type="number" id="eConf" class="form-control" value="${source.confidence || 50}"></div>
+            `,
+            showCancelButton: true, confirmButtonText: 'Save Changes',
+            preConfirm: () => {
+                const name = document.getElementById('eName').value;
+                const url = document.getElementById('eUrl').value;
+                if (!name || !url) Swal.showValidationMessage(`Required`);
+                return { name, url, format: document.getElementById('eFormat').value, schedule_interval_minutes: document.getElementById('eInterval').value, confidence: document.getElementById('eConf').value };
+            }
+        }).then(res => { if (res.isConfirmed) submitForm(`/system/update_source/${index}`, res.value); });
+    }
+
+    function showAddLdapMappingModal() {
+        const profiles = {{ profiles|tojson }};
+        let pCards = '<div class="row g-2">';
+        profiles.forEach(p => pCards += `<div class="col-6"><input type="radio" class="btn-check" name="mapProfile" id="p_${p.id}" value="${p.id}"><label class="btn btn-outline-secondary btn-sm w-100 p-3 text-start" for="p_${p.id}"><div class="fw-bold">${p.name}</div></label></div>`);
+        pCards += '</div>';
+        Swal.fire({
+            title: 'Link LDAP Group to Profile',
+            html: `<div class="text-start mb-3"><label class="form-label small fw-bold">LDAP Group DN</label><input type="text" id="groupDn" class="form-control" placeholder="CN=Admins,OU=Groups,DC=local"></div><div class="text-start"><label class="form-label small fw-bold">Select Profile</label>${pCards}</div>`,
+            width: '600px', showCancelButton: true, confirmButtonText: 'Link',
+            preConfirm: () => { const dn = document.getElementById('groupDn').value; const pid = document.querySelector('input[name="mapProfile"]:checked')?.value; if (!dn || !pid) Swal.showValidationMessage(`Required`); return { group_dn: dn, profile_id: pid }; }
+        }).then(res => { if (res.isConfirmed) submitForm('{{ url_for("system.add_ldap_mapping") }}', res.value); });
+    }
+
+    function showProfileModal(profile = null) {
+        const isEdit = profile !== null;
+        let perms = { dashboard: 'r', system: 'none', tools: 'none' };
+        if (isEdit && profile.permissions) perms = typeof profile.permissions === 'string' ? JSON.parse(profile.permissions) : profile.permissions;
+        const modules = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'system', label: 'System' }, { id: 'tools', label: 'Tools' }];
+        let gridHtml = '<div class="list-group rounded-3 mb-3 text-start">';
+        modules.forEach(mod => {
+            const val = perms[mod.id] || 'none';
+            gridHtml += `<div class="list-group-item bg-light p-2"><div class="fw-bold small mb-1">${mod.label}</div><div class="btn-group btn-group-sm w-100"><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_none" value="none" ${val==='none'?'checked':''}><label class="btn btn-outline-secondary" for="${mod.id}_none">None</label><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_r" value="r" ${val==='r'?'checked':''}><label class="btn btn-outline-info" for="${mod.id}_r">Read</label><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_rw" value="rw" ${val==='rw'?'checked':''}><label class="btn btn-outline-success" for="${mod.id}_rw">Write</label></div></div>`;
+        });
+        gridHtml += '</div>';
+        Swal.fire({
+            title: isEdit ? 'Edit Profile' : 'New Profile',
+            html: `<input type="text" id="profName" class="form-control mb-2" placeholder="Name" value="${isEdit?profile.name:''}" ${isEdit?'disabled':''}><input type="text" id="profDesc" class="form-control mb-3" placeholder="Desc" value="${isEdit?profile.description||'':''}">${gridHtml}`,
+            confirmButtonText: 'Save', showCancelButton: true,
+            preConfirm: () => { const name = document.getElementById('profName').value; const desc = document.getElementById('profDesc').value; const newPerms = {}; ['dashboard','system','tools'].forEach(id => newPerms[id] = document.querySelector(`input[name="perm_${id}"]:checked`).value); return { name, description: desc, permissions: JSON.stringify(newPerms) }; }
+        }).then(res => { if (res.isConfirmed) { const data = { description: res.value.description, permissions: res.value.permissions }; if(isEdit) data.profile_id = profile.id; else data.name = res.value.name; submitForm(isEdit?'{{ url_for("system.update_profile") }}':'{{ url_for("system.add_profile") }}', data); } });
+    }
+
+    function showAddUserModal() {
+        const profiles = {{ profiles|tojson }};
+        let pOptions = ''; profiles.forEach(p => pOptions += `<option value="${p.id}">${p.name}</option>`);
+        Swal.fire({
+            title: 'Add Account',
+            html: `<div class="text-start mb-2"><label class="small fw-bold">User</label><input type="text" id="newU" class="form-control"></div><div class="text-start mb-2"><label class="small fw-bold">Pass</label><input type="password" id="newP" class="form-control"></div><div class="text-start"><label class="small fw-bold">Profile</label><select id="newPr" class="form-select">${pOptions}</select></div>`,
+            confirmButtonText: 'Add', showCancelButton: true,
+            preConfirm: () => { const u=document.getElementById('newU').value; const p=document.getElementById('newP').value; const pid=document.getElementById('newPr').value; if(!u||!p) Swal.showValidationMessage(`Required`); return { username:u, password:p, profile_id:pid }; }
+        }).then(res => { if (res.isConfirmed) submitForm('{{ url_for("system.add_user") }}', res.value); });
+    }
+
+    function showChangePasswordModal(u) {
+        Swal.fire({ title: `Reset ${u}`, input: 'password', showCancelButton: true }).then(res => { if (res.isConfirmed) submitForm('{{ url_for("system.change_user_password") }}', { username: u, password: res.value }); });
+    }
+
+    function submitForm(action, data) {
+        const form = document.createElement('form'); form.method = 'POST'; form.action = action;
+        for (const k in data) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = data[k]; form.appendChild(i); }
+        const csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}'; form.appendChild(csrf);
+        document.body.appendChild(form); showSavingAlert(); form.submit();
+    }
+
+    function showSavingAlert() { Swal.fire({ title: 'Saving...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } }); }
+    function checkLdapServerStatus() { fetch('/system/ldap/status').then(r => r.json()).then(d => { const b = document.getElementById('ldapServerStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : (d.status === 'offline' ? 'bg-danger' : 'bg-secondary')); b.innerHTML = d.status.toUpperCase(); }); }
+    function checkDnsStatus() { fetch('/system/dns/status').then(r => r.json()).then(d => { const b = document.getElementById('dnsStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
+    function checkProxyStatus() { fetch('/system/proxy/status').then(r => r.json()).then(d => { const b = document.getElementById('proxyStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
+    function testLdapLogin() { const u = document.getElementById('ldapTestUser').value; const p = document.getElementById('ldapTestPass').value; const r = document.getElementById('ldapTestResult'); r.className = 'form-text mt-2 text-muted'; r.innerHTML = 'Testing...'; r.classList.remove('d-none'); fetch('/system/ldap/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify({ username: u, password: p }) }).then(res => res.json()).then(d => { r.className = 'form-text mt-2 ' + (d.status === 'success' ? 'text-success' : 'text-danger'); r.innerHTML = d.message; }); }
+    function testProxySettings() { const f = document.getElementById('proxyForm'); const data = { enabled: f.querySelector('[name="proxy_enabled"]').checked, server: f.querySelector('[name="proxy_server"]').value, port: f.querySelector('[name="proxy_port"]').value, username: f.querySelector('[name="proxy_username"]').value, password: f.querySelector('[name="proxy_password"]').value }; Swal.fire({ title: 'Testing...', didOpen: () => { Swal.showLoading(); } }); fetch('/system/proxy/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify(data) }).then(r => r.json()).then(d => { Swal.fire(d.status === 'success' ? 'Success' : 'Failed', d.message, d.status); }); }
+    function addHostnameRow() { const c = document.getElementById('serverHostnamesList'); const n = document.createElement('div'); n.className = 'input-group input-group-sm mb-2 hostname-row'; n.innerHTML = `<input type="text" class="form-control" name="ldap_server[]" required><button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>`; c.appendChild(n); }
+    function removeHostnameRow(btn) { if (document.querySelectorAll('.hostname-row').length > 1) btn.closest('.hostname-row').remove(); }
+    function autoUpdatePort(cb) { const p = document.querySelector('input[name="ldap_port"]'); if (p) p.value = cb.checked ? '636' : '389'; }
+    function toggleProxyFields() { document.getElementById('proxyFields').style.display = document.getElementById('proxyEnabled').checked ? 'block' : 'none'; }
+</script>
+{% endblock %}

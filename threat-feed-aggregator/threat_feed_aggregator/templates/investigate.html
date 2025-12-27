@@ -1,237 +1,177 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Investigate IP - Threat Feed Aggregator</title>
-    <!-- Bootstrap CSS -->
-    <link href="{{ url_for('static', filename='vendor/css/bootstrap.min.css') }}" rel="stylesheet">
-    <!-- FontAwesome -->
-    <link href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}" rel="stylesheet">
-    <!-- Theme CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
-    <!-- SweetAlert2 -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/sweetalert2.min.css') }}">
-    
-    <script src="{{ url_for('static', filename='vendor/js/sweetalert2.all.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</head>
-<body>
+{% extends "base.html" %}
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h4><i class="fas fa-shield-alt me-2"></i> ThreatFeed</h4>
-        <a href="{{ url_for('dashboard.index') }}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-        <a href="{{ url_for('tools.investigate') }}" class="active"><i class="fas fa-search-location"></i> Investigate IP</a>
-        <a href="{{ url_for('system.index') }}"><i class="fas fa-cogs"></i> System Settings</a>
-        <a href="{{ url_for('auth.logout') }}"><i class="fas fa-sign-out-alt"></i> Logout</a>
+{% block title %}Investigate IP{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <div class="row align-items-center mb-4">
+        <div class="col-md-6">
+            <h3 class="fw-bold text-dark mb-1">Threat Investigation</h3>
+            <p class="text-muted small">Real-time IP reputation and geolocation intelligence.</p>
+        </div>
     </div>
 
-    <!-- Content -->
-    <div class="content">
-        <!-- Header -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="fw-bold mb-0">Investigate IP</h3>
-            <span class="text-muted">Powered by ip.thc.org</span>
-        </div>
-
+    <div class="row g-4">
         <!-- Search Card -->
-        <div class="card mb-4 shadow-sm">
-            <div class="card-body">
-                <form id="investigateForm" onsubmit="lookupIp(event)">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="input-group input-group-lg">
-                        <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
-                        <input type="text" class="form-control border-start-0" id="ipInput" placeholder="Enter IP Address (e.g. 1.1.1.1)" required>
-                        <button class="btn btn-primary px-5" type="submit" id="searchBtn">Lookup</button>
+        <div class="col-md-5">
+            <div class="card settings-card shadow-sm">
+                <div class="card-header bg-white py-3 border-0">
+                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-search me-2 text-primary"></i>IP Reputation Query</h6>
+                </div>
+                <div class="card-body">
+                    <form id="investigateForm">
+                        <div class="mb-3">
+                            <label class="form-label-custom">Target IP Address</label>
+                            <div class="input-group shadow-sm">
+                                <input type="text" id="ipInput" class="form-control" placeholder="e.g. 8.8.8.8" required>
+                                <button class="btn btn-primary px-4" type="submit" id="searchBtn">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    <hr class="my-4">
+                    <div class="small text-muted fw-bold text-uppercase mb-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">Recent Searches</div>
+                    <div id="recentSearches" class="d-flex flex-wrap gap-2">
+                        <!-- Populated by JS -->
                     </div>
-                </form>
+                </div>
             </div>
         </div>
 
-        <!-- Results Section -->
-        <div id="resultsArea" style="display: none;">
-            <div class="row">
-                <!-- IP Info Card -->
-                <div class="col-md-4 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light fw-bold">IP Details</div>
-                        <div class="card-body">
-                            <h2 class="text-primary mb-3" id="resIp"></h2>
-                            <ul class="list-group list-group-flush">
-                                <li class="list-group-item d-flex justify-content-between px-0">
-                                    <span class="text-muted">ASN</span>
-                                    <span class="fw-bold" id="resAsn">-</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between px-0">
-                                    <span class="text-muted">Organization</span>
-                                    <span class="fw-bold text-end" id="resOrg">-</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between px-0">
-                                    <span class="text-muted">Location</span>
-                                    <span class="fw-bold" id="resLoc">-</span>
-                                </li>
-                                <li class="list-group-item d-flex justify-content-between px-0">
-                                    <span class="text-muted">Country</span>
-                                    <span class="fw-bold" id="resCountry">-</span>
-                                </li>
-                            </ul>
-                            <div class="mt-3">
-                                <a href="#" id="googleMapsLink" target="_blank" class="btn btn-sm btn-outline-secondary w-100"><i class="fas fa-map-marker-alt me-2"></i> View on Map</a>
+        <!-- Result Card -->
+        <div class="col-md-7">
+            <div id="resultCard" class="card settings-card shadow-sm d-none">
+                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center border-bottom">
+                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-info-circle me-2 text-info"></i>Intelligence Report</h6>
+                    <div id="reportIpBadge" class="badge bg-primary px-3"></div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Geolocation</label>
+                            <div class="p-3 bg-light rounded-3 border">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="fas fa-map-marker-alt text-danger me-2"></i>
+                                    <span id="resCountry" class="fw-bold">N/A</span>
+                                </div>
+                                <div id="resMapLink"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label-custom">Reverse DNS / Hosting</label>
+                            <div class="p-3 bg-light rounded-3 border h-100">
+                                <ul id="resDomains" class="list-unstyled mb-0 small">
+                                    <li class="text-muted">No domains found.</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Domains Card -->
-                <div class="col-md-8 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                            <span class="fw-bold">Reverse DNS / Hosted Domains</span>
-                            <span class="badge bg-primary" id="domainCount">0</span>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-                                <table class="table table-striped table-hover mb-0">
-                                    <thead class="table-light sticky-top">
-                                        <tr>
-                                            <th>Domain</th>
-                                            <th class="text-end">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="domainList">
-                                        <!-- Domains injected here -->
-                                    </tbody>
-                                </table>
-                            </div>
+                    
+                    <div class="mt-4 pt-4 border-top">
+                        <label class="form-label-custom">External Threat Intelligence</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a id="vtLink" href="#" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-virus me-1"></i>VirusTotal</a>
+                            <a id="abuseLink" href="#" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-shield-alt me-1"></i>AbuseIPDB</a>
+                            <a id="talosLink" href="#" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-external-link-alt me-1"></i>Cisco Talos</a>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- WHOIS Information Card -->
-            <div class="row">
-                <div class="col-md-12 mb-4">
-                    <div class="card h-100">
-                        <div class="card-header bg-light fw-bold">WHOIS Information</div>
-                        <div class="card-body">
-                            <pre id="whoisData" class="bg-light p-3 rounded" style="white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto;">No WHOIS data available.</pre>
-                        </div>
-                    </div>
+            
+            <!-- Placeholder -->
+            <div id="noResultPlaceholder" class="card settings-card shadow-sm border-dashed">
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="fas fa-microscope fa-3x mb-3 opacity-25"></i>
+                    <p class="mb-0">Enter a valid IP address to retrieve comprehensive intelligence data.</p>
                 </div>
             </div>
         </div>
-
-        <!-- Error/Empty State -->
-        <div id="emptyState" class="text-center py-5 text-muted">
-            <i class="fas fa-search-location fa-4x mb-3 text-secondary opacity-25"></i>
-            <p>Enter an IP address to see hosted domains and details.</p>
-        </div>
-
     </div>
+</div>
+{% endblock %}
 
-    <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
-    <script>
-        function lookupIp(e) {
-            e.preventDefault();
-            const ip = document.getElementById('ipInput').value.trim();
-            if (!ip) return;
+{% block extra_scripts %}
+<script>
+    const investigateForm = document.getElementById('investigateForm');
+    const searchBtn = document.getElementById('searchBtn');
+    const resultCard = document.getElementById('resultCard');
+    const noResultPlaceholder = document.getElementById('noResultPlaceholder');
 
-            const btn = document.getElementById('searchBtn');
-            const originalText = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+    investigateForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const ip = document.getElementById('ipInput').value.trim();
+        if (!ip) return;
 
-            const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-            fetch('{{ url_for("tools.lookup_ip") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfToken
-                },
-                body: JSON.stringify({ ip: ip })
-            })
-            .then(response => response.json())
+        fetch(`/tools/query/${ip}`)
+            .then(r => r.json())
             .then(data => {
-                if (data.success) {
-                    displayResults(ip, data.data, data.whois_data); // Pass whois_data
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+                
+                if (data.status === 'success') {
+                    noResultPlaceholder.classList.add('d-none');
+                    resultCard.classList.remove('d-none');
+                    
+                    document.getElementById('reportIpBadge').textContent = ip;
+                    document.getElementById('resCountry').textContent = data.country || 'Unknown';
+                    
+                    const domainsList = document.getElementById('resDomains');
+                    domainsList.innerHTML = '';
+                    if (data.domains && data.domains.length > 0) {
+                        data.domains.forEach(d => {
+                            const li = document.createElement('li');
+                            li.className = 'mb-1 fw-bold text-dark';
+                            li.textContent = d;
+                            domainsList.appendChild(li);
+                        });
+                    } else {
+                        domainsList.innerHTML = '<li class="text-muted">No associated domains found.</li>';
+                    }
+
+                    document.getElementById('resMapLink').innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${ip}" target="_blank" class="small text-decoration-none"><i class="fas fa-map me-1"></i>View Location</a>`;
+                    document.getElementById('vtLink').href = `https://www.virustotal.com/gui/ip-address/${ip}`;
+                    document.getElementById('abuseLink').href = `https://www.abuseipdb.com/check/${ip}`;
+                    document.getElementById('talosLink').href = `https://talosintelligence.com/reputation_center/lookup?search=${ip}`;
+                    
+                    saveRecentSearch(ip);
                 } else {
-                    Swal.fire('Error', data.error || 'Lookup failed', 'error');
+                    Swal.fire('Error', data.message, 'error');
                 }
             })
-            .catch(error => {
-                console.error(error);
-                Swal.fire('Error', 'Network error occurred', 'error');
-            })
-            .finally(() => {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+            .catch(err => {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+                Swal.fire('Error', 'Service unreachable.', 'error');
             });
+    });
+
+    function saveRecentSearch(ip) {
+        let history = JSON.parse(localStorage.getItem('recentIps') || '[]');
+        if (!history.includes(ip)) {
+            history.unshift(ip); if (history.length > 6) history.pop();
+            localStorage.setItem('recentIps', JSON.stringify(history));
+            updateRecentSearches();
         }
+    }
 
-        function displayResults(ip, data, whois_data) { // Added whois_data parameter
-            document.getElementById('emptyState').style.display = 'none';
-            document.getElementById('resultsArea').style.display = 'block';
+    function updateRecentSearches() {
+        const container = document.getElementById('recentSearches');
+        const history = JSON.parse(localStorage.getItem('recentIps') || '[]');
+        container.innerHTML = history.length ? '' : '<span class="text-muted small">No recent history.</span>';
+        history.forEach(ip => {
+            const span = document.createElement('span');
+            span.className = 'badge bg-light text-dark border px-2 py-2 cursor-pointer';
+            span.style.cursor = 'pointer';
+            span.textContent = ip;
+            span.onclick = () => { document.getElementById('ipInput').value = ip; investigateForm.dispatchEvent(new Event('submit')); };
+            container.appendChild(span);
+        });
+    }
 
-            // 1. IP Details
-            document.getElementById('resIp').textContent = ip;
-            document.getElementById('resAsn').textContent = data.asn ? data.asn.number : 'N/A';
-            document.getElementById('resOrg').textContent = data.asn ? data.asn.organisation : 'N/A';
-            document.getElementById('resLoc').textContent = data.city || 'Unknown';
-            document.getElementById('resCountry').textContent = data.country || 'Unknown';
-
-            // 2. WHOIS Data
-            document.getElementById('whoisData').textContent = whois_data || 'No WHOIS data available.';
-            
-            if (data.gps) {
-                document.getElementById('googleMapsLink').href = `https://maps.google.com/?q=${data.gps}`;
-                document.getElementById('googleMapsLink').classList.remove('disabled');
-            } else {
-                document.getElementById('googleMapsLink').classList.add('disabled');
-            }
-
-            // 2. Domains
-            const list = document.getElementById('domainList');
-            list.innerHTML = '';
-            
-            // The API returns distinct formats based on endpoint.
-            // Based on curl output: "Entries: 1/1 ... host-..."
-            // But the JSON API might be different. Let's assume standard THC API structure or inspect it.
-            // If the API returns a list directly or inside a key.
-            // Common THC API keys: "items", "domains", or just a list if strictly rDNS? 
-            // Wait, previous curl output was text based rDNS.
-            // "curl .../api/v1/lookup ... -s" output wasn't shown fully in JSON format.
-            // Let's robustly handle the list.
-            
-            let domains = [];
-            // Check likely places for the list
-            if (Array.isArray(data)) domains = data;
-            else if (data.items) domains = data.items;
-            else if (data.domains) domains = data.domains;
-            else if (data.entries) domains = data.entries;
-
-            document.getElementById('domainCount').textContent = domains.length;
-
-            if (domains.length === 0) {
-                list.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No domains found for this IP.</td></tr>';
-            } else {
-                domains.forEach(d => {
-                    // d might be an object { domain: "..." } or string
-                    const domainName = (typeof d === 'string') ? d : (d.domain || d.name || JSON.stringify(d));
-                    
-                    const row = `
-                        <tr>
-                            <td>${domainName}</td>
-                            <td class="text-end">
-                                <a href="http://${domainName}" target="_blank" class="btn btn-sm btn-link text-muted"><i class="fas fa-external-link-alt"></i></a>
-                            </td>
-                        </tr>
-                    `;
-                    list.innerHTML += row;
-                });
-            }
-        }
-    </script>
-</body>
-</html>
+    document.addEventListener('DOMContentLoaded', updateRecentSearches);
+</script>
+{% endblock %}

@@ -39,10 +39,18 @@ if not SECRET_KEY:
     logging.error("Environment variable 'SECRET_KEY' is not set. Please set it for production use.")
     SECRET_KEY = 'dev_key_do_not_use_in_production'
     
-app.secret_key = SECRET_KEY
-app.config['SESSION_COOKIE_NAME'] = 'threat_feed_aggregator_session'
+app.secret_key = os.getenv('SECRET_KEY', 'default_secret_key')
 
-# Security
+# Jinja2 Filters
+@app.template_filter('from_json')
+def from_json_filter(value):
+    import json
+    try:
+        return json.loads(value)
+    except:
+        return {}
+
+# CSRF Protection
 csrf = CSRFProtect(app)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['SESSION_COOKIE_SECURE'] = False

@@ -1,4 +1,4 @@
-﻿Flask
+Flask
 aiohttp
 APScheduler
 SQLAlchemy
@@ -16,3 +16,4 @@ ldap3
 gunicorn
 tzlocal
 dnspython
+aiodns

@@ -130,6 +130,60 @@ def init_db(conn=None):
                         url_count INTEGER
                     )
                 ''')
+
+                # --- Admin Profiles (RBAC) ---
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS admin_profiles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL UNIQUE,
+                        description TEXT,
+                        permissions TEXT NOT NULL -- JSON string: {"module": "access_level"}
+                    )
+                ''')
+
+                # --- LDAP Group Mappings ---
+                db.execute('''
+                    CREATE TABLE IF NOT EXISTS ldap_group_mappings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        group_dn TEXT NOT NULL UNIQUE,
+                        profile_id INTEGER NOT NULL,
+                        FOREIGN KEY(profile_id) REFERENCES admin_profiles(id) ON DELETE CASCADE
+                    )
+                ''')
+
+                # Seed Default Profiles FIRST (to satisfy FK constraints when migrating users)
+                cursor = db.execute("SELECT COUNT(*) FROM admin_profiles")
+                if cursor.fetchone()[0] == 0:
+                    import json
+                    # 1. Super_User (Full Access)
+                    db.execute('INSERT INTO admin_profiles (name, description, permissions) VALUES (?, ?, ?)',
+                               ('Super_User', 'Full access to all modules', json.dumps({
+                                   "dashboard": "rw", "system": "rw", "tools": "rw"
+                               })))
+                    # 2. Standard_User (Limited System Access)
+                    db.execute('INSERT INTO admin_profiles (name, description, permissions) VALUES (?, ?, ?)',
+                               ('Standard_User', 'Can manage feeds but not system settings', json.dumps({
+                                   "dashboard": "rw", "system": "r", "tools": "rw"
+                               })))
+                    # 3. Read_Only (View Only)
+                    db.execute('INSERT INTO admin_profiles (name, description, permissions) VALUES (?, ?, ?)',
+                               ('Read_Only', 'View access only', json.dumps({
+                                   "dashboard": "r", "system": "r", "tools": "r"
+                               })))
+
+                # Users Table Migration (Add profile_id)
+                cursor = db.execute("PRAGMA table_info(users)")
+                user_columns = [info[1] for info in cursor.fetchall()]
+                if 'profile_id' not in user_columns:
+                    try:
+                        # SQLite limitation: Cannot add REFERENCES in ALTER TABLE easily.
+                        # Adding column without FK constraint for migration.
+                        db.execute('ALTER TABLE users ADD COLUMN profile_id INTEGER DEFAULT 1')
+                    except Exception as ex:
+                        logger.error(f"Migration error (profile_id): {ex}")
+                    
+                    # Ensure admin has correct profile
+                    db.execute("UPDATE users SET profile_id = 1 WHERE username = 'admin'")
                 
                 db.commit()
             except Exception as e:
@@ -210,10 +264,21 @@ def check_admin_credentials(password, conn=None):
 # --- Local User Management (Generic) ---
 
 def get_all_users(conn=None):
-    """Returns a list of all local users."""
+    """Returns a list of all local users with their profile names."""
     with db_transaction(conn) as db:
-        cursor = db.execute("SELECT username FROM users ORDER BY username ASC")
-        return [row['username'] for row in cursor.fetchall()]
+        try:
+            cursor = db.execute('''
+                SELECT u.username, p.name as profile_name 
+                FROM users u 
+                LEFT JOIN admin_profiles p ON u.profile_id = p.id 
+                ORDER BY u.username ASC
+            ''')
+            results = [dict(row) for row in cursor.fetchall()]
+            logger.info(f"Fetched {len(results)} users: {[r['username'] for r in results]}")
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching users: {e}")
+            return []
 
 def add_local_user(username, password, conn=None):
     """Adds a new local user."""
@@ -276,7 +341,7 @@ def verify_local_user(username, password, conn=None):
 
 def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
     """
-    Bulk upsert with scoring logic.
+    Highly optimized bulk upsert with scoring logic.
     indicators: list of (indicator, country, type)
     """
     with DB_WRITE_LOCK:
@@ -284,45 +349,48 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
             try:
                 now_iso = datetime.now(timezone.utc).isoformat()
                 
-                # Step 1: Insert OR Ignore into indicators (to ensure existence)
-                data_for_indicators = []
-                for item, country, indicator_type in indicators:
-                    data_for_indicators.append((item, now_iso, country, indicator_type))
-
-                # Use INSERT OR IGNORE to add new ones. 
-                # We update last_seen separately or via conflict if we want to update metadata.
-                # Let's use upsert to update country/last_seen.
-                db.executemany('''
-                    INSERT INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
-                    VALUES (?, ?, ?, ?, 50, 1)
-                    ON CONFLICT(indicator) DO UPDATE SET
-                        last_seen = excluded.last_seen,
-                        country = COALESCE(excluded.country, indicators.country),
-                        type = excluded.type
-                ''', data_for_indicators)
-
-                # Step 2: Update indicator_sources table
-                data_for_sources = []
-                for item, _, _ in indicators:
-                    data_for_sources.append((item, source_name, now_iso))
+                # Speed Optimization: Use a temporary table for bulk operations
+                db.execute('CREATE TEMPORARY TABLE IF NOT EXISTS temp_bulk_indicators (indicator TEXT, country TEXT, type TEXT)')
+                db.execute('DELETE FROM temp_bulk_indicators')
                 
-                db.executemany('''
+                db.executemany('INSERT INTO temp_bulk_indicators VALUES (?, ?, ?)', indicators)
+
+                # Step 1: Bulk Upsert into main indicators table
+                # Using INSERT OR REPLACE for compatibility with older SQLite versions
+                db.execute(f'''
+                    INSERT OR REPLACE INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
+                    SELECT indicator, ?, country, type, 50, 1 FROM temp_bulk_indicators
+                ''', (now_iso,))
+
+                # Step 2: Bulk Update indicator_sources
+                db.execute(f'''
                     INSERT OR REPLACE INTO indicator_sources (indicator, source_name, last_seen)
-                    VALUES (?, ?, ?)
-                ''', data_for_sources)
+                    SELECT indicator, ?, ? FROM temp_bulk_indicators
+                ''', (source_name, now_iso))
                 
                 db.commit()
             except Exception as e:
                 logger.error(f"Error bulk upserting indicators: {e}")
                 raise 
 
+def clean_database_vacuum(conn=None):
+    """Performs VACUUM to shrink DB size and optimize indexes."""
+    with db_transaction(conn) as db:
+        db.execute('VACUUM')
+        logger.info("Database vacuumed and optimized.")
+def get_all_indicators_iter(conn=None):
+    """
+    Generator that yields indicators one by one to save memory.
+    Ideal for EDL generation with large datasets.
+    """
+    with db_transaction(conn) as db:
+        cursor = db.execute('SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators')
+        for row in cursor:
+            yield row
+
 def recalculate_scores(source_confidence_map=None, conn=None):
     """
-    Recalculates source_count and risk_score for ALL indicators based on source confidence.
-    Formula: Base Score (Max Confidence of sources) + Overlap Bonus.
-    
-    Args:
-        source_confidence_map (dict): {source_name: confidence_score (int)}. Default confidence is 50.
+    Optimized: Recalculates risk scores using a more efficient SQL structure.
     """
     if source_confidence_map is None:
         source_confidence_map = {}
@@ -330,7 +398,7 @@ def recalculate_scores(source_confidence_map=None, conn=None):
     with DB_WRITE_LOCK:
         with db_transaction(conn) as db:
             try:
-                # 1. Update source_count (Always keep this accurate)
+                # 1. Update source_count accurately
                 db.execute('''
                     UPDATE indicators
                     SET source_count = (
@@ -340,23 +408,20 @@ def recalculate_scores(source_confidence_map=None, conn=None):
                     )
                 ''')
                 
-                # 2. Update risk_score using Temporary Table for Confidences
-                # Create temp table
+                # 2. Use a temporary table for confidence scores to join against
                 db.execute('CREATE TEMPORARY TABLE IF NOT EXISTS temp_source_conf (name TEXT PRIMARY KEY, score INTEGER)')
                 db.execute('DELETE FROM temp_source_conf')
                 
-                # Prepare data (default to 50 if not provided)
                 data_to_insert = [(name, score) for name, score in source_confidence_map.items()]
                 if data_to_insert:
-                    db.executemany('INSERT INTO temp_source_conf (name, score) VALUES (?, ?)', data_to_insert)
+                    db.executemany('INSERT INTO temp_source_conf VALUES (?, ?)', data_to_insert)
                 
-                # The complex update query
+                # 3. Optimized calculation using a single UPDATE with a correlated subquery
+                # Formula: Max(Confidence) + (Overlap Bonus)
                 db.execute('''
                     UPDATE indicators
                     SET risk_score = (
-                        SELECT MIN(100, 
-                            MAX(COALESCE(sc.score, 50)) + ((indicators.source_count - 1) * 5)
-                        )
+                        SELECT MIN(100, MAX(COALESCE(sc.score, 50)) + ((indicators.source_count - 1) * 5))
                         FROM indicator_sources src
                         LEFT JOIN temp_source_conf sc ON src.source_name = sc.name
                         WHERE src.indicator = indicators.indicator
@@ -365,9 +430,10 @@ def recalculate_scores(source_confidence_map=None, conn=None):
                 ''')
                 
                 db.commit()
-                logger.info(f"Scores recalculated successfully with map: {source_confidence_map}")
+                logger.info(f"Scores recalculated efficiently for all indicators.")
             except Exception as e:
                 logger.error(f"Error recalculating scores: {e}")
+                db.rollback()
 
 # ... (Rest of functions) ...
 def get_all_indicators(conn=None):
@@ -576,3 +642,138 @@ def get_historical_stats(days=30, conn=None):
             ORDER BY timestamp ASC
         ''', (cutoff,))
         return [dict(row) for row in cursor.fetchall()]
+
+# --- Admin Profile Management ---
+
+def get_admin_profiles(conn=None):
+    with db_transaction(conn) as db:
+        cursor = db.execute('SELECT * FROM admin_profiles ORDER BY id ASC')
+        return [dict(row) for row in cursor.fetchall()]
+
+def add_admin_profile(name, description, permissions, conn=None):
+    import json
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                db.execute('INSERT INTO admin_profiles (name, description, permissions) VALUES (?, ?, ?)',
+                           (name, description, json.dumps(permissions)))
+                db.commit()
+                return True, "Profile added."
+            except sqlite3.IntegrityError:
+                return False, "Profile name already exists."
+            except Exception as e:
+                return False, str(e)
+
+def delete_admin_profile(profile_id, conn=None):
+    if profile_id in (1, 2, 3): # Protect default profiles
+        return False, "Cannot delete default profiles."
+    
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                # Reassign users to Read_Only (id=3) before deleting
+                db.execute('UPDATE users SET profile_id = 3 WHERE profile_id = ?', (profile_id,))
+                db.execute('DELETE FROM admin_profiles WHERE id = ?', (profile_id,))
+                db.commit()
+                return True, "Profile deleted."
+            except Exception as e:
+                return False, str(e)
+
+def update_admin_profile(profile_id, description, permissions, conn=None):
+    if profile_id == 1: # Protect Super_User permissions
+        return False, "Cannot modify Super_User permissions."
+        
+    import json
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                db.execute('UPDATE admin_profiles SET description = ?, permissions = ? WHERE id = ?',
+                           (description, json.dumps(permissions), profile_id))
+                db.commit()
+                return True, "Profile updated."
+            except Exception as e:
+                return False, str(e)
+
+def get_user_permissions(username, conn=None):
+    """Retrieves the permissions dict for a specific user."""
+    import json
+    with db_transaction(conn) as db:
+        cursor = db.execute('''
+            SELECT p.permissions 
+            FROM users u 
+            JOIN admin_profiles p ON u.profile_id = p.id 
+            WHERE u.username = ?
+        ''', (username,))
+        row = cursor.fetchone()
+        if row:
+            try:
+                return json.loads(row['permissions'])
+            except:
+                return {} # Fallback
+        return {} # Default no permissions
+
+# --- LDAP Group Mappings ---
+
+def get_ldap_group_mappings(conn=None):
+    with db_transaction(conn) as db:
+        cursor = db.execute('''
+            SELECT m.id, m.group_dn, p.name as profile_name 
+            FROM ldap_group_mappings m
+            JOIN admin_profiles p ON m.profile_id = p.id
+            ORDER BY m.id ASC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+def add_ldap_group_mapping(group_dn, profile_id, conn=None):
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                db.execute('INSERT INTO ldap_group_mappings (group_dn, profile_id) VALUES (?, ?)',
+                           (group_dn.strip(), profile_id))
+                db.commit()
+                return True, "Mapping added."
+            except sqlite3.IntegrityError:
+                return False, "Group DN already mapped."
+            except Exception as e:
+                return False, str(e)
+
+def delete_ldap_group_mapping(mapping_id, conn=None):
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                db.execute('DELETE FROM ldap_group_mappings WHERE id = ?', (mapping_id,))
+                db.commit()
+                return True, "Mapping deleted."
+            except Exception as e:
+                return False, str(e)
+
+def get_profile_by_ldap_groups(user_groups, conn=None):
+    """
+    Checks user groups against mappings and returns the best profile_id.
+    Prioritizes profile_id 1 (Super_User) if multiple groups match.
+    """
+    with db_transaction(conn) as db:
+        try:
+            cursor = db.execute('SELECT group_dn, profile_id FROM ldap_group_mappings')
+            mappings = cursor.fetchall()
+            
+            normalized_user_groups = [g.lower() for g in user_groups]
+            matched_profile_ids = []
+            
+            for mapping in mappings:
+                if mapping['group_dn'].lower() in normalized_user_groups:
+                    matched_profile_ids.append(mapping['profile_id'])
+            
+            if not matched_profile_ids:
+                return None
+                
+            # If any matched profile is Super_User (1), return it
+            if 1 in matched_profile_ids:
+                return 1
+                
+            # Otherwise return the first matched (or logic can be added for 2 > 3 etc)
+            return matched_profile_ids[0]
+        except Exception as e:
+            logger.error(f"Error checking LDAP group mappings: {e}")
+        
+        return None

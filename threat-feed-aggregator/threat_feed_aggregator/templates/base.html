@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %} - Threat Feed Aggregator</title>
+    <!-- Bootstrap 5 -->
+    <link href="{{ url_for('static', filename='vendor/css/bootstrap.min.css') }}" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}" rel="stylesheet">
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/sweetalert2.min.css') }}">
+    <!-- Theme CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            --secondary-gradient: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            --card-border-radius: 1rem;
+            --sidebar-width: 260px;
+        }
+        body { background-color: #f8fafc; min-height: 100vh; margin: 0; padding: 0; overflow: hidden; display: flex; width: 100%; }
+        
+                .sidebar { 
+                    width: var(--sidebar-width); 
+                    background: var(--secondary-gradient); 
+                    color: white; 
+                    height: 100vh;
+                    position: fixed;
+                    left: 0;
+                    top: 0;
+                    display: flex; 
+                    flex-direction: column; 
+                    z-index: 1050;
+                }
+                
+                        .main-container { 
+                            flex-grow: 1; 
+                            height: 100vh;
+                            overflow-y: auto; 
+                            margin-left: var(--sidebar-width);
+                            padding: 2.5rem;
+                            width: calc(100% - var(--sidebar-width));
+                            background-color: #f8fafc;
+                            position: relative;
+                        }
+                        
+                        .container-fluid { max-width: 1400px; margin-left: 0; }        {% if request.endpoint == 'auth.login' %}
+        .main-container { margin-left: 0; width: 100%; padding: 0; }
+        {% endif %}
+
+        .settings-card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); border-radius: var(--card-border-radius); transition: all 0.3s; background: white; margin-bottom: 1.5rem; }
+        .settings-card:hover { box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1); }
+        .form-label-custom { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 0.5rem; }
+        .btn-primary { background: var(--primary-gradient); border: none; }
+        .btn-primary:hover { opacity: 0.9; }
+        .badge-authority { font-size: 0.65rem; padding: 0.35em 0.65em; border-radius: 2rem; }
+        
+        /* Custom Scrollbar */
+        .main-container::-webkit-scrollbar { width: 6px; }
+        .main-container::-webkit-scrollbar-track { background: #f1f1f1; }
+        .main-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .main-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    {% if request.endpoint != 'auth.login' %}
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="px-4 py-4 mb-2">
+            <h4 class="text-white fw-bold mb-0"><i class="fas fa-shield-virus me-2 text-info"></i> ThreatFeed</h4>
+            <small class="text-info opacity-75">Intelligence Engine</small>
+        </div>
+        <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint == 'dashboard.index' }}"><i class="fas fa-th-large"></i> Overview</a>
+        <a href="{{ url_for('tools.investigate') }}" class="{{ 'active' if request.endpoint == 'tools.investigate' }}"><i class="fas fa-search-location"></i> IP Investigation</a>
+        <a href="{{ url_for('system.index') }}" class="{{ 'active' if request.endpoint == 'system.index' }}"><i class="fas fa-cog"></i> System Settings</a>
+        
+        <div class="mt-auto p-4 border-top border-secondary">
+            <div class="d-flex align-items-center mb-3">
+                <div class="avatar-sm bg-primary rounded-circle me-2 d-flex align-items-center justify-content-center text-white font-monospace" style="width:32px; height:32px; font-size: 0.8rem;">
+                    {{ session.get('username', 'U')[0]|upper }}
+                </div>
+                <div class="small overflow-hidden">
+                    <div class="text-white fw-bold text-truncate" style="max-width: 150px;">{{ session.get('username') }}</div>
+                    <div class="text-muted text-truncate" style="font-size:0.7rem;">{{ session.get('profile_name', 'Analyst') }}</div>
+                </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm w-100 py-2" style="border:none; text-align:left; padding-left:0;">
+                <i class="fas fa-sign-out-alt me-2"></i> Sign Out
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <div class="main-container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/js/sweetalert2.all.min.js') }}"></script>
+    <script>
+        // Common Flash Messages
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              Swal.fire({
+                title: '{{ category|title }}',
+                text: '{{ message }}',
+                icon: '{{ category if category != "danger" else "error" }}',
+                timer: 3000,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+              });
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

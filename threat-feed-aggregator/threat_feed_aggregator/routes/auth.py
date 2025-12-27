@@ -66,18 +66,17 @@ def login():
         username = request.form['username']
         password = request.form['password']
         
-        logger.info(f"Login attempt received for user: {username}")
-        success, message = check_credentials(username, password)
-        
-        if success:
-            logger.info(f"Login SUCCESS for user: {username}")
-            session['logged_in'] = True
-            session['username'] = username
-            session.modified = True
-            return redirect(url_for('dashboard.index'))
-        else:
-            logger.warning(f"Login FAILED for user {username}: {message}")
-            error = message if message else 'Invalid Credentials.'
+        if username and password:
+            success, message, info = check_credentials(username, password)
+            if success:
+                session['logged_in'] = True
+                session['username'] = username
+                session['permissions'] = info.get('permissions', {})
+                session['profile_name'] = info.get('profile_name', 'Local')
+                flash(message, 'success')
+                return redirect(url_for('dashboard.index'))
+            else:
+                flash(message, 'danger')
 
     return render_template('login.html', error=error)
 

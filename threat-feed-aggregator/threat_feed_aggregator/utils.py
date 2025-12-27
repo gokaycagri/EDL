@@ -94,69 +94,86 @@ def remove_from_safe_list(item_to_remove):
         logger.error(f"Error removing from safe list file: {e}")
         return False, str(e)
 
-def is_whitelisted(indicator, whitelist_db_items=None):
+def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None):
     """
     Checks if an indicator is in the user-defined whitelist OR the global safe list.
     Supports IPs, CIDRs, and exact string matches for Domains.
+    
+    precomputed_db_nets: Optional list of ip_network objects for DB whitelist items.
     """
-    # 1. Check Global Safe List (Exact Match)
+    # 1. Check Global Safe List (Exact Match) - O(1)
     if indicator in SAFE_ITEMS:
         return True, "Global Safe List"
 
-    # 2. Check Global Safe List (CIDR)
+    # 2. Check Global Safe List (CIDR) - Optimized
     try:
-        if '/' in indicator:
-            input_net = ipaddress.ip_network(indicator, strict=False)
+        is_cidr = '/' in indicator
+        if is_cidr:
+            input_obj = ipaddress.ip_network(indicator, strict=False)
             for net in SAFE_NETWORKS:
-                if input_net.subnet_of(net): 
-                    return True, "Global Safe List (CIDR)"
+                if input_obj.subnet_of(net): return True, "Global Safe List (CIDR)"
         else:
-            input_ip = ipaddress.ip_address(indicator)
+            input_obj = ipaddress.ip_address(indicator)
             for net in SAFE_NETWORKS:
-                if input_ip in net:
-                    return True, "Global Safe List (CIDR)"
+                if input_obj in net: return True, "Global Safe List (CIDR)"
     except ValueError:
-        pass 
+        return False, None # Invalid indicator string
 
     # 3. Check User DB Whitelist
     if whitelist_db_items:
+        # Exact match check first (O(1) if items is a set)
         if indicator in whitelist_db_items:
             return True, "User Whitelist"
         
-        try:
-            input_obj = None
-            is_input_cidr = '/' in indicator
-            
-            if is_input_cidr:
-                input_obj = ipaddress.ip_network(indicator, strict=False)
-            else:
-                input_obj = ipaddress.ip_address(indicator)
-
+        # CIDR check using precomputed objects if available, otherwise fallback
+        if precomputed_db_nets:
+            for w_net in precomputed_db_nets:
+                try:
+                    if is_cidr:
+                        if input_obj.subnet_of(w_net): return True, "User Whitelist (CIDR)"
+                    else:
+                        if input_obj in w_net: return True, "User Whitelist (CIDR)"
+                except: continue
+        else:
+            # Fallback (slow)
             for w_item in whitelist_db_items:
                 if '/' in w_item:
                     try:
                         w_net = ipaddress.ip_network(w_item, strict=False)
-                        if is_input_cidr:
-                            if input_obj.subnet_of(w_net):
-                                return True, "User Whitelist (CIDR)"
+                        if is_cidr:
+                            if input_obj.subnet_of(w_net): return True, "User Whitelist (CIDR)"
                         else:
-                            if input_obj in w_net:
-                                return True, "User Whitelist (CIDR)"
-                    except ValueError:
-                        pass
-        except ValueError:
-            pass
+                            if input_obj in w_net: return True, "User Whitelist (CIDR)"
+                    except ValueError: pass
 
     return False, None
 
 def filter_whitelisted_items(items, whitelist_db_items):
     """
     Filters a list of items against safe list and user whitelist.
-    Returns filtered list.
+    Highly optimized for bulk processing.
     """
+    if not items: return []
+    
+    # Precompute DB whitelist into sets and network objects
+    db_items_set = set()
+    db_nets = []
+    if whitelist_db_items:
+        for w in whitelist_db_items:
+            w_str = w['item'] if isinstance(w, dict) else w
+            if '/' in w_str:
+                try: db_nets.append(ipaddress.ip_network(w_str, strict=False))
+                except: db_items_set.add(w_str)
+            else:
+                db_items_set.add(w_str)
+
     filtered = []
     for item in items:
-        whitelisted, reason = is_whitelisted(item, whitelist_db_items)
+        # For tuples from parse_mixed_text (val, type)
+        val = item[0] if isinstance(item, tuple) else item
+        
+        # Pass precomputed data to avoid repeated overhead
+        whitelisted, _ = is_whitelisted(val, db_items_set, db_nets)
         if not whitelisted:
             filtered.append(item)
     return filtered
