@@ -17,7 +17,9 @@ def get_executable_dir():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     else:
-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Return the directory containing this script (threat_feed_aggregator)
+        # So that data dir becomes .../threat_feed_aggregator/data
+        return os.path.dirname(os.path.abspath(__file__))
 
 # Internal resources (templates, default config) are in the code/temp dir
 CODE_BASE_DIR = get_base_path()
@@ -45,22 +47,78 @@ if not os.path.exists(CONFIG_FILE) and os.path.exists(CONFIG_FILE_DEFAULT):
     except Exception:
         pass # Handle case where source might be missing in some builds
 
+import logging
+
+# Configure logging to stdout
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+_config_cache = None
+_config_cache_mtime = 0
+
 def read_config():
+    global _config_cache, _config_cache_mtime
     target_file = CONFIG_FILE
+    
     # Fallback to default if user config missing
     if not os.path.exists(target_file):
+        # logger.warning(f"[Config] User config not found at {target_file}. Trying default.")
         target_file = CONFIG_FILE_DEFAULT
         
     if not os.path.exists(target_file):
+        # logger.error(f"[Config] No config file found anywhere. Returning empty.")
         return {"source_urls": []}
         
-    with open(target_file, "r") as f:
-        return json.load(f)
+    try:
+        current_mtime = os.stat(target_file).st_mtime
+        if _config_cache and current_mtime == _config_cache_mtime:
+            return _config_cache
+
+        # Debug: Check file stats
+        # stats = os.stat(target_file)
+        # logger.info(f"[Config] Reading {target_file} | Size: {stats.st_size} | Mtime: {stats.st_mtime}")
+        
+        with open(target_file, "r") as f:
+            data = json.load(f)
+            _config_cache = data
+            _config_cache_mtime = current_mtime
+            
+            # Check specific keys to debug the issue
+            # if 'proxy' in data:
+            #      logger.info(f"[Config] READ CONTENT: Proxy Enabled={data['proxy'].get('enabled')}, Server={data['proxy'].get('server')}")
+            # else:
+            #      logger.info(f"[Config] READ CONTENT: Proxy key MISSING")
+            return data
+    except Exception as e:
+        logger.error(f"[Config] ERROR reading {target_file}: {e}")
+        # Emergency fallback logic remains...
+        if target_file != CONFIG_FILE_DEFAULT and os.path.exists(CONFIG_FILE_DEFAULT):
+             try:
+                 # logger.warning(f"[Config] Attempting fallback to default config due to corruption.")
+                 with open(CONFIG_FILE_DEFAULT, "r") as f:
+                     return json.load(f)
+             except:
+                 pass
+        return {"source_urls": []}
 
 def write_config(config):
-    # Always write to user config
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+    global _config_cache, _config_cache_mtime
+    try:
+        # logger.info(f"[Config] WRITING to {CONFIG_FILE}. Proxy Enabled: {config.get('proxy', {}).get('enabled')}")
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno()) # Force write to disk
+            
+        # Update cache immediately to prevent stale reads
+        _config_cache = config
+        _config_cache_mtime = os.stat(CONFIG_FILE).st_mtime
+            
+        # Verify write (Optional, can be removed for production speed)
+        # with open(CONFIG_FILE, "r") as f: ...
+                
+    except Exception as e:
+        logger.error(f"[Config] ERROR writing config: {e}")
 
 def read_stats():
     if not os.path.exists(STATS_FILE):

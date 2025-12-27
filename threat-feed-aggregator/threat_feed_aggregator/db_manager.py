@@ -207,6 +207,71 @@ def check_admin_credentials(password, conn=None):
         return True
     return False
 
+# --- Local User Management (Generic) ---
+
+def get_all_users(conn=None):
+    """Returns a list of all local users."""
+    with db_transaction(conn) as db:
+        cursor = db.execute("SELECT username FROM users ORDER BY username ASC")
+        return [row['username'] for row in cursor.fetchall()]
+
+def add_local_user(username, password, conn=None):
+    """Adds a new local user."""
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                hashed_password = generate_password_hash(password)
+                db.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', 
+                             (username, hashed_password))
+                db.commit()
+                return True, f"User {username} added."
+            except sqlite3.IntegrityError:
+                return False, "Username already exists."
+            except Exception as e:
+                return False, str(e)
+
+def update_local_user_password(username, password, conn=None):
+    """Updates password for an existing user."""
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                hashed_password = generate_password_hash(password)
+                cursor = db.execute('UPDATE users SET password_hash = ? WHERE username = ?', 
+                                  (hashed_password, username))
+                db.commit()
+                if cursor.rowcount > 0:
+                    return True, "Password updated."
+                else:
+                    return False, "User not found."
+            except Exception as e:
+                return False, str(e)
+
+def delete_local_user(username, conn=None):
+    """Deletes a local user (prevents deleting 'admin')."""
+    if username == 'admin':
+        return False, "Cannot delete the default admin account."
+        
+    with DB_WRITE_LOCK:
+        with db_transaction(conn) as db:
+            try:
+                cursor = db.execute('DELETE FROM users WHERE username = ?', (username,))
+                db.commit()
+                if cursor.rowcount > 0:
+                    return True, "User deleted."
+                else:
+                    return False, "User not found."
+            except Exception as e:
+                return False, str(e)
+
+def verify_local_user(username, password, conn=None):
+    """Verifies credentials for any local user."""
+    with db_transaction(conn) as db:
+        cursor = db.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        if result and check_password_hash(result['password_hash'], password):
+            return True
+        return False
+
 # --- SCORING & UPSERT LOGIC (UPDATED) ---
 
 def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):

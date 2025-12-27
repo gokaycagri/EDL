@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.0] - 2025-12-27
+
+### Added
+- **Local User Management:** Implemented a full user management system allowing administrators to add, delete, and manage passwords for multiple local users, not just the default 'admin'.
+- **Connection Status Indicators:** Added real-time visual badges (Online/Offline) for LDAP, DNS, and Proxy configurations in the System Settings dashboard.
+- **Config Caching:** Implemented in-memory caching with mtime invalidation for the configuration file, significantly reducing disk I/O and improving UI response times.
+- **HTTP Session Reuse:** Optimized the data collector to reuse a single `aiohttp.ClientSession` across all feed fetches, reducing TCP/TLS handshake overhead.
+
+### Fixed
+- **Config Persistence Bug:** Resolved a critical issue where saving DNS settings would overwrite or disable Proxy settings (and vice versa) due to race conditions and incorrect file paths.
+- **Proxy Save UX:** Fixed an issue where the Proxy "Save" button would not trigger the form submission correctly. Added a "Saving..." visual feedback.
+- **Windows Docker Volume:** Switched from atomic rename to direct file writing for configuration saves to ensure compatibility with Windows Docker volumes.
+
+### Changed
+- **UX Workflow:** Updated settings pages to redirect back to the specific settings tab instead of the dashboard after saving changes.
+
 ## [1.5.1] - 2025-12-27
 
 ### Fixed

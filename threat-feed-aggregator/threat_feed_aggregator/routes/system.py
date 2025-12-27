@@ -6,7 +6,11 @@ from ..db_manager import (
     remove_whitelist_item,
     delete_whitelisted_indicators,
     check_admin_credentials,
-    set_admin_password
+    set_admin_password,
+    get_all_users,
+    add_local_user,
+    delete_local_user,
+    update_local_user_password
 )
 from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..aggregator import fetch_and_process_single_feed
@@ -18,7 +22,57 @@ from .auth import login_required
 @login_required
 def index():
     config = read_config()
-    return render_template('system.html', config=config)
+    users = get_all_users()
+    return render_template('system.html', config=config, users=users)
+
+@bp_system.route('/users/add', methods=['POST'])
+@login_required
+def add_user():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    
+    if username and password:
+        success, message = add_local_user(username, password)
+        if success:
+            flash(f'User {username} added successfully.', 'success')
+        else:
+            flash(f'Error adding user: {message}', 'danger')
+    else:
+        flash('Username and password are required.', 'danger')
+        
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/users/delete', methods=['POST'])
+@login_required
+def delete_user():
+    username = request.form.get('username')
+    
+    if username:
+        success, message = delete_local_user(username)
+        if success:
+            flash(f'User {username} deleted successfully.', 'success')
+        else:
+            flash(f'Error deleting user: {message}', 'danger')
+            
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/users/change_password', methods=['POST'])
+@login_required
+def change_user_password():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    
+    # Optional: Verify current admin password for security before changing others?
+    # For now, assuming logged-in admin has rights.
+    
+    if username and password:
+        success, message = update_local_user_password(username, password)
+        if success:
+            flash(f'Password for {username} updated successfully.', 'success')
+        else:
+            flash(f'Error updating password: {message}', 'danger')
+            
+    return redirect(url_for('system.index'))
 
 @bp_system.route('/add_source', methods=['POST'])
 @login_required
@@ -251,7 +305,63 @@ def update_ldap():
     
     write_config(config)
     flash('LDAP settings updated successfully.', 'success')
-    return redirect(url_for('dashboard.index'))
+    return redirect(url_for('system.index'))
+
+@bp_system.route('/ldap/status', methods=['GET'])
+@login_required
+def check_ldap_server_status():
+    """
+    Checks if the configured LDAP servers are reachable (TCP connect).
+    Does not test authentication since passwords are not stored.
+    """
+    import socket
+    from ..config_manager import read_config
+    
+    config = read_config()
+    auth_config = config.get('auth', {})
+    
+    ldap_enabled = auth_config.get('ldap_enabled')
+    if ldap_enabled is None:
+        ldap_config = auth_config.get('ldap', {})
+        ldap_enabled = ldap_config.get('enabled', False)
+        servers_list = [ldap_config] if ldap_enabled else []
+    else:
+        servers_list = auth_config.get('ldap_servers', [])
+        
+    if not ldap_enabled:
+        return jsonify({'status': 'disabled', 'message': 'LDAP is disabled'})
+        
+    if not servers_list:
+        return jsonify({'status': 'error', 'message': 'No servers configured'})
+
+    # Try to connect to at least one server
+    connected = False
+    details = []
+    
+    for srv in servers_list:
+        host = srv.get('server')
+        port = srv.get('port', 389)
+        
+        if not host: continue
+        
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2) # 2 seconds timeout
+            result = sock.connect_ex((host, int(port)))
+            sock.close()
+            
+            if result == 0:
+                connected = True
+                details.append(f"{host}: OK")
+            else:
+                details.append(f"{host}: Unreachable")
+        except Exception as e:
+            details.append(f"{host}: Error ({str(e)})")
+            
+    if connected:
+        return jsonify({'status': 'online', 'message': 'Servers Reachable', 'details': details})
+    else:
+        return jsonify({'status': 'offline', 'message': 'Servers Unreachable', 'details': details})
 
 @bp_system.route('/ldap/test', methods=['POST'])
 @login_required
@@ -308,15 +418,89 @@ def test_ldap_connection():
         logger.warning(f"LDAP Test FAILED for user {username}: {message}")
         return jsonify({'status': 'error', 'message': f'Failed: {message}'})
 
+@bp_system.route('/proxy/status', methods=['GET'])
+@login_required
+def check_proxy_status():
+    """
+    Checks if the configured Proxy is working by connecting to a site.
+    """
+    import requests
+    from ..config_manager import read_config
+    
+    config = read_config()
+    proxy_config = config.get('proxy', {})
+    
+    enabled = proxy_config.get('enabled')
+    server = proxy_config.get('server')
+    port = proxy_config.get('port')
+    username = proxy_config.get('username')
+    password = proxy_config.get('password')
+    
+    if not enabled:
+        return jsonify({'status': 'disabled', 'message': 'Proxy Disabled'})
+        
+    if not server or not port:
+        return jsonify({'status': 'error', 'message': 'Incomplete Configuration'})
+        
+    # Construct Proxy URL
+    auth_string = ""
+    if username and password:
+        auth_string = f"{username}:{password}@"
+        
+    proxy_url = f"http://{auth_string}{server}:{port}"
+    proxies = {"http": proxy_url, "https": proxy_url}
+    
+    try:
+        # Test connection to a reliable external site
+        test_url = "https://www.google.com"
+        response = requests.get(test_url, proxies=proxies, timeout=5)
+        
+        if response.status_code == 200:
+            return jsonify({'status': 'online', 'message': 'Proxy Working'})
+        else:
+            return jsonify({'status': 'offline', 'message': f'HTTP {response.status_code}'})
+            
+    except Exception as e:
+        return jsonify({'status': 'offline', 'message': 'Connection Failed'})
+
 @bp_system.route('/update_proxy', methods=['POST'])
 @login_required
 def update_proxy():
-    # ... existing code ...
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("RECEIVED /update_proxy request")
+    
+    enabled = request.form.get('proxy_enabled') == 'on'
+    server = request.form.get('proxy_server')
+    port = request.form.get('proxy_port')
+    username = request.form.get('proxy_username')
+    password = request.form.get('proxy_password')
+    
+    config = read_config()
+    
+    if enabled and server:
+        # Clean server address (remove protocol if user added it)
+        server = server.replace('http://', '').replace('https://', '').strip('/')
+    
+    config['proxy'] = {
+        'enabled': enabled,
+        'server': server,
+        'port': port,
+        'username': username,
+        'password': password
+    }
+    
+    write_config(config)
+    flash('Proxy settings updated successfully.', 'success')
     return redirect(url_for('system.index'))
 
 @bp_system.route('/update_dns', methods=['POST'])
 @login_required
 def update_dns():
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("RECEIVED /update_dns request")
+    
     primary = request.form.get('dns_primary')
     secondary = request.form.get('dns_secondary')
     
@@ -329,6 +513,52 @@ def update_dns():
     write_config(config)
     flash('DNS settings updated successfully.', 'success')
     return redirect(url_for('system.index'))
+
+@bp_system.route('/dns/status', methods=['GET'])
+@login_required
+def check_dns_status():
+    """
+    Checks if the configured DNS servers are working by resolving a domain.
+    """
+    import dns.resolver
+    from ..config_manager import read_config
+    
+    config = read_config()
+    dns_config = config.get('dns', {})
+    
+    primary = dns_config.get('primary')
+    secondary = dns_config.get('secondary')
+    
+    if not primary and not secondary:
+        return jsonify({'status': 'disabled', 'message': 'No Custom DNS Configured'})
+        
+    servers_to_test = []
+    if primary: servers_to_test.append(primary)
+    if secondary: servers_to_test.append(secondary)
+    
+    working_servers = []
+    failed_servers = []
+    
+    for server in servers_to_test:
+        try:
+            resolver = dns.resolver.Resolver()
+            resolver.nameservers = [server]
+            resolver.timeout = 2
+            resolver.lifetime = 2
+            
+            # Try to resolve a reliable domain
+            resolver.resolve('google.com', 'A')
+            working_servers.append(server)
+        except Exception as e:
+            failed_servers.append(f"{server} ({str(e)})")
+            
+    if working_servers:
+        details = f"Working: {', '.join(working_servers)}"
+        if failed_servers:
+            details += f"\nFailed: {', '.join(failed_servers)}"
+        return jsonify({'status': 'online', 'message': 'DNS Resolution OK', 'details': details})
+    else:
+        return jsonify({'status': 'offline', 'message': 'DNS Resolution Failed', 'details': f"All failed: {', '.join(failed_servers)}"})
 
 @bp_system.route('/proxy/test', methods=['POST'])
 @login_required
@@ -347,6 +577,9 @@ def test_proxy_connection():
         
     if not server or not port:
         return jsonify({'status': 'error', 'message': 'Server and Port are required.'})
+        
+    # Clean server address (remove protocol if user added it)
+    server = server.replace('http://', '').replace('https://', '').strip('/')
         
     # Construct Proxy URL
     auth_string = ""

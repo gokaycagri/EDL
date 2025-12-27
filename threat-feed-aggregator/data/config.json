@@ -32,9 +32,47 @@
     ],
     "auth": {
         "ldap": {
-            "enabled": false,
-            "server": "openldap",
-            "domain": "dc=threataggregator,dc=local"
-        }
+            "enabled": true,
+            "server": "PRD-DC-AD01.mfa.gov.tr",
+            "port": 636,
+            "domain": "OU=MFA,DC=mfa,DC=gov,DC=tr",
+            "admin_group": "CN=T1-FWAdmins,OU=FORTI,OU=T1-Admins,OU=T1-Groups,OU=Tier1,OU=Admin,OU=MFA,DC=mfa,DC=gov,DC=tr",
+            "ldaps_enabled": true
+        },
+        "ldap_enabled": true,
+        "ldap_servers": [
+            {
+                "server": "PRD-DC-AD01.mfa.gov.tr",
+                "port": 636,
+                "domain": "OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "admin_group": "CN=T1-FWAdmins,OU=FORTI,OU=T1-Admins,OU=T1-Groups,OU=Tier1,OU=Admin,OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "ldaps_enabled": true
+            },
+            {
+                "server": "PRD-DC-AD02.mfa.gov.tr",
+                "port": 636,
+                "domain": "OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "admin_group": "CN=T1-FWAdmins,OU=FORTI,OU=T1-Admins,OU=T1-Groups,OU=Tier1,OU=Admin,OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "ldaps_enabled": true
+            },
+            {
+                "server": "PRD-DC-AD03.mfa.gov.tr",
+                "port": 636,
+                "domain": "OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "admin_group": "CN=T1-FWAdmins,OU=FORTI,OU=T1-Admins,OU=T1-Groups,OU=Tier1,OU=Admin,OU=MFA,DC=mfa,DC=gov,DC=tr",
+                "ldaps_enabled": true
+            }
+        ]
+    },
+    "dns": {
+        "primary": "10.236.6.11",
+        "secondary": "10.236.6.12"
+    },
+    "proxy": {
+        "enabled": true,
+        "server": "proxy.mfa.gov.tr",
+        "port": "9090",
+        "username": "muhammet.cetin",
+        "password": "Mc.010611047.1511.20"
     }
 }

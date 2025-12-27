@@ -118,7 +118,7 @@ class FeedAggregator:
     def __init__(self, db_conn=None):
         self.db_conn = db_conn
 
-    async def fetch_data(self, source_config):
+    async def fetch_data(self, source_config, session=None):
         """
         Fetches data from the source asynchronously.
         """
@@ -141,10 +141,12 @@ class FeedAggregator:
             items_with_type = await loop.run_in_executor(None, fetch_and_parse_taxii, url, collection_id, username, password)
             raw_data = "TAXII_PROCESSED"
         else:
-            raw_data = await fetch_data_from_url_async(url)
+            raw_data = await fetch_data_from_url_async(url, session=session)
         
         duration = time.time() - start_time
         return raw_data, items_with_type, duration
+
+    # ... (parse_data, filter_whitelist, enrich_data, save_batch methods remain unchanged)
 
     def parse_data(self, raw_data, source_config):
         """
@@ -218,7 +220,7 @@ class FeedAggregator:
                     else:
                         logger.error(f"[{source_name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}")
 
-    async def process_source(self, source_config, recalculate=True):
+    async def process_source(self, source_config, recalculate=True, session=None):
         name = source_config["name"]
         loop = asyncio.get_event_loop()
         
@@ -227,7 +229,7 @@ class FeedAggregator:
         update_job_status(name, "Fetching", f"Downloading from {source_config['url']}")
 
         try:
-            raw_data, items, duration = await self.fetch_data(source_config)
+            raw_data, items, duration = await self.fetch_data(source_config, session=session)
             
             if raw_data:
                 if not items and source_config.get("format") != "taxii":
@@ -279,20 +281,23 @@ class FeedAggregator:
 
 async def aggregate_sources_async(source_urls):
     aggregator = FeedAggregator()
-    tasks = [aggregator.process_source(source, recalculate=False) for source in source_urls]
-    results = []
+    from .data_collector import get_async_session
     
-    # Process all feeds concurrently
-    # return_exceptions=True allows others to finish even if one fails
-    results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    for res in results_or_exceptions:
-        if isinstance(res, Exception):
-            logger.error(f"Task failed with: {res}")
-        else:
-            results.append(res)
-            
-    return results
+    # Create a single session for all requests
+    async with await get_async_session() as session:
+        tasks = [aggregator.process_source(source, recalculate=False, session=session) for source in source_urls]
+        results = []
+        
+        # Process all feeds concurrently
+        results_or_exceptions = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for res in results_or_exceptions:
+            if isinstance(res, Exception):
+                logger.error(f"Task failed with: {res}")
+            else:
+                results.append(res)
+                
+        return results
 
 def run_aggregator(source_urls):
     """

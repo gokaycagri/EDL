@@ -140,7 +140,10 @@
 
                 <!-- LDAP Settings -->
                 <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold"><i class="fas fa-users-cog me-2"></i> LDAP / Active Directory</div>
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-users-cog me-2"></i> LDAP / Active Directory</div>
+                        <span id="ldapServerStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
+                    </div>
                     <div class="card-body">
                         <form action="{{ url_for('system.update_ldap') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -228,28 +231,53 @@
                     </div>
                 </div>
 
-                <!-- Admin Password -->
+                <!-- Local User Management -->
                 <div class="card mb-4">
-                    <div class="card-header bg-danger text-white fw-bold"><i class="fas fa-lock me-2"></i> Admin Password</div>
-                    <div class="card-body">
-                        <form action="{{ url_for('system.change_password') }}" method="POST">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div class="mb-2">
-                                <label class="form-label small">Current Password</label>
-                                <input type="password" class="form-control form-control-sm" name="current_password" required>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label small">New Password</label>
-                                <input type="password" class="form-control form-control-sm" name="new_password" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small">Confirm New Password</label>
-                                <input type="password" class="form-control form-control-sm" name="confirm_new_password" required>
-                            </div>
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-warning btn-sm text-white"><i class="fas fa-edit me-2"></i> Change Password</button>
-                            </div>
-                        </form>
+                    <div class="card-header bg-danger text-white fw-bold d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-users-cog me-2"></i> Local Users</div>
+                        <button class="btn btn-sm btn-light text-danger fw-bold" onclick="showAddUserModal()">
+                            <i class="fas fa-user-plus me-1"></i> Add User
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Username</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if users %}
+                                        {% for user in users %}
+                                        <tr>
+                                            <td class="ps-3 fw-bold">
+                                                <i class="fas fa-user{{ '-shield' if user == 'admin' else '' }} me-2 text-secondary"></i>
+                                                {{ user }}
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <button class="btn btn-sm btn-outline-warning" onclick="showChangePasswordModal('{{ user }}')" title="Change Password">
+                                                    <i class="fas fa-key"></i>
+                                                </button>
+                                                {% if user != 'admin' %}
+                                                <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                    <input type="hidden" name="username" value="{{ user }}">
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure you want to delete user {{ user }}?')" title="Delete User">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr><td colspan="2" class="text-center">No users found.</td></tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -260,9 +288,12 @@
                 
                 <!-- Proxy Settings -->
                 <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold"><i class="fas fa-network-wired me-2 text-primary"></i> Proxy Settings</div>
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-network-wired me-2 text-primary"></i> Proxy Settings</div>
+                        <span id="proxyStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
+                    </div>
                     <div class="card-body">
-                        <form action="{{ url_for('system.update_proxy') }}" method="POST">
+                        <form id="proxyForm" action="{{ url_for('system.update_proxy') }}" method="POST" onsubmit="showSavingAlert()">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             
                             <div class="form-check form-switch mb-3">
@@ -303,7 +334,10 @@
 
                 <!-- DNS Settings -->
                 <div class="card mb-4">
-                    <div class="card-header bg-light fw-bold"><i class="fas fa-search me-2 text-primary"></i> DNS Configuration</div>
+                    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-search me-2 text-primary"></i> DNS Configuration</div>
+                        <span id="dnsStatus" class="badge bg-secondary rounded-pill" style="font-size: 0.7em;">Unknown</span>
+                    </div>
                     <div class="card-body">
                         <form action="{{ url_for('system.update_dns') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -390,6 +424,111 @@
 
     <script src="{{ url_for('static', filename='vendor/js/bootstrap.bundle.min.js') }}"></script>
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            checkLdapServerStatus();
+            checkDnsStatus();
+            checkProxyStatus();
+        });
+
+        function checkProxyStatus() {
+            const badge = document.getElementById('proxyStatus');
+            
+            badge.className = 'badge bg-secondary rounded-pill';
+            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            
+            fetch('/system/proxy/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'online') {
+                    badge.className = 'badge bg-success rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Working';
+                    badge.title = data.message;
+                } else if (data.status === 'offline') {
+                    badge.className = 'badge bg-danger rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Failed';
+                    badge.title = data.message;
+                } else if (data.status === 'disabled') {
+                    badge.className = 'badge bg-secondary rounded-pill';
+                    badge.innerHTML = 'Disabled';
+                } else {
+                    badge.className = 'badge bg-warning text-dark rounded-pill';
+                    badge.innerHTML = 'Config Error';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                badge.className = 'badge bg-warning text-dark rounded-pill';
+                badge.innerHTML = 'Error';
+            });
+        }
+
+        function checkDnsStatus() {
+            const badge = document.getElementById('dnsStatus');
+            
+            badge.className = 'badge bg-secondary rounded-pill';
+            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            
+            fetch('/system/dns/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'online') {
+                    badge.className = 'badge bg-success rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Working';
+                    badge.title = data.details;
+                } else if (data.status === 'offline') {
+                    badge.className = 'badge bg-danger rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Failed';
+                    badge.title = data.details;
+                } else if (data.status === 'disabled') {
+                    badge.className = 'badge bg-secondary rounded-pill';
+                    badge.innerHTML = 'Default';
+                    badge.title = 'Using System DNS';
+                } else {
+                    badge.className = 'badge bg-warning text-dark rounded-pill';
+                    badge.innerHTML = 'Unknown';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                badge.className = 'badge bg-warning text-dark rounded-pill';
+                badge.innerHTML = 'Error';
+            });
+        }
+
+        function checkLdapServerStatus() {
+            const badge = document.getElementById('ldapServerStatus');
+            // If LDAP section isn't enabled/visible, maybe skip? 
+            // But user might want to know why it's disabled.
+            
+            badge.className = 'badge bg-secondary rounded-pill';
+            badge.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+            
+            fetch('/system/ldap/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'online') {
+                    badge.className = 'badge bg-success rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Connected';
+                    badge.title = data.details.join('\n');
+                } else if (data.status === 'offline') {
+                    badge.className = 'badge bg-danger rounded-pill';
+                    badge.innerHTML = '<i class="fas fa-times-circle me-1"></i> Unreachable';
+                    badge.title = data.details.join('\n');
+                } else if (data.status === 'disabled') {
+                    badge.className = 'badge bg-secondary rounded-pill';
+                    badge.innerHTML = 'Disabled';
+                } else {
+                    badge.className = 'badge bg-warning text-dark rounded-pill';
+                    badge.innerHTML = 'Unknown';
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                badge.className = 'badge bg-warning text-dark rounded-pill';
+                badge.innerHTML = 'Error';
+            });
+        }
+
         function addHostnameRow() {
             const container = document.getElementById('serverHostnamesList');
             const newRow = document.createElement('div');
@@ -534,6 +673,18 @@
             });
         }
 
+        function showSavingAlert() {
+            Swal.fire({
+                title: 'Saving...',
+                text: 'Updating configuration...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            // Form submission continues naturally
+        }
+
         function toggleProxyFields() {
             var isEnabled = document.getElementById('proxyEnabled').checked;
             var fields = document.getElementById('proxyFields');
@@ -578,6 +729,131 @@
                 console.error('Async: Could not copy text: ', err);
                 copyText.type = originalType;
             });
+        }
+
+        function showAddUserModal() {
+            Swal.fire({
+                title: 'Add New User',
+                html: `
+                    <input type="text" id="newUsername" class="swal2-input" placeholder="Username">
+                    <input type="password" id="newPassword" class="swal2-input" placeholder="Password">
+                `,
+                confirmButtonText: 'Add User',
+                showCancelButton: true,
+                preConfirm: () => {
+                    const username = Swal.getPopup().querySelector('#newUsername').value;
+                    const password = Swal.getPopup().querySelector('#newPassword').value;
+                    if (!username || !password) {
+                        Swal.showValidationMessage(`Please enter both username and password`);
+                    }
+                    return { username: username, password: password };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '{{ url_for("system.add_user") }}';
+                    
+                    const userField = document.createElement('input');
+                    userField.type = 'hidden';
+                    userField.name = 'username';
+                    userField.value = result.value.username;
+                    form.appendChild(userField);
+                    
+                    const passField = document.createElement('input');
+                    passField.type = 'hidden';
+                    passField.name = 'password';
+                    passField.value = result.value.password;
+                    form.appendChild(passField);
+                    
+                    const csrfField = document.createElement('input');
+                    csrfField.type = 'hidden';
+                    csrfField.name = 'csrf_token';
+                    csrfField.value = '{{ csrf_token() }}';
+                    form.appendChild(csrfField);
+                    
+                    document.body.appendChild(form);
+                    form.submit();
+                }
+            });
+        }
+
+        function showChangePasswordModal(username) {
+            // Different logic for admin (needs current password check usually, but let's simplify for now or handle via specific route)
+            // If user is admin, we might want to ask for old password.
+            // But the generic route just updates hash. 
+            // Ideally for admin self-change we use the old route.
+            
+            if (username === 'admin') {
+                // Admin change logic (complex with old pass) or simple force reset?
+                // Let's keep it simple: Force reset logic for consistency, 
+                // BUT better to redirect to a secure form or ask for old pass.
+                // Let's create a custom HTML form in swal for admin.
+                Swal.fire({
+                    title: `Change Password for ${username}`,
+                    html: `
+                        <input type="password" id="currentPass" class="swal2-input" placeholder="Current Password">
+                        <input type="password" id="newPass" class="swal2-input" placeholder="New Password">
+                        <input type="password" id="confirmPass" class="swal2-input" placeholder="Confirm New Password">
+                    `,
+                    confirmButtonText: 'Update',
+                    showCancelButton: true,
+                    preConfirm: () => {
+                        const current = Swal.getPopup().querySelector('#currentPass').value;
+                        const newP = Swal.getPopup().querySelector('#newPass').value;
+                        const confirmP = Swal.getPopup().querySelector('#confirmPass').value;
+                        
+                        if (!current || !newP || !confirmP) {
+                            Swal.showValidationMessage(`All fields are required`);
+                        }
+                        if (newP !== confirmP) {
+                            Swal.showValidationMessage(`New passwords do not match`);
+                        }
+                        return { current: current, new: newP, confirm: confirmP };
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Submit to old admin change route
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '{{ url_for("system.change_password") }}';
+                        
+                        const c = document.createElement('input'); c.type='hidden'; c.name='current_password'; c.value=result.value.current; form.appendChild(c);
+                        const n = document.createElement('input'); n.type='hidden'; n.name='new_password'; n.value=result.value.new; form.appendChild(n);
+                        const cn = document.createElement('input'); cn.type='hidden'; cn.name='confirm_new_password'; cn.value=result.value.confirm; form.appendChild(cn);
+                        const csrf = document.createElement('input'); csrf.type='hidden'; csrf.name='csrf_token'; csrf.value='{{ csrf_token() }}'; form.appendChild(csrf);
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                    }
+                });
+            } else {
+                // Regular user force reset (Admin doing it)
+                Swal.fire({
+                    title: `Reset Password for ${username}`,
+                    html: `<input type="password" id="newPass" class="swal2-input" placeholder="New Password">`,
+                    confirmButtonText: 'Reset Password',
+                    showCancelButton: true,
+                    preConfirm: () => {
+                        const password = Swal.getPopup().querySelector('#newPass').value;
+                        if (!password) Swal.showValidationMessage(`Password required`);
+                        return password;
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = '{{ url_for("system.change_user_password") }}';
+                        
+                        const u = document.createElement('input'); u.type='hidden'; u.name='username'; u.value=username; form.appendChild(u);
+                        const p = document.createElement('input'); p.type='hidden'; p.name='password'; p.value=result.value; form.appendChild(p);
+                        const csrf = document.createElement('input'); csrf.type='hidden'; csrf.name='csrf_token'; csrf.value='{{ csrf_token() }}'; form.appendChild(csrf);
+                        
+                        document.body.appendChild(form);
+                        form.submit();
+                    }
+                });
+            }
         }
 
         // Check if there are flash messages and display them with SweetAlert

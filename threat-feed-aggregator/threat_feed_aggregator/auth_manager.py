@@ -4,7 +4,7 @@ import logging
 import ssl
 from ldap3 import Server, Connection, ALL, NTLM, SIMPLE, Tls
 
-from .db_manager import check_admin_credentials, set_admin_password
+from .db_manager import check_admin_credentials, set_admin_password, verify_local_user
 
 logger = logging.getLogger(__name__)
 
@@ -106,15 +106,12 @@ def authenticate_ldap_user(username, password, servers_list):
 
 def check_credentials(username, password):
     """
-    Checks credentials against local admin (from DB) and configured LDAP.
+    Checks credentials against local users (DB) and configured LDAP.
     Returns: (bool, message)
     """
-    # 1. Check Local Admin (from DB)
-    if username == 'admin':
-        if check_admin_credentials(password):
-            return True, "Local admin login successful."
-        else:
-            return False, "Invalid admin password."
+    # 1. Check Local DB (Admin + Other Local Users)
+    if verify_local_user(username, password):
+        return True, "Local login successful."
 
     # 2. Check LDAP if enabled
     from .config_manager import read_config

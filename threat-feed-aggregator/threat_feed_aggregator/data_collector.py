@@ -47,16 +47,23 @@ def fetch_data_from_url(url):
         logger.error(f"Error fetching data from {url}: {e}")
         return None
 
-async def fetch_data_from_url_async(url):
+async def fetch_data_from_url_async(url, session=None):
     """
     Fetches data from a given URL asynchronously using custom DNS and Proxy.
+    If 'session' is provided, it uses that session. Otherwise, creates a new one.
     """
     try:
         _, proxy_url, _ = get_proxy_settings()
-        async with await get_async_session() as session:
+        
+        if session:
             async with session.get(url, timeout=30, proxy=proxy_url) as response:
                 response.raise_for_status()
                 return await response.text()
+        else:
+            async with await get_async_session() as new_session:
+                async with new_session.get(url, timeout=30, proxy=proxy_url) as response:
+                    response.raise_for_status()
+                    return await response.text()
     except Exception as e:
         logger.error(f"Async error fetching data from {url}: {e}")
         return None
