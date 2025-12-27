@@ -1,16 +1,12 @@
-# Use official Python runtime as a parent image
-FROM python:3.13-slim
+# Stage 1: Builder
+FROM python:3.13-slim as builder
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
-ENV PORT=8080
-
-# Set work directory
 WORKDIR /app
 
-# Install system dependencies
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install build dependencies for python-ldap/python-whois extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     make \
@@ -23,33 +19,56 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install Python dependencies to a temporary location
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --prefix=/install --no-warn-script-location -r requirements.txt
+
+# Stage 2: Final
+FROM python:3.13-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV PORT=8080
+
+# Install runtime dependencies and utilities
+# whois: Required for IP investigation tools
+# curl: Required for Healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libldap-2.5-0 \
+    libsasl2-2 \
+    libssl3 \
+    whois \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy installed python packages from builder
+COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY . .
 
-# --- OpenShift Compatibility Fixes ---
-# 1. Create directory structure to ensure permissions can be set
-RUN mkdir -p /app/threat_feed_aggregator/data
-
-# 2. Grant permissions to Group 0 (root group)
-# OpenShift runs containers with a random UID but always part of GID 0.
-# We need to ensure the group has write access to code and data directories.
-RUN chgrp -R 0 /app && \
+# --- OpenShift / Kubernetes Compatibility ---
+# 1. Ensure directory exists for volume mounting
+# 2. Grant permissions to the root group (GID 0) to allow random UIDs to write
+RUN mkdir -p /app/threat_feed_aggregator/data && \
+    chgrp -R 0 /app && \
     chmod -R g=u /app
 
 # Expose unprivileged port
 EXPOSE 8080
 
-# Entrypoint script
+# Entrypoint setup
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# User 1001 is a convention, but OCP will likely override this UID.
-# The important part is the group permission set above.
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/login || exit 1
+
+# Run as non-root (OpenShift will override UID, but keeps GID 0)
 USER 1001
 
-# Run the application
 ENTRYPOINT ["/entrypoint.sh"]
