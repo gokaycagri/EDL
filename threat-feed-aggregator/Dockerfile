@@ -66,7 +66,7 @@ RUN chmod +x /entrypoint.sh
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/login || exit 1
+  CMD curl -f -k https://localhost:8080/login || exit 1
 
 # Run as non-root (OpenShift will override UID, but keeps GID 0)
 USER 1001
