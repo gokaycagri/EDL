@@ -17,6 +17,14 @@ files = [
     ("https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js", "js/sweetalert2.all.min.js"),
     ("https://cdn.jsdelivr.net/npm/jsvectormap/dist/js/jsvectormap.min.js", "js/jsvectormap.min.js"),
     ("https://cdn.jsdelivr.net/npm/jsvectormap/dist/maps/world.js", "js/world.js"),
+    
+    # jQuery (Required for DataTables)
+    ("https://code.jquery.com/jquery-3.7.1.min.js", "js/jquery.min.js"),
+
+    # DataTables
+    ("https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css", "css/dataTables.bootstrap5.min.css"),
+    ("https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js", "js/jquery.dataTables.min.js"),
+    ("https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js", "js/dataTables.bootstrap5.min.js"),
 
     # Webfonts (FontAwesome)
     ("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2", "webfonts/fa-solid-900.woff2"),
