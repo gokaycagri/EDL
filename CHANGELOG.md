@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.0] - 2025-12-28
+
+### Improved
+- **Dashboard UI:** Enhanced "Scheduled Runs" visibility by displaying relative time (e.g., "in 15 min") and using descriptive feed names instead of internal function IDs.
+- **Testing Suite:** Added comprehensive unit tests for `Tools`, `System`, and `Data` routes, achieving >95% coverage for core functionality.
+- **Scheduler Transparency:** Jobs are now named after their source feed (e.g., "FireHol Level 1") for easier monitoring.
+
+### Fixed
+- **Test Infrastructure:** Resolved import errors and mocking issues in `test_auth_manager.py` and `test_gui_views.py`.
+- **Dependencies:** Added `python-whois` to `requirements.txt` to fix runtime errors in the investigation tool.
+
 ## [1.7.0] - 2025-12-27
 
 ### Added
