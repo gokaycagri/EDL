@@ -37,7 +37,7 @@ ENV PORT=8080
 # whois: Required for IP investigation tools
 # curl: Required for Healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libldap-2.5-0 \
+    libldap2 \
     libsasl2-2 \
     libssl3 \
     whois \
