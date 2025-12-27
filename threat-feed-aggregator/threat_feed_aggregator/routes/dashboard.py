@@ -64,10 +64,25 @@ def index():
     from apscheduler.triggers.interval import IntervalTrigger
 
     for job in scheduled_jobs:
+        next_run = job.next_run_time.astimezone(local_tz) if job.next_run_time else None
+        time_until = 'N/A'
+        if next_run:
+            now = datetime.now(local_tz)
+            diff = next_run - now
+            total_seconds = int(diff.total_seconds())
+            minutes = total_seconds // 60
+            if minutes < 60:
+                time_until = f"in {minutes} min"
+            else:
+                hours = minutes // 60
+                mins = minutes % 60
+                time_until = f"in {hours}h {mins}m"
+
         jobs_for_template.append({
             'id': job.id,
             'name': job.name,
-            'next_run_time': job.next_run_time.astimezone(local_tz).strftime('%d/%m/%Y %H:%M') if job.next_run_time else 'N/A',
+            'next_run_time': next_run.strftime('%d/%m/%Y %H:%M') if next_run else 'N/A',
+            'time_until': time_until,
             'interval': f"{job.trigger.interval.total_seconds() / 60} minutes" if isinstance(job.trigger, IntervalTrigger) else 'N/A'
         })
 

@@ -24,7 +24,7 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertEqual(result, "line1\nline2\nline3")
-        mock_get.assert_called_once_with(url, timeout=30)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None)
 
     @patch('threat_feed_aggregator.data_collector.requests.get')
     def test_fetch_data_from_url_failure(self, mock_get):
@@ -37,7 +37,7 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertIsNone(result)
-        mock_get.assert_called_once_with(url, timeout=30)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None)
 
 if __name__ == '__main__':
     unittest.main()

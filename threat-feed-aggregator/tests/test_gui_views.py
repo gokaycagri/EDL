@@ -29,16 +29,16 @@ class TestGuiViews(unittest.TestCase):
     @patch('threat_feed_aggregator.routes.auth.check_credentials')
     def test_login_action_success(self, mock_check):
         """Test successful login redirection."""
-        mock_check.return_value = (True, "Login successful")
+        mock_check.return_value = (True, "Login successful", {"username": "admin", "permissions": {}})
         response = self.client.post('/login', data={'username': 'admin', 'password': 'password'}, follow_redirects=True)
         # Should redirect to index, so we check for text present on dashboard
         self.assertIn(b'Dashboard', response.data)
-        self.assertIn(b'Logout', response.data)
+        self.assertIn(b'Sign Out', response.data)
 
     @patch('threat_feed_aggregator.routes.auth.check_credentials')
     def test_login_action_failure(self, mock_check):
         """Test failed login stays on login page with error."""
-        mock_check.return_value = (False, "Invalid credentials")
+        mock_check.return_value = (False, "Invalid credentials", None)
         response = self.client.post('/login', data={'username': 'admin', 'password': 'wrong'}, follow_redirects=True)
         self.assertIn(b'Invalid credentials', response.data)
         self.assertIn(b'Login', response.data) # Still on login page

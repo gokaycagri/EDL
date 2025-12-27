@@ -185,7 +185,7 @@
                     <div class="card-header bg-white py-3 border-0"><h6 class="fw-bold mb-0 text-dark"><i class="fas fa-calendar-alt me-2 text-info"></i>Scheduled Runs</h6></div>
                     <div class="card-body p-0">
                         <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
-                            <tbody class="small">{% if scheduled_jobs %}{% for job in scheduled_jobs %}<tr><td class="ps-3 py-2"><strong>{{ job.name }}</strong></td><td class="text-end pe-3 text-primary fw-bold">{{ job.next_run_time }}</td></tr>{% endfor %}{% endif %}</tbody>
+                            <tbody class="small">{% if scheduled_jobs %}{% for job in scheduled_jobs %}<tr><td class="ps-3 py-2"><strong>{{ job.name }}</strong><br><span class="text-muted" style="font-size: 0.7em;">{{ job.next_run_time }}</span></td><td class="text-end pe-3 text-primary fw-bold">{{ job.time_until }}</td></tr>{% endfor %}{% endif %}</tbody>
                         </table></div>
                     </div>
                 </div>

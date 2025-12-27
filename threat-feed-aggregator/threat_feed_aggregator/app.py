@@ -95,6 +95,7 @@ def update_scheduled_jobs():
                 'interval',
                 minutes=interval_minutes,
                 id=job_id,
+                name=source_name,
                 args=[source_config],
                 replace_existing=True
             )
