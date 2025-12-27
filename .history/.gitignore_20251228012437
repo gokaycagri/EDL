@@ -49,4 +49,3 @@ dist/
 threat_feed_aggregator.egg-info/
 .gemini/
 gha-creds-*.json
-.gemini/settings.json
