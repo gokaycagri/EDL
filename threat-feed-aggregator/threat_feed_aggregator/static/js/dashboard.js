@@ -155,7 +155,7 @@ function updateLogs() {
 
             logWindow.textContent = '';
             data.forEach(line => {
-                if (hidePolls && (line.includes('GET /api/') || line.includes('GET /status') || line.includes('GET /static/'))) return;
+                if (hidePolls && (line.includes('GET /api/') || line.includes('GET /status') || line.includes('GET /static/') || line.includes('GET /login'))) return;
                 const div = document.createElement('div'); div.className = 'log-line mb-1'; div.textContent = line;
                 if (line.includes('ERROR')) div.style.color = '#f87171'; else if (line.includes('WARNING')) div.style.color = '#fbbf24'; else if (line.includes('SUCCESS') || line.includes('Completed') || line.includes('Written batch')) div.style.color = '#4ade80';
                 logWindow.appendChild(div);
