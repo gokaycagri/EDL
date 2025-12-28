@@ -268,7 +268,7 @@ def validate_indicator(item):
     
     # If it has a scheme (http/https), check if it has a netloc (domain)
     if parsed.scheme in ('http', 'https'):
-        if parsed.netloc:
+        if parsed.netloc and ' ' not in parsed.netloc:
             return True, "url"
     
     # If no scheme, check if it looks like a domain (has a dot, no spaces)

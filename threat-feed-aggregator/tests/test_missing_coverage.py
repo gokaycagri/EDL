@@ -183,3 +183,42 @@ class TestMissingCoverage(unittest.TestCase):
         # In a real app send_from_directory returns a Response object, 
         # here we just check if it was called correctly.
         mock_send.assert_called_once()
+
+    # --- New API Endpoints (v1.9) ---
+
+    @patch('threat_feed_aggregator.routes.api.read_config')
+    @patch('threat_feed_aggregator.routes.api.threading.Thread')
+    def test_run_single_feed(self, mock_thread, mock_read):
+        self.login()
+        mock_read.return_value = {'source_urls': [{'name': 'TestFeed', 'url': 'http://test.com'}]}
+        
+        response = self.client.get('/api/run_single/TestFeed')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('running', response.json['status'])
+        mock_thread.assert_called_once()
+
+    @patch('threat_feed_aggregator.app.scheduler.get_jobs')
+    @patch('threat_feed_aggregator.config_manager.read_config')
+    def test_get_scheduled_jobs(self, mock_read, mock_jobs):
+        self.login()
+        mock_read.return_value = {'timezone': 'UTC'}
+        
+        # Mock a job
+        mock_job = MagicMock()
+        mock_job.name = "Test Job"
+        import datetime
+        import pytz
+        mock_job.next_run_time = datetime.datetime(2025, 12, 28, 12, 0, tzinfo=pytz.UTC)
+        mock_jobs.return_value = [mock_job]
+        
+        response = self.client.get('/api/scheduled_jobs')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json), 1)
+        self.assertEqual(response.json[0]['name'], "Test Job")
+
+    @patch('threat_feed_aggregator.log_manager.clear_logs')
+    def test_clear_live_logs(self, mock_clear):
+        self.login()
+        response = self.client.post('/api/live_logs/clear')
+        self.assertEqual(response.status_code, 200)
+        mock_clear.assert_called_once()
