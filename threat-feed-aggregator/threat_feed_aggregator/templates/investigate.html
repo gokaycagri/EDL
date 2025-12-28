@@ -106,13 +106,20 @@
         searchBtn.disabled = true;
         searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-        fetch(`/tools/query/${ip}`)
+        fetch('/tools/api/lookup_ip', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({ ip: ip })
+        })
             .then(r => r.json())
             .then(data => {
                 searchBtn.disabled = false;
                 searchBtn.innerHTML = '<i class="fas fa-search"></i>';
                 
-                if (data.status === 'success') {
+                if (data.success) {
                     noResultPlaceholder.classList.add('d-none');
                     resultCard.classList.remove('d-none');
                     
