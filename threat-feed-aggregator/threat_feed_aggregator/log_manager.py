@@ -47,6 +47,12 @@ def get_live_logs():
     """
     return list(LOG_BUFFER)
 
+def clear_logs():
+    """
+    Clears the log buffer.
+    """
+    LOG_BUFFER.clear()
+
 def setup_memory_logging():
     """
     Attaches the memory handler to the root logger.

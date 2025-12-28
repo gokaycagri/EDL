@@ -166,8 +166,19 @@ function updateLogs() {
 }
 
 function clearTerminal() { 
-    const logWindow = document.getElementById('logWindow');
-    if (logWindow) logWindow.textContent = ''; 
+    if(confirm('Clear all live logs from memory?')) {
+        fetch('/api/live_logs/clear', { 
+            method: 'POST', 
+            headers: { 'X-CSRFToken': getCsrfToken() } 
+        })
+        .then(r => r.json())
+        .then(data => {
+            const logWindow = document.getElementById('logWindow');
+            if (logWindow) logWindow.textContent = ''; 
+            updateLogs();
+        })
+        .catch(err => console.error('Failed to clear logs:', err));
+    }
 }
 
 function clearHistory() { 

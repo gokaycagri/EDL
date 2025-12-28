@@ -183,6 +183,14 @@ def live_logs():
     """Returns the latest logs from memory."""
     return jsonify(get_live_logs())
 
+@bp_api.route('/live_logs/clear', methods=['POST'])
+@login_required
+def clear_live_logs_route():
+    """Clears the live logs from memory."""
+    from ..log_manager import clear_logs
+    clear_logs()
+    return jsonify({'status': 'success', 'message': 'Live logs cleared.'})
+
 @bp_api.route('/source_stats')
 @login_required
 def source_stats_api():
