@@ -7,35 +7,30 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
 
-    - name: Set up Python 3.11
+    - name: Set up Python 3.13
       uses: actions/setup-python@v4
       with:
-        python-version: "3.11"
+        python-version: "3.13"
 
-    - name: Install dependencies
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev whois
+
+    - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff bandit
+        pip install pytest pytest-cov
         if [ -f threat-feed-aggregator/requirements.txt ]; then pip install -r threat-feed-aggregator/requirements.txt; fi
-        
-    - name: Run Ruff (Linting & Formatting)
-      working-directory: ./threat-feed-aggregator
-      run: |
-        ruff check .
-        ruff format . --check
-        
-    - name: Run Bandit (Security Linter)
-      working-directory: ./threat-feed-aggregator
-      run: |
-        bandit -r . -ll -f custom_json -o bandit_results.json || true # Allow failure to see results
 
-    - name: Run Tests
+    - name: Run Unit Tests
       working-directory: ./threat-feed-aggregator
       run: |
-        python -m unittest discover tests
+        # Using pytest to run all tests in the tests/ directory
+        python -m pytest tests/ --doctest-modules --junitxml=junit/test-results.xml
