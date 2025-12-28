@@ -151,6 +151,10 @@ def source_stats_api():
     
     formatted_stats = {}
     for name, data in stats.items():
+        if name == 'last_updated':
+            formatted_stats[name] = data
+            continue
+            
         if isinstance(data, dict) and 'last_updated' in data:
             try:
                 dt = datetime.fromisoformat(data['last_updated'])

@@ -127,9 +127,8 @@ def read_stats():
         try:
             stats = json.load(f)
             if isinstance(stats, dict):
-                for key, value in stats.items():
-                    if not isinstance(value, dict):
-                        stats[key] = {}
+                # Ensure existing source entries are dicts, but don't touch top-level strings like last_updated
+                # Actually, let's just return what's in the file and handle types where used.
                 return stats
         except json.JSONDecodeError:
             pass
