@@ -87,7 +87,7 @@ function getCsrfToken() {
 }
 
 function updateHistory() {
-    fetch('/api/history')
+    fetch('/api/history?limit=6')
         .then(r => {
             if (!r.ok) throw new Error(`History fetch failed: ${r.status}`);
             return r.json();
@@ -109,6 +109,27 @@ function updateHistory() {
             tbody.innerHTML = newHtml;
         })
         .catch(err => console.error('Update history failed:', err));
+}
+
+function viewAllHistory() {
+    fetch('/api/history?limit=100')
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById('fullHistoryTableBody');
+            if (!tbody) return;
+            
+            let newHtml = '';
+            data.forEach(item => {
+                const statusClass = item.status === 'success' ? 'bg-success' : (item.status === 'running' ? 'bg-info' : 'bg-danger');
+                newHtml += `<tr><td class="ps-4 text-muted small">${item.start_time}</td><td class="fw-bold">${item.source_name}</td><td><span class="badge ${statusClass}">${item.status.toUpperCase()}</span></td><td>${item.items_processed || 0}</td><td class="text-end pe-4 small text-muted">${item.message || '-'}</td></tr>`;
+            });
+            tbody.innerHTML = newHtml;
+            
+            // Show the modal
+            const historyModal = new bootstrap.Modal(document.getElementById('historyModal'));
+            historyModal.show();
+        })
+        .catch(err => Swal.fire('Error', 'Failed to load full history', 'error'));
 }
 
 function updateLogs() {
@@ -312,6 +333,7 @@ function submitForm(action, data) {
 window.updateSourceStats = updateSourceStats;
 window.runAggregator = runAggregator;
 window.updateHistory = updateHistory;
+window.viewAllHistory = viewAllHistory;
 window.updateLogs = updateLogs;
 window.clearTerminal = clearTerminal;
 window.clearHistory = clearHistory;

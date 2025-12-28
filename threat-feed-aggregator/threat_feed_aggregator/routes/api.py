@@ -100,7 +100,8 @@ def trend_data():
 @login_required
 def job_history():
     """Returns past job execution history."""
-    history = get_job_history(limit=20)
+    limit = request.args.get('limit', default=20, type=int)
+    history = get_job_history(limit=limit)
     # Format dates
     for item in history:
         try:

@@ -220,7 +220,10 @@
                 <div class="card settings-card shadow-sm h-100 border-0">
                     <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
                         <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-history me-2 text-secondary"></i>Recent Task Activity</h6>
-                        <button class="btn btn-xs btn-outline-danger" onclick="clearHistory()">Clear History</button>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-xs btn-outline-primary" onclick="viewAllHistory()">View All</button>
+                            <button class="btn btn-xs btn-outline-danger" onclick="clearHistory()">Clear History</button>
+                        </div>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
@@ -237,6 +240,39 @@
                         <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
                             <tbody class="small">{% if scheduled_jobs %}{% for job in scheduled_jobs %}<tr><td class="ps-3 py-2"><strong>{{ job.name }}</strong><br><span class="text-muted" style="font-size: 0.7em;">{{ job.next_run_time }}</span></td><td class="text-end pe-3 text-primary fw-bold">{{ job.time_until }}</td></tr>{% endfor %}{% endif %}</tbody>
                         </table></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- History Modal -->
+        <div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
+                    <div class="modal-header border-0 bg-light py-3">
+                        <h5 class="modal-title fw-bold text-dark"><i class="fas fa-history me-2 text-primary"></i>Full Task History</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr class="small text-muted">
+                                        <th class="ps-4">Timestamp</th>
+                                        <th>Source</th>
+                                        <th>Status</th>
+                                        <th>Items</th>
+                                        <th class="text-end pe-4">Message</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fullHistoryTableBody" class="small">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
