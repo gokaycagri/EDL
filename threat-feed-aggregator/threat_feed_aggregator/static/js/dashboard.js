@@ -81,10 +81,15 @@ function runAggregator() {
     });
 }
 
+function getCsrfToken() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.content : (AppConfig ? AppConfig.csrfToken : '');
+}
+
 function updateHistory() {
     fetch('/api/history')
         .then(r => {
-            if (!r.ok) throw new Error(`HTTP error! status: ${r.status}`);
+            if (!r.ok) throw new Error(`History fetch failed: ${r.status}`);
             return r.json();
         })
         .then(data => {
@@ -103,26 +108,38 @@ function updateHistory() {
             });
             tbody.innerHTML = newHtml;
         })
-        .catch(err => {
-            console.error('Update history failed:', err);
-        });
+        .catch(err => console.error('Update history failed:', err));
 }
 
 function updateLogs() {
-    const hidePolls = document.getElementById('hidePolls').checked;
-    fetch('/api/live_logs').then(r => r.json()).then(data => {
-        const logWindow = document.getElementById('logWindow');
-        if (!logWindow) return;
-        const wasAtBottom = logWindow.scrollHeight - logWindow.clientHeight <= logWindow.scrollTop + 50;
-        logWindow.textContent = '';
-        data.forEach(line => {
-            if (hidePolls && (line.includes('GET /api/') || line.includes('GET /status'))) return;
-            const div = document.createElement('div'); div.className = 'log-line mb-1'; div.textContent = line;
-            if (line.includes('ERROR')) div.style.color = '#f87171'; else if (line.includes('WARNING')) div.style.color = '#fbbf24'; else if (line.includes('SUCCESS') || line.includes('Completed') || line.includes('Written batch')) div.style.color = '#4ade80';
-            logWindow.appendChild(div);
-        });
-        if (wasAtBottom) logWindow.scrollTop = logWindow.scrollHeight;
-    });
+    const hidePollsEl = document.getElementById('hidePolls');
+    const hidePolls = hidePollsEl ? hidePollsEl.checked : true;
+    
+    fetch('/api/live_logs')
+        .then(r => {
+            if (!r.ok) throw new Error(`Logs fetch failed: ${r.status}`);
+            return r.json();
+        })
+        .then(data => {
+            const logWindow = document.getElementById('logWindow');
+            if (!logWindow) return;
+            const wasAtBottom = logWindow.scrollHeight - logWindow.clientHeight <= logWindow.scrollTop + 50;
+            
+            if (data.length === 0) {
+                logWindow.innerHTML = '<div class="text-muted italic">Waiting for logs...</div>';
+                return;
+            }
+
+            logWindow.textContent = '';
+            data.forEach(line => {
+                if (hidePolls && (line.includes('GET /api/') || line.includes('GET /status'))) return;
+                const div = document.createElement('div'); div.className = 'log-line mb-1'; div.textContent = line;
+                if (line.includes('ERROR')) div.style.color = '#f87171'; else if (line.includes('WARNING')) div.style.color = '#fbbf24'; else if (line.includes('SUCCESS') || line.includes('Completed') || line.includes('Written batch')) div.style.color = '#4ade80';
+                logWindow.appendChild(div);
+            });
+            if (wasAtBottom) logWindow.scrollTop = logWindow.scrollHeight;
+        })
+        .catch(err => console.error('Update logs failed:', err));
 }
 
 function clearTerminal() { 
@@ -134,9 +151,15 @@ function clearHistory() {
     if(confirm('Clear history?')) {
         fetch('/api/history/clear', { 
             method: 'POST', 
-            headers: { 'X-CSRFToken': AppConfig.csrfToken } 
+            headers: { 
+                'X-CSRFToken': getCsrfToken(),
+                'Content-Type': 'application/json'
+            } 
         })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) return r.text().then(text => { throw new Error(text || `Server error ${r.status}`) });
+            return r.json();
+        })
         .then(data => {
             if (data.status === 'success') {
                 Swal.fire('Cleared!', data.message, 'success');
@@ -147,7 +170,7 @@ function clearHistory() {
         })
         .catch(err => {
             console.error('Clear history error:', err);
-            Swal.fire('Error', 'Network error while clearing history', 'error');
+            Swal.fire('Error', `Network error: ${err.message}`, 'error');
         });
     }
 }
@@ -156,7 +179,7 @@ function updateMS365() {
     Swal.fire({title:'Updating MS365...', didOpen:()=>{Swal.showLoading();}}); 
     fetch('/api/update_ms365', {
         method:'POST', 
-        headers:{'X-CSRFToken': AppConfig.csrfToken}
+        headers:{'X-CSRFToken': getCsrfToken()}
     }).then(r=>r.json()).then(d=> {
         Swal.fire('Result', d.message, d.status);
         updateHistory();
@@ -168,7 +191,7 @@ function updateGitHub() {
     Swal.fire({title:'Updating GitHub...', didOpen:()=>{Swal.showLoading();}}); 
     fetch('/api/update_github', {
         method:'POST', 
-        headers:{'X-CSRFToken': AppConfig.csrfToken}
+        headers:{'X-CSRFToken': getCsrfToken()}
     }).then(r=>r.json()).then(d=> {
         Swal.fire('Result', d.message, d.status);
         updateHistory();
@@ -180,7 +203,7 @@ function updateAzure() {
     Swal.fire({title:'Updating Azure...', didOpen:()=>{Swal.showLoading();}}); 
     fetch('/api/update_azure', {
         method:'POST', 
-        headers:{'X-CSRFToken': AppConfig.csrfToken}
+        headers:{'X-CSRFToken': getCsrfToken()}
     }).then(r=>r.json()).then(d=> {
         Swal.fire('Result', d.message, d.status);
         updateHistory();
@@ -227,7 +250,10 @@ function testSource(name) {
     if (!source) { Swal.fire('Error', 'Not found', 'error'); return; }
     fetch('/api/test_feed', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': AppConfig.csrfToken }, 
+        headers: { 
+            'Content-Type': 'application/json', 
+            'X-CSRFToken': getCsrfToken() 
+        }, 
         body: JSON.stringify(source) 
     })
     .then(r => r.json()).then(data => {
@@ -278,7 +304,7 @@ function initMap() {
 function submitForm(action, data) {
     const form = document.createElement('form'); form.method = 'POST'; form.action = action;
     for (const key in data) { const input = document.createElement('input'); input.type = 'hidden'; input.name = key; input.value = data[key]; form.appendChild(input); }
-    const csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = AppConfig.csrfToken;
+    const csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = getCsrfToken();
     form.appendChild(csrf);
     document.body.appendChild(form); form.submit();
 }
