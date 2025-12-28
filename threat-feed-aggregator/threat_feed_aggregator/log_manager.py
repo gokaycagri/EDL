@@ -1,6 +1,7 @@
 import logging
 import collections
-from datetime import datetime, timezone
+import pytz
+from datetime import datetime
 
 # Circular buffer to hold the last 1000 log lines in memory
 LOG_BUFFER = collections.deque(maxlen=1000)
@@ -11,8 +12,27 @@ class MemoryLogHandler(logging.Handler):
     """
     def __init__(self):
         super().__init__()
-        # Use a standard formatter
         self.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+
+    def formatTime(self, record, datefmt=None):
+        """
+        Overridden to use the configured system timezone.
+        """
+        try:
+            from .config_manager import read_config
+            config = read_config()
+            tz_name = config.get('timezone', 'UTC')
+            tz = pytz.timezone(tz_name)
+            
+            # Convert record created time (UTC timestamp) to local datetime
+            dt = datetime.fromtimestamp(record.created, tz=pytz.utc)
+            local_dt = dt.astimezone(tz)
+            
+            if datefmt:
+                return local_dt.strftime(datefmt)
+            return local_dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+        except Exception:
+            return super().formatTime(record, datefmt)
 
     def emit(self, record):
         try:
