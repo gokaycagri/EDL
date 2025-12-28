@@ -99,7 +99,7 @@ class TestGuiViews(unittest.TestCase):
         """Test updating global settings (retention)."""
         self.login()
         
-        mock_read.return_value = {"indicator_lifetime_days": 30}
+        mock_read.return_value = {"indicator_lifetime_days": 30, "source_urls": []}
         
         response = self.client.post('/system/update_settings', data={'indicator_lifetime_days': 60}, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
