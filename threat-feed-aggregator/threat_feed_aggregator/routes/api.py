@@ -30,7 +30,53 @@ from .auth import login_required, api_key_required
 
 logger = logging.getLogger(__name__)
 
-# ... (aggregation_task remains same)
+# Global aggregation status
+AGGREGATION_STATUS = "idle"
+
+def aggregation_task(update_status=True):
+    """
+    Runs a full aggregation of all configured threat feeds.
+    """
+    logging.debug(f"Starting aggregation_task (update_status={update_status}).")
+    global AGGREGATION_STATUS
+    if update_status:
+        AGGREGATION_STATUS = "running"
+    
+    config = read_config()
+    source_urls = config.get("source_urls", [])
+
+    run_aggregator(source_urls)
+    
+    if update_status:
+        AGGREGATION_STATUS = "completed"
+    logging.debug("aggregation_task completed.")
+
+@bp_api.route('/run')
+@login_required
+def run_script():
+    logging.debug("Received request to /api/run endpoint.")
+    global AGGREGATION_STATUS
+    if AGGREGATION_STATUS == "running":
+        logging.info("Aggregation already running, returning status.")
+        return jsonify({"status": AGGREGATION_STATUS})
+    
+    AGGREGATION_STATUS = "running"
+    thread = threading.Thread(target=aggregation_task)
+    thread.start()
+    logging.info("Aggregation task started in a new thread.")
+    return jsonify({"status": "running"})
+
+@bp_api.route('/status')
+@login_required
+def status():
+    logging.debug("Received request to /api/status endpoint.")
+    return jsonify({"status": AGGREGATION_STATUS})
+
+@bp_api.route('/status_detailed')
+@login_required
+def status_detailed():
+    """Returns detailed status of currently running jobs."""
+    return jsonify(CURRENT_JOB_STATUS)
 
 @bp_api.route('/trend_data')
 @login_required
