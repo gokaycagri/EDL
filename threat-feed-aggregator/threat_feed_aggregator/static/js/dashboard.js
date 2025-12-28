@@ -282,3 +282,19 @@ function submitForm(action, data) {
     form.appendChild(csrf);
     document.body.appendChild(form); form.submit();
 }
+
+window.updateSourceStats = updateSourceStats;
+window.runAggregator = runAggregator;
+window.updateHistory = updateHistory;
+window.updateLogs = updateLogs;
+window.clearTerminal = clearTerminal;
+window.clearHistory = clearHistory;
+window.updateMS365 = updateMS365;
+window.updateGitHub = updateGitHub;
+window.updateAzure = updateAzure;
+window.runSingleSource = runSingleSource;
+window.showAddSourceModal = showAddSourceModal;
+window.showEditSourceModal = showEditSourceModal;
+window.testSource = testSource;
+window.showAddWhitelistModal = showAddWhitelistModal;
+window.submitForm = submitForm;
