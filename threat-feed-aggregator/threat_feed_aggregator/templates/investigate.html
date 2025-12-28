@@ -147,7 +147,8 @@
                         domains.forEach(d => {
                             const li = document.createElement('li');
                             li.className = 'mb-1 fw-bold text-dark';
-                            li.textContent = d;
+                            // Handle both object (THC API) and string (Legacy/Other) formats
+                            li.textContent = (typeof d === 'object' && d.domain) ? d.domain : d;
                             domainsList.appendChild(li);
                         });
                     } else {
