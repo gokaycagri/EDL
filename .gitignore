@@ -58,3 +58,15 @@ threat_feed_aggregator.egg-info/
 .gemini/
 gha-creds-*.json
 .gemini/settings.json
+
+# Large binary files (Docker images, database dumps, backups)
+*.tar
+*.tar.gz
+*.tar.bz2
+*.zip
+*.sql.done
+threat-feed-aggregator/data/migration.sql.done
+postgres.tar
+redis.tar
+threat-feed-aggregator.tar
+threat-feed-bundle.tar

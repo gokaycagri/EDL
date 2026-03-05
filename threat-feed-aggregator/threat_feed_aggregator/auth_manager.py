@@ -34,15 +34,19 @@ def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
 
 def verify_totp(secret, code):
     """Verifies a TOTP code against the secret."""
-    if not secret: return False
+    if not secret or not code: return False
+    
+    # Sanitize input: Remove spaces and other whitespace
+    code = code.replace(" ", "").strip()
+    
     try:
         totp = pyotp.TOTP(secret)
-        # valid_window=1 allows for 30s before/after the current time
-        result = totp.verify(code, valid_window=1)
+        # valid_window=2 allows for 60s before/after the current time (accommodating drift)
+        result = totp.verify(code, valid_window=2)
         if result:
             logger.info("TOTP verification successful.")
         else:
-            logger.warning("TOTP verification failed: Invalid Code.")
+            logger.warning(f"TOTP verification failed for code: {code} (Invalid Code)")
         return result
     except Exception as e:
         logger.error(f"Error during TOTP verification: {e}")
@@ -148,9 +152,11 @@ def _check_ldap_credentials(username, password):
                 possible_dns.append(f"cn={username},cn=users,{base_dn}")
 
             for test_dn in possible_dns:
+                logger.info(f"LDAP bind attempt for user {username} with DN: {test_dn}")
                 try:
                     conn = Connection(server, user=test_dn, password=password, auto_bind=True)
                     if conn.bound:
+                        logger.info(f"LDAP bind SUCCESS for user: {username} (DN: {test_dn})")
                         # Success! Now fetch groups for RBAC
                         short_username = username.split('\\')[-1]
                         search_filter = f"( |(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={test_dn}))"
@@ -161,6 +167,7 @@ def _check_ldap_credentials(username, password):
                             user_entry = conn.entries[0]
                             if 'memberOf' in user_entry:
                                 user_groups = [str(g) for g in user_entry['memberOf'].values]
+                            logger.info(f"LDAP Groups for {username}: {user_groups}")
 
                         # --- RBAC Logic: Match LDAP groups to Profiles ---
                         profile_id = get_profile_by_ldap_groups(user_groups)
@@ -171,6 +178,7 @@ def _check_ldap_credentials(username, password):
                                 profile_id = 1 # Super_User
 
                         if not profile_id:
+                            logger.warning(f"LDAP Auth success for {username} but no matching Admin Profile found for groups: {user_groups}")
                             conn.unbind()
                             return False, "Authenticated but no matching Admin Profile found for your groups.", None
 
@@ -207,6 +215,7 @@ def _check_ldap_credentials(username, password):
                             "permissions": permissions
                         }
                 except Exception as bind_e:
+                    logger.warning(f"LDAP bind failed for {username} with DN {test_dn}: {bind_e}")
                     last_error = str(bind_e)
                     continue
 
@@ -220,13 +229,17 @@ def check_credentials(username, password):
     Checks credentials against local users (DB) and configured LDAP.
     Returns: (bool, message, info_dict)
     """
+    logger.info(f"Login attempt for user: {username}")
     # 1. Check Local DB (Admin + Other Local Users)
     if local_user_exists(username):
         if verify_local_user(username, password):
             perms = get_user_permissions(username)
+            logger.info(f"Local login successful for user: {username}")
             return True, "Local login successful.", {"username": username, "source": "local", "permissions": perms}
         else:
+            logger.warning(f"Local login failed (Invalid Password) for user: {username}")
             return False, "Invalid credentials.", None
 
     # 2. Check LDAP if enabled
+    logger.info(f"User {username} not found locally, falling back to LDAP.")
     return _check_ldap_credentials(username, password)

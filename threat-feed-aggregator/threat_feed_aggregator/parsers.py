@@ -103,11 +103,29 @@ def parse_csv(raw_data, column=0):
     except (csv.Error, IndexError):
         return []
 
+def normalize_indicator(indicator, itype=None):
+    """
+    Standardizes indicators for de-duplication.
+    """
+    if not itype:
+        itype = identify_indicator_type(indicator)
+    
+    if itype == 'domain':
+        return indicator.lower(), itype
+    elif itype == 'cidr':
+        try:
+            return str(ipaddress.ip_network(indicator, strict=False)), itype
+        except: pass
+    elif itype == 'ip':
+        try:
+            return str(ipaddress.ip_address(indicator)), itype
+        except: pass
+    
+    return indicator, itype
+
 def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
     """
-    Parses mixed text data, identifying indicator types for each line.
-    Returns a list of tuples: (indicator_value, indicator_type).
-    Includes logging for progress tracking.
+    Highly optimized mixed text parser with centralized normalization.
     """
     parsed_items = []
     lines = raw_data.splitlines()
@@ -115,79 +133,27 @@ def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
     logger.info(f"[{source_name}] Starting parse of {total_lines} lines...")
 
     for i, line in enumerate(lines):
-        stripped_line = line.strip()
-        if not stripped_line or stripped_line.startswith('#'):
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
             continue
 
-        indicator_type = identify_indicator_type(stripped_line)
+        normalized, itype = normalize_indicator(stripped)
+        parsed_items.append((normalized, itype))
 
-        # Normalization for De-duplication
-        if indicator_type == 'domain':
-            stripped_line = stripped_line.lower()
-        elif indicator_type == 'cidr':
-            try:
-                # Normalize CIDR (e.g., 192.168.1.1/24 -> 192.168.1.0/24)
-                stripped_line = str(ipaddress.ip_network(stripped_line, strict=False))
-            except ValueError:
-                pass
-        elif indicator_type == 'ip':
-            try:
-                # Normalize IP (e.g., remove leading zeros)
-                stripped_line = str(ipaddress.ip_address(stripped_line))
-            except ValueError:
-                pass
-
-        parsed_items.append((stripped_line, indicator_type))
-
-        # Log progress every 50,000 lines
         if (i + 1) % 50000 == 0:
             logger.info(f"[{source_name}] Parsed {i + 1}/{total_lines} lines...")
 
-    logger.info(f"[{source_name}] Parsing completed. Total items: {len(parsed_items)}")
     return parsed_items
-
-# --- Smart Parsers (Standardized Output) ---
 
 def parse_json_with_type(raw_data, key=None, **kwargs):
     items = parse_json(raw_data, key)
-    normalized_items = []
-    for item in items:
-        itype = identify_indicator_type(item)
-        if itype == 'domain':
-            item = item.lower()
-        elif itype == 'cidr':
-            try:
-                item = str(ipaddress.ip_network(item, strict=False))
-            except Exception: pass
-        elif itype == 'ip':
-            try:
-                item = str(ipaddress.ip_address(item))
-            except Exception: pass
-        normalized_items.append((item, itype))
-    return normalized_items
+    return [normalize_indicator(item) for item in items]
 
 def parse_csv_with_type(raw_data, column=0, **kwargs):
-    # Ensure column is an integer
-    try:
-        column = int(column)
-    except (ValueError, TypeError):
-        column = 0
+    try: column = int(column)
+    except: column = 0
     items = parse_csv(raw_data, column)
-    normalized_items = []
-    for item in items:
-        itype = identify_indicator_type(item)
-        if itype == 'domain':
-            item = item.lower()
-        elif itype == 'cidr':
-            try:
-                item = str(ipaddress.ip_network(item, strict=False))
-            except Exception: pass
-        elif itype == 'ip':
-            try:
-                item = str(ipaddress.ip_address(item))
-            except Exception: pass
-        normalized_items.append((item, itype))
-    return normalized_items
+    return [normalize_indicator(item) for item in items]
 
 def get_parser(format_type):
     """

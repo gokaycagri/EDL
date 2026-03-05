@@ -41,6 +41,9 @@
         <li class="nav-item">
             <a class="nav-link" id="security-tab" data-bs-toggle="tab" href="#security" role="tab"><i class="fas fa-lock me-2"></i>Security</a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link" id="integrations-tab" data-bs-toggle="tab" href="#integrations" role="tab"><i class="fas fa-plug me-2"></i>Integrations</a>
+        </li>
     </ul>
 
     <div class="tab-content" id="settingsTabsContent">
@@ -112,6 +115,11 @@
                                     <option value="Australia/Sydney" {{ 'selected' if current_tz == 'Australia/Sydney' }}>Australia/Sydney</option>
                                 </select>
                                 <div class="form-text mt-1 small">Used for displaying all timestamps in the UI.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">System Base URL (Optional)</label>
+                                <input type="text" class="form-control shadow-sm" name="base_url" value="{{ config.get('base_url', '') }}" placeholder="https://10.9.102.12/" {{ 'readonly' if sys_perm == 'r' }}>
+                                <div class="form-text mt-1 small">Used for generating external links (e.g., FortiDeceptor). Leave empty to use current address.</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label-custom">Indicator Lifetime (Days)</label>
@@ -365,8 +373,169 @@
             </div>
         </div>
 
-        <!-- Tab: Security -->
-        <div class="tab-pane fade" id="security" role="tabpanel">
+        <!-- Tab: Security (Existing content end) -->
+        </div>
+
+        <!-- Tab: Integrations (FortiDeceptor Simulation) -->
+        <div class="tab-pane fade" id="integrations" role="tabpanel">
+            <div class="row">
+                <div class="col-xl-8 mx-auto">
+                    <div class="card shadow-lg border-0" style="border-radius: 12px; overflow: hidden;">
+                        <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fas fa-robot me-2"></i> FortiDeceptor Integration Guide</h5>
+                            <span class="badge bg-danger">Simulation Mode</span>
+                        </div>
+                        <div class="card-body bg-light p-4">
+                            <div class="alert alert-warning border-0 shadow-sm mb-4">
+                                <h6 class="fw-bold"><i class="fas fa-exclamation-triangle me-2"></i> Önemli: SSL Sertifika Uyarısı</h6>
+                                <p class="small mb-0">Uygulama kendinden imzalı sertifika kullanmaktadır. FortiDeceptor üzerinde bağlantının başarılı olması için webhook ayarlarında <strong>"Verify SSL"</strong> veya <strong>"Trusted Certificate"</strong> seçeneğini <u>devre dışı bırakmanız</u> gerekmektedir.</p>
+                            </div>
+                            <div class="alert alert-info border-0 shadow-sm mb-4">
+                                <i class="fas fa-info-circle me-2"></i> Bu ekran, <strong>FortiDeceptor</strong> cihazınızdaki arayüzü simüle etmektedir. Aşağıdaki değerleri cihazınıza kopyalayarak entegrasyonu tamamlayabilirsiniz.
+                            </div>
+
+                            <!-- Deceptor UI Simulation -->
+                            <div class="p-4 bg-white border rounded shadow-sm" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                                <h6 class="border-bottom pb-2 mb-4 fw-bold text-muted text-uppercase small">Integrate With New Device</h6>
+                                
+                                <!-- General Info -->
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Enabled</label></div>
+                                    <div class="col-md-9"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" checked disabled></div></div>
+                                </div>
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Name <span class="text-danger">*</span></label></div>
+                                    <div class="col-md-6"><input type="text" class="form-control form-control-sm bg-light" value="EDL_Aggregator_Hook" readonly></div>
+                                </div>
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Integrate Method</label></div>
+                                    <div class="col-md-6"><select class="form-select form-select-sm bg-light" disabled><option>GEN-WEBHOOK</option></select></div>
+                                </div>
+
+                                <div class="alert alert-primary py-2 px-3 small border-0 mb-4" style="background-color: #e3f2fd; color: #0d47a1;">
+                                    <i class="fas fa-info-circle me-2"></i> Compatible with GEN-WEBHOOK Method
+                                </div>
+
+                                <!-- BLOCK SECTION -->
+                                <h6 class="fw-bold text-dark border-bottom pb-1 mb-3">Block</h6>
+                                
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Expiry</label></div>
+                                    <div class="col-md-4"><div class="input-group input-group-sm"><input type="text" class="form-control bg-light" value="3600" readonly><span class="input-group-text">Seconds</span></div></div>
+                                </div>
+
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Http Method</label></div>
+                                    <div class="col-md-4"><select class="form-select form-select-sm bg-light" disabled><option>POST</option></select></div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">URL</label></div>
+                                    <div class="col-md-9">
+                                        <div class="input-group input-group-sm">
+                                            <textarea class="form-control bg-white fw-bold" rows="2" id="copy_block_url" readonly>{{ config.get('base_url') or request.url_root }}api/deceptor/block</textarea>
+                                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('copy_block_url')"><i class="fas fa-copy"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Authorization <span class="text-danger">*</span></label></div>
+                                    <div class="col-md-9">
+                                        <div class="d-flex gap-2">
+                                            <select class="form-select form-select-sm fw-bold border-primary" style="background-color: #fff9f9;" id="auth_client_selector" onchange="updateAuthField(this)">
+                                                {% if config.api_clients %}
+                                                    {% for client in config.api_clients %}
+                                                        <option value="Bearer {{ client.api_key }}">Client: {{ client.name }}</option>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <option value="">-- No API Clients Found --</option>
+                                                {% endif %}
+                                            </select>
+                                            <button type="button" class="btn btn-sm btn-primary text-nowrap" onclick="showAddApiClientModalFromIntegrations()" title="Create New API Key">
+                                                <i class="fas fa-plus-circle me-1"></i> New Key
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap" onclick="copyToClipboard('copy_auth')" title="Copy Authorization Header">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </div>
+                                        <input type="hidden" id="copy_auth" value="{% if config.api_clients %}Bearer {{ config.api_clients[0].api_key }}{% endif %}">
+                                        <div class="form-text mt-1 text-xs"><i class="fas fa-info-circle me-1"></i> FortiDeceptor için bir API Client seçin veya yeni bir tane oluşturun.</div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-4 align-items-start">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">HTTP Header</label></div>
+                                    <div class="col-md-9">
+                                        <div class="row g-1">
+                                            <div class="col-5"><input type="text" class="form-control form-control-sm bg-light" value="whblockheader" readonly></div>
+                                            <div class="col-1 text-center">:</div>
+                                            <div class="col-6"><input type="text" class="form-control form-control-sm bg-light" value="Hacker-IP" readonly></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-4 align-items-start">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">HTTP Data</label></div>
+                                    <div class="col-md-9">
+                                        <div class="row g-1">
+                                            <div class="col-5"><input type="text" class="form-control form-control-sm bg-light" value="whblockdata" readonly></div>
+                                            <div class="col-1 text-center">:</div>
+                                            <div class="col-6"><input type="text" class="form-control form-control-sm bg-light" value="Hacker-IP" readonly></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- UNBLOCK SECTION -->
+                                <h6 class="fw-bold text-dark border-bottom pb-1 mb-3 mt-4">Unblock</h6>
+
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">Http Method</label></div>
+                                    <div class="col-md-4"><select class="form-select form-select-sm bg-light" disabled><option>POST</option></select></div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">URL</label></div>
+                                    <div class="col-md-9">
+                                        <div class="input-group input-group-sm">
+                                            <textarea class="form-control bg-white fw-bold" rows="2" id="copy_unblock_url" readonly>{{ config.get('base_url') or request.url_root }}api/deceptor/unblock</textarea>
+                                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('copy_unblock_url')"><i class="fas fa-copy"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-4 align-items-start">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">HTTP Header</label></div>
+                                    <div class="col-md-9">
+                                        <div class="row g-1">
+                                            <div class="col-5"><input type="text" class="form-control form-control-sm bg-light" value="whunblockheader" readonly></div>
+                                            <div class="col-1 text-center">:</div>
+                                            <div class="col-6"><input type="text" class="form-control form-control-sm bg-light" value="Hacker-IP" readonly></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-4 align-items-start">
+                                    <div class="col-md-3 text-end"><label class="small fw-bold">HTTP Data</label></div>
+                                    <div class="col-md-9">
+                                        <div class="row g-1">
+                                            <div class="col-5"><input type="text" class="form-control form-control-sm bg-light" value="whunblockdata" readonly></div>
+                                            <div class="col-1 text-center">:</div>
+                                            <div class="col-6"><input type="text" class="form-control form-control-sm bg-light" value="Hacker-IP" readonly></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="text-center mt-5">
+                                    <button class="btn btn-sm btn-danger px-5" disabled>Save</button>
+                                    <button class="btn btn-sm btn-outline-secondary px-5 ms-2" disabled>Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
             <div class="row g-4">
                 <div class="col-md-6">
                     <div class="card settings-card shadow-sm mb-4">
@@ -629,5 +798,83 @@
     function removeHostnameRow(btn) { if (document.querySelectorAll('.hostname-row').length > 1) btn.closest('.hostname-row').remove(); }
     function autoUpdatePort(cb) { const p = document.querySelector('input[name="ldap_port"]'); if (p) p.value = cb.checked ? '636' : '389'; }
     function toggleProxyFields() { document.getElementById('proxyFields').style.display = document.getElementById('proxyEnabled').checked ? 'block' : 'none'; }
+
+    function copyToClipboard(elementId) {
+        const el = document.getElementById(elementId);
+        if(!el) return;
+        
+        let textToCopy = "";
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+            textToCopy = el.value;
+        } else {
+            textToCopy = el.innerText || el.textContent;
+        }
+
+        if(!textToCopy) {
+            Swal.fire('Hata', 'Kopyalanacak bir içerik bulunamadı.', 'error');
+            return;
+        }
+        
+        const tempInput = document.createElement("textarea");
+        tempInput.value = textToCopy;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        try {
+            document.execCommand("copy");
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: 'Kopyalandı!',
+                showConfirmButton: false,
+                timer: 1500
+            });
+        } catch (err) {
+            console.error('Kopyalama başarısız:', err);
+        }
+        document.body.removeChild(tempInput);
+    }
+
+    function updateAuthField(select) {
+        document.getElementById('copy_auth').value = select.value;
+    }
+
+    function showAddApiClientModalFromIntegrations() {
+        Swal.fire({
+            title: 'Yeni API Client Oluştur',
+            html: `
+                <div class="text-start mb-3">
+                    <label class="form-label small fw-bold">Client Adı (Örn: FortiDeceptor)</label>
+                    <input type="text" id="apiClientName" class="form-control" placeholder="FortiDeceptor">
+                </div>
+                <div class="text-start">
+                    <label class="form-label small fw-bold">İzin Verilen IP'ler (Virgülle ayırın, boş bırakırsanız her yerden erişilir)</label>
+                    <input type="text" id="apiAllowedIps" class="form-control" placeholder="10.9.102.12">
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Oluştur',
+            preConfirm: () => {
+                const name = document.getElementById('apiClientName').value;
+                const ips = document.getElementById('apiAllowedIps').value;
+                if (!name) { Swal.showValidationMessage('Lütfen bir isim girin'); return false; }
+                return { name: name, allowed_ips: ips };
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                const formData = new FormData();
+                formData.append('name', result.value.name);
+                formData.append('allowed_ips', result.value.allowed_ips);
+                formData.append('csrf_token', '{{ csrf_token() }}');
+
+                fetch('{{ url_for("system.add_api_client") }}', {
+                    method: 'POST',
+                    body: formData
+                }).then(() => {
+                    Swal.fire('Başarılı', 'API Anahtarı oluşturuldu. Sayfa yenileniyor...', 'success').then(() => location.reload());
+                });
+            }
+        });
+    }
 </script>
 {% endblock %}

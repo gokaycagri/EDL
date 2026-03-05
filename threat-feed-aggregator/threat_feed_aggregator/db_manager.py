@@ -63,7 +63,9 @@ from .repositories.whitelist_repo import (
     add_api_blacklist_item,
     remove_api_blacklist_item,
     update_api_blacklist_item,
-    get_api_blacklist_items
+    get_api_blacklist_items,
+    get_api_blacklist_item_by_value,
+    remove_expired_blacklist_items
 )
 from .repositories.custom_list_repo import (
     create_custom_list,

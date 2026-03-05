@@ -317,8 +317,9 @@ def validate_indicator(item):
 def get_proxy_settings():
     """
     Retrieves proxy settings from config and formats them for requests/aiohttp.
+    Ensures internal/local domains bypass the proxy.
     Returns:
-        tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, auth_for_aiohttp)
+        tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, None)
     """
     from .config_manager import read_config
     config = read_config()
@@ -335,19 +336,19 @@ def get_proxy_settings():
     if not server or not port:
         return None, None, None
 
-    # Format: http://user:pass@host:port or http://host:port
+    # Use raw credentials for the proxy URL as dots/numbers don't need encoding
+    # and some corporate proxies are sensitive to encoding.
     auth_string = ""
     if username and password:
         auth_string = f"{username}:{password}@"
 
     proxy_url = f"http://{auth_string}{server}:{port}"
 
-    # Requests format
+    # Proxies dict for 'requests'
     proxies = {
         "http": proxy_url,
-        "https": proxy_url
+        "https": proxy_url,
+        "no_proxy": "localhost,127.0.0.1,.mfa.gov.tr,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     }
 
-    # Aiohttp Auth (if separate auth object needed, though URL encoding usually works)
-    # Usually returning just the URL is enough for aiohttp if auth is embedded
     return proxies, proxy_url, None

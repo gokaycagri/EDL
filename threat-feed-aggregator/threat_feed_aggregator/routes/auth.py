@@ -22,10 +22,28 @@ def api_key_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         config = read_config()
+        
+        client_ip = request.remote_addr
+        if request.headers.getlist("X-Forwarded-For"):
+             client_ip = request.headers.getlist("X-Forwarded-For")[0]
 
+        # Support both X-API-KEY and standard Authorization header
         request_key = request.headers.get("X-API-KEY")
         if not request_key:
-            return jsonify({"status": "error", "message": "Unauthorized: Missing X-API-KEY header"}), 401
+            auth_header = request.headers.get("Authorization")
+            if auth_header:
+                # Handle "Bearer <key>" or just "<key>"
+                if auth_header.lower().startswith("bearer "):
+                    request_key = auth_header[7:].strip()
+                else:
+                    request_key = auth_header.strip()
+                
+                # Robustness: Remove quotes if added by the client
+                request_key = request_key.replace('"', '').replace("'", "")
+
+        if not request_key:
+            logger.warning(f"API Access Refused: Missing Key from {client_ip} to {request.path}")
+            return jsonify({"status": "error", "message": "Unauthorized: Missing API Key"}), 401
 
         # Check against API Clients list
         api_clients = config.get("api_clients", [])
@@ -112,6 +130,7 @@ def verify_2fa():
             session.pop('pre_mfa_auth', None)
             return redirect(url_for('dashboard.index'))
         else:
+            logger.warning(f"2FA verification failed for user: {username}")
             flash('Invalid Code', 'danger')
             
     return render_template('login_2fa.html')

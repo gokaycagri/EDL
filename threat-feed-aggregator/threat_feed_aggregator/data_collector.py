@@ -24,14 +24,15 @@ def fetch_data_from_url(url, auth=None):
 
     Args:
         url (str): The URL to fetch data from.
-        auth (tuple): Optional (username, password) tuple for Basic Auth.
+        auth (tuple): Optional (username, password) tuple for Basic Auth (Target Site).
 
     Returns:
         str: The content of the response, or None if the request fails.
     """
     try:
-        proxies, _, _ = get_proxy_settings()
-        response = requests.get(url, timeout=30, proxies=proxies, auth=auth)
+        proxies, _, proxy_auth = get_proxy_settings()
+        # Use proxies dict and explicit proxy auth for reliability
+        response = requests.get(url, timeout=30, proxies=proxies, auth=auth, proxy_auth=proxy_auth)
         if response.status_code == 404:
             logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
             return None
@@ -46,33 +47,31 @@ def fetch_data_from_url(url, auth=None):
 
 async def fetch_data_from_url_async(url, session=None, auth=None):
     """
-    Fetches data from a given URL asynchronously using custom DNS and Proxy.
-    If 'session' is provided, it uses that session. Otherwise, creates a new one.
+    Highly Optimized: Fetches data asynchronously. 
+    Reuses provided session or creates a temporary one with optimized settings.
     """
     try:
         _, proxy_url, _ = get_proxy_settings()
-
-        if session:
-            async with session.get(url, timeout=30, proxy=proxy_url, auth=auth) as response:
+        
+        # Note: For aiohttp, auth is the target site auth, 
+        # proxy_auth is the proxy credentials.
+        # However, our get_proxy_settings returns a pre-encoded proxy_url for aiohttp.
+        # If proxy_url is None, it won't use a proxy.
+        
+        # Internal helper to perform the actual GET
+        async def do_get(s):
+            async with s.get(url, timeout=30, proxy=proxy_url, auth=auth) as response:
                 if response.status == 404:
-                    logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
                     return None
                 response.raise_for_status()
                 return await response.text()
+
+        if session:
+            return await do_get(session)
         else:
             async with await get_async_session() as new_session:
-                async with new_session.get(url, timeout=30, proxy=proxy_url, auth=auth) as response:
-                    if response.status == 404:
-                        logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
-                        return None
-                    response.raise_for_status()
-                    return await response.text()
-    except aiohttp.ClientResponseError as e:
-        if e.status == 404:
-            logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
-        else:
-            logger.error(f"HTTP Error {e.status} fetching from {url}: {e.message}")
-        return None
+                return await do_get(new_session)
+
     except Exception as e:
-        logger.error(f"Async error fetching data from {url}: {e}")
+        logger.error(f"Async fetch failed for {url}: {e}")
         return None

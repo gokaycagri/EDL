@@ -21,6 +21,7 @@ from .db_manager import (
     save_historical_stats,
     upsert_indicators_bulk,
     get_source_counts,
+    remove_expired_blacklist_items
 )
 from .geoip_manager import get_country_code
 from .output_formatter import (
@@ -85,75 +86,97 @@ def _cleanup_whitelisted_items_from_db():
         db_delete_whitelisted_indicators(indicators_to_delete)
 
 
+import shutil
+import threading
+
+# Global lock and status for EDL regeneration
+_REGEN_LOCK = threading.Lock()
+_REGEN_ACTIVE = False
+
 def regenerate_edl_files():
     """
-    Optimized: Regenerates EDL files using an iterator to handle millions of records with low memory.
+    Highly Optimized: Regenerates EDL files using streaming to handle millions of records with minimal memory.
+    Ensures only one instance runs at a time using a lock.
     """
-    logger.info("Regenerating EDL files from database...")
+    global _REGEN_ACTIVE
+    
+    if not _REGEN_LOCK.acquire(blocking=False):
+        logger.info("EDL regeneration already in progress, skipping redundant call.")
+        return False, "Regeneration already in progress."
+    
+    _REGEN_ACTIVE = True
+    logger.info("Regenerating EDL files from database using streaming...")
     try:
-        # Instead of loading everything to a dict, we'll process in chunks or stream if possible.
-        # But our formatters currently expect a dict. Let's adapt them to be more memory efficient.
-        # For now, let's load efficiently.
-        indicators_data = {row['indicator']: {
-            'last_seen': row['last_seen'],
-            'country': row['country'],
-            'type': row['type'],
-            'risk_score': row['risk_score'],
-            'source_count': row['source_count']
-        } for row in get_all_indicators_iter()}
+        # File paths
+        paths = {
+            "palo_alto_ip": os.path.join(DATA_DIR, "palo_alto_ip.txt"),
+            "palo_alto_domain": os.path.join(DATA_DIR, "palo_alto_domain.txt"),
+            "fortinet_ip": os.path.join(DATA_DIR, "fortinet_ip.txt"),
+            "fortinet_domain": os.path.join(DATA_DIR, "fortinet_domain.txt"),
+            "url_list": os.path.join(DATA_DIR, "url_list.txt")
+        }
 
-        # --- Merge API Blacklist Items ---
-        # Treat them as high-confidence (Risk Score 100) items
-        api_blacklist_items = get_api_blacklist_items()
-        for item in api_blacklist_items:
-            ind = item['item']
-            if ind not in indicators_data:
-                indicators_data[ind] = {
-                    'last_seen': item['added_at'],
-                    'country': 'Unknown',
-                    'type': item['type'],
-                    'risk_score': 100,
-                    'source_count': 1
-                }
-            else:
-                indicators_data[ind]['risk_score'] = 100
+        # Open all files for writing
+        with open(paths["palo_alto_ip"], "w") as pa_ip, \
+             open(paths["palo_alto_domain"], "w") as pa_dom, \
+             open(paths["fortinet_ip"], "w") as fn_ip, \
+             open(paths["fortinet_domain"], "w") as fn_dom, \
+             open(paths["url_list"], "w") as url_l:
 
-        # --- Palo Alto ---
-        # IP List
-        palo_alto_output = format_for_palo_alto(indicators_data)
-        with open(os.path.join(DATA_DIR, "palo_alto_edl.txt"), "w") as f:
-            f.write(palo_alto_output)
-        with open(os.path.join(DATA_DIR, "palo_alto_ip.txt"), "w") as f:
-            f.write(palo_alto_output)
-            
-        # Domain List
-        palo_alto_domain = format_for_palo_alto_domain(indicators_data)
-        with open(os.path.join(DATA_DIR, "palo_alto_domain.txt"), "w") as f:
-            f.write(palo_alto_domain)
+            count = 0
+            # Use iterator to stream from DB
+            for row in get_all_indicators_iter():
+                ind = row['indicator']
+                itype = row['type']
+                
+                if itype in ['ip', 'cidr']:
+                    pa_ip.write(f"{ind}\n")
+                    fn_ip.write(f"{ind}\n")
+                elif itype == 'domain':
+                    pa_dom.write(f"{ind}\n")
+                    fn_dom.write(f"{ind}\n")
+                elif itype == 'url':
+                    url_l.write(f"{ind}\n")
+                
+                count += 1
 
-        # --- Fortinet ---
-        # IP List
-        fortinet_output = format_for_fortinet(indicators_data)
-        with open(os.path.join(DATA_DIR, "fortinet_edl.txt"), "w") as f:
-            f.write(fortinet_output)
-        with open(os.path.join(DATA_DIR, "fortinet_ip.txt"), "w") as f:
-            f.write(fortinet_output)
-            
-        # Domain List
-        fortinet_domain = format_for_fortinet_domain(indicators_data)
-        with open(os.path.join(DATA_DIR, "fortinet_domain.txt"), "w") as f:
-            f.write(fortinet_domain)
+            # --- Handle API Blacklist (Treat as Score 100) ---
+            api_blacklist_items = get_api_blacklist_items()
+            for item in api_blacklist_items:
+                ind = item['item']
+                itype = item['type']
+                if itype in ['ip', 'cidr']:
+                    pa_ip.write(f"{ind}\n")
+                    fn_ip.write(f"{ind}\n")
+                elif itype == 'domain':
+                    pa_dom.write(f"{ind}\n")
+                    fn_dom.write(f"{ind}\n")
+                
+            # Legacy file compatibility
+            shutil.copy(paths["palo_alto_ip"], os.path.join(DATA_DIR, "palo_alto_edl.txt"))
+            shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
 
-        # --- Generic URL List ---
-        url_list_output = format_for_url_list(indicators_data)
-        with open(os.path.join(DATA_DIR, "url_list.txt"), "w") as f:
-            f.write(url_list_output)
-
-        logger.info(f"EDL files regenerated. (Total records: {len(indicators_data)})")
+        logger.info(f"EDL files regenerated successfully. (Processed: {count} records)")
         return True, "Lists regenerated successfully."
     except Exception as e:
         logger.error(f"Error regenerating EDL files: {e}")
         return False, str(e)
+    finally:
+        _REGEN_ACTIVE = False
+        _REGEN_LOCK.release()
+
+def trigger_background_regeneration():
+    """
+    Triggers EDL regeneration in a background thread to prevent blocking API responses.
+    """
+    if _REGEN_LOCK.locked():
+        logger.info("Background regeneration already queued or running.")
+        return
+    
+    thread = threading.Thread(target=regenerate_edl_files, name="EDLRegenThread")
+    thread.daemon = True
+    thread.start()
+    logger.info("Started background EDL regeneration thread.")
 
 
 class FeedAggregator:
@@ -252,6 +275,12 @@ class FeedAggregator:
                         job_service.update_job_status(source_name, "Saving", msg)
                         break
                     except Exception as e:
+                        # CRITICAL FIX: Rollback the transaction to clear "aborted" state before retry
+                        try:
+                            conn.rollback()
+                        except Exception as rb_e:
+                            logger.error(f"Failed to rollback transaction: {rb_e}")
+
                         if attempt < max_retries - 1:
                             logger.warning(f"[{source_name}] Error writing batch {current_batch_num} (Attempt {attempt+1}): {e}. Retrying...")
                             time.sleep(2 * (attempt + 1))
@@ -349,7 +378,8 @@ def run_aggregator(source_urls):
     config = read_config()
     default_lifetime = config.get("indicator_lifetime_days", 30)
 
-    # Cleanup Old Indicators
+    # Cleanup Old Indicators & Expired Blacklist
+    remove_expired_blacklist_items()
     retention_map = {s['name']: s.get('retention_days', default_lifetime) for s in source_urls}
     remove_old_indicators(retention_map, default_lifetime)
 

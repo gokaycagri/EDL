@@ -243,8 +243,21 @@
                 if (sources.length > 0) {
                     sources.forEach(src => {
                         const li = document.createElement('li');
-                        li.className = 'mb-2 text-dark';
-                        li.innerHTML = `<i class="fas fa-exclamation-triangle text-danger me-2"></i><strong>${src.source_name}</strong><br><small class="text-muted ms-4">Last seen: ${src.last_seen}</small>`;
+                        li.className = 'mb-3 text-dark pb-2 border-bottom last-child-border-0';
+                        
+                        let iconClass = "fas fa-exclamation-triangle text-danger";
+                        if (src.source_name === 'FortiDeceptor') iconClass = "fas fa-robot text-danger";
+                        
+                        let commentHtml = src.comment ? `<div class="ms-4 mt-1 p-2 bg-soft-info rounded small"><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> ${src.comment}</div>` : '';
+                        
+                        li.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <i class="${iconClass} me-2"></i>
+                                <strong>${src.source_name}</strong>
+                            </div>
+                            <small class="text-muted ms-4">Last seen: ${src.last_seen}</small>
+                            ${commentHtml}
+                        `;
                         internalResultList.appendChild(li);
                     });
                 } else {

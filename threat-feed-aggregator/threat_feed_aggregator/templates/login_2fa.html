@@ -57,7 +57,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-4">
                     <label for="code" class="form-label small fw-bold text-muted text-uppercase">Authenticator Code</label>
-                    <input type="text" class="form-control form-control-lg text-center letter-spacing-2" id="code" name="code" placeholder="000 000" maxlength="6" autocomplete="off" required style="letter-spacing: 0.5em; font-weight: bold;">
+                    <input type="text" class="form-control form-control-lg text-center letter-spacing-2" id="code" name="code" placeholder="000 000" maxlength="7" autocomplete="off" required style="letter-spacing: 0.5em; font-weight: bold;">
                 </div>
                 <div class="d-grid">
                     <button type="submit" class="btn btn-primary py-2 fw-bold">Verify</button>
@@ -68,5 +68,22 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const codeInput = document.getElementById('code');
+            if (codeInput) {
+                codeInput.focus();
+                
+                // Optional: Help user by automatically removing non-digits if they paste
+                codeInput.addEventListener('input', function(e) {
+                    // We allow one space for the placeholder-like format, 
+                    // but backend will strip it anyway.
+                    // This regex just keeps digits and spaces.
+                    this.value = this.value.replace(/[^\d\s]/g, '');
+                });
+            }
+        });
+    </script>
 </body>
 </html>

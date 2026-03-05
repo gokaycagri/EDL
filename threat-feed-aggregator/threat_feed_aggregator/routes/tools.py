@@ -41,12 +41,41 @@ def lookup_internal():
         if not indicator:
             return jsonify({'success': False, 'error': 'No indicator provided'}), 400
 
-        from ..db_manager import get_sources_for_indicator
+        from ..db_manager import get_sources_for_indicator, get_api_blacklist_item_by_value
+        
+        # 1. Fetch from main DB (indicator_sources table)
         sources = get_sources_for_indicator(indicator)
+
+        # 2. Check API Blacklist (Manual/Deceptor Blocks) for metadata like comments
+        blacklist_item = get_api_blacklist_item_by_value(indicator)
+        
+        if blacklist_item:
+            comment = blacklist_item.get('comment') or ""
+            # Determine source name based on comment content
+            blacklist_source_name = "Manual Blacklist"
+            if "FortiDeceptor" in comment:
+                blacklist_source_name = "FortiDeceptor"
+            
+            # Check if this source already exists in 'sources'
+            existing_idx = next((i for i, s in enumerate(sources) if s['source_name'] == blacklist_source_name), None)
+            
+            if existing_idx is not None:
+                # Enrich existing source with the comment from blacklist
+                sources[existing_idx]['comment'] = comment
+                # Move to top for visibility
+                sources.insert(0, sources.pop(existing_idx))
+            else:
+                # Add as a new source entry at the top
+                sources.insert(0, {
+                    'source_name': blacklist_source_name,
+                    'last_seen': blacklist_item['added_at'],
+                    'comment': comment
+                })
 
         return jsonify({'success': True, 'sources': sources})
 
     except Exception as e:
+        logger.error(f"Error in lookup_internal: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp_tools.route('/dns_deduplication')

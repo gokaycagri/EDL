@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from threat_feed_aggregator.cert_manager import get_cert_paths, generate_self_signed_cert
 from threat_feed_aggregator.db_manager import init_db
+from threat_feed_aggregator.repositories.user_repo import set_admin_password
 
 # Configure minimal logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,7 +24,24 @@ def prestart():
         logger.error(f"Failed to initialize database: {e}")
         sys.exit(1)
 
-    # 2. Ensure SSL Certificates Exist
+    # 2. Create/Update Default Admin User
+    try:
+        admin_pass = os.getenv('ADMIN_PASSWORD', '123456')
+        success, msg = set_admin_password(admin_pass)
+        if success:
+            logger.info(f"Admin User Check: {msg}")
+        else:
+            logger.error(f"Failed to set admin password: {msg}")
+    except Exception as e:
+        logger.error(f"Error during admin user setup: {e}")
+
+    # 2.5 Run Migration SQL if exists
+    migration_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'migration.sql')
+    if False and os.path.exists(migration_path):
+        logger.info(f"Found migration file at {migration_path}. Importing data in batches...")
+        # ... (rest of commented out logic)
+
+    # 3. Ensure SSL Certificates Exist
     try:
         # generate_self_signed_cert checks if they exist internally
         cert_path, key_path = generate_self_signed_cert()
