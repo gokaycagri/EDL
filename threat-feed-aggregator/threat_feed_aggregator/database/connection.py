@@ -32,24 +32,27 @@ print(f"DEBUG: DB_WRITE_LOCK initialized as {type(DB_WRITE_LOCK)} at {id(DB_WRIT
 
 # Postgres Connection Pool
 pg_pool = None
+pg_pool_lock = threading.Lock()
 
 def init_pg_pool():
     global pg_pool
     if DB_TYPE == 'postgres' and not pg_pool:
-        try:
-            pg_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=1,
-                maxconn=20,
-                user=os.getenv('DB_USER', 'threat_user'),
-                password=os.getenv('DB_PASS', 'secure_password'),
-                host=os.getenv('DB_HOST', 'postgres'),
-                port=os.getenv('DB_PORT', '5432'),
-                database=os.getenv('DB_NAME', 'threat_feed')
-            )
-            logger.info("PostgreSQL connection pool initialized.")
-        except Exception as e:
-            logger.error(f"Failed to initialize Postgres pool: {e}")
-            raise
+        with pg_pool_lock:
+            if not pg_pool: # Double check inside lock
+                try:
+                    pg_pool = psycopg2.pool.ThreadedConnectionPool(
+                        minconn=1,
+                        maxconn=20,
+                        user=os.getenv('DB_USER', 'threat_user'),
+                        password=os.getenv('DB_PASS', 'secure_password'),
+                        host=os.getenv('DB_HOST', 'postgres'),
+                        port=os.getenv('DB_PORT', '5432'),
+                        database=os.getenv('DB_NAME', 'threat_feed')
+                    )
+                    logger.info("PostgreSQL connection pool initialized.")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Postgres pool: {e}")
+                    raise
 
 class PostgresCursorWrapper:
     """
@@ -67,17 +70,27 @@ class PostgresCursorWrapper:
         query_pg = query.replace('?', '%s')
         
         # 2. Convert 'INSERT OR IGNORE' -> 'INSERT ... ON CONFLICT DO NOTHING'
+        # Note: Postgres doesn't support "INSERT OR IGNORE", it uses "ON CONFLICT DO NOTHING"
+        is_ignore = False
         if 'INSERT OR IGNORE' in query_pg:
             query_pg = query_pg.replace('INSERT OR IGNORE', 'INSERT')
-            query_pg += " ON CONFLICT DO NOTHING"
+            if 'ON CONFLICT' not in query_pg:
+                query_pg += " ON CONFLICT DO NOTHING"
+            is_ignore = True
             
         # 3. Handle duplicate key errors silently if expected
         try:
             self.cursor.execute(query_pg, params)
         except Exception as e:
-            # SILENCE: Don't log duplicate key as ERROR, it's expected and handled
-            if "duplicate key" not in str(e).lower() and "unique constraint" not in str(e).lower():
-                logger.error(f"SQL Error: {e} | Query: {query_pg}")
+            # SILENCE: Don't log duplicate key as ERROR if it's an IGNORE query
+            err_msg = str(e).lower()
+            if is_ignore and ("duplicate key" in err_msg or "unique constraint" in err_msg):
+                # We can't continue with the current transaction if a real PG error occurred,
+                # but ON CONFLICT DO NOTHING should prevent the error from being raised to Python.
+                # If we are here, it means ON CONFLICT didn't catch it or something else failed.
+                return self
+            
+            logger.error(f"SQL Error: {e} | Query: {query_pg}")
             raise
         return self
 
