@@ -1,12 +1,14 @@
 # Changelog
 
-## [1.18.12] - 2026-03-11
+## [1.18.15] - 2026-03-11
 
 ### Fixed
-- **System Settings:** Resolved a 500 Internal Server Error when opening System Settings due to a missing `from_json` Jinja2 filter.
-- **FortiDeceptor Integration:** Implemented more robust API Key parsing using regex to handle various header formats (Bearer prefix, literal quotes, colons).
-- **Gunicorn Stability:** Fixed a startup crash ("null bytes in source code") caused by incorrect file encoding in `version.py` and `app.py`.
-- **API Security:** Added detailed logging for API access attempts to improve troubleshooting of 401/403 errors.
+- **Proxy Authentication:** Implemented automatic URL-encoding for proxy credentials to handle special characters (e.g. '@' in usernames like `user@domain`), resolving 407 authentication errors.
+- **Service Whitelists:** Fixed a 500 error when accessing Microsoft/GitHub/Azure lists by adding the missing `format_generic` import in `api.py`.
+- **API Key Parsing:** Further refined the regex-based API key extraction to handle redundant "Bearer" prefixes and joined strings from FortiDeceptor.
+- **System Settings:** Ensured the `from_json` filter is correctly registered globally in `app.py`.
+
+## [1.18.12] - 2026-03-11
 
 ## [2.0.0] - 2026-03-05
 

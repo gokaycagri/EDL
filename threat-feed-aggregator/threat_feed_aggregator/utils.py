@@ -321,6 +321,7 @@ def get_proxy_settings():
     Returns:
         tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, None)
     """
+    import urllib.parse
     from .config_manager import read_config
     config = read_config()
     proxy_config = config.get('proxy', {})
@@ -336,11 +337,12 @@ def get_proxy_settings():
     if not server or not port:
         return None, None, None
 
-    # Use raw credentials for the proxy URL as dots/numbers don't need encoding
-    # and some corporate proxies are sensitive to encoding.
+    # URL-encode credentials for the proxy URL to handle special characters (@, \, etc)
     auth_string = ""
     if username and password:
-        auth_string = f"{username}:{password}@"
+        encoded_user = urllib.parse.quote(username)
+        encoded_pass = urllib.parse.quote(password)
+        auth_string = f"{encoded_user}:{encoded_pass}@"
 
     proxy_url = f"http://{auth_string}{server}:{port}"
 

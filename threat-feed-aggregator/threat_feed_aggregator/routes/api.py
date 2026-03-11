@@ -14,6 +14,7 @@ from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..azure_services import process_azure_feeds
 from ..microsoft_services import process_microsoft_feeds
 from ..config_manager import DATA_DIR, read_config, read_stats
+from ..output_formatter import format_generic
 from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
