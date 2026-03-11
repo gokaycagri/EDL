@@ -32,11 +32,12 @@ def api_key_required(f):
         
         if auth_header:
             import re
-            # Clear quotes and colons
+            # Step 1: Remove any quotes, colons, and joiners
             cleaned = auth_header.replace('"', '').replace("'", "").replace(':', '').strip()
-            # Extract key after 'bearer' if present, or just the key itself
-            # This regex captures the long alphanumeric key and ignores 'bearer' prefix
-            match = re.search(r'(?:bearer\s+)?([a-zA-Z0-9]{10,})', cleaned, re.IGNORECASE)
+            
+            # Step 2: Extract key if 'Bearer' exists (case insensitive)
+            # Handle cases like 'bearer4Sb...', 'bearer 4Sb...', or 'Bearer Bearer 4Sb...'
+            match = re.search(r'(?:bearer\s*)?([a-zA-Z0-9]{10,})', cleaned, re.IGNORECASE)
             if match:
                 request_key = match.group(1)
             else:
