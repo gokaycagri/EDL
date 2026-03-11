@@ -55,6 +55,27 @@ def _is_cache_valid(path, ttl_seconds=600):
     age = time.time() - mtime
     return age < ttl_seconds
 
+@bp_api.route('/edl/firewall/<path:filename>')
+def get_firewall_edl(filename):
+    """
+    Public-ish endpoint for firewalls to fetch EDL files.
+    Does NOT require session login.
+    """
+    from flask import send_from_directory
+    from ..config_manager import DATA_DIR, read_config
+    
+    # Security: Ensure we only serve .txt files from the DATA_DIR root (no path traversal)
+    safe_filename = os.path.basename(filename)
+    if not safe_filename.endswith('.txt'):
+        return jsonify({'error': 'Invalid file type'}), 403
+
+    # Optional: Basic IP restriction could be added here if needed
+    # for now, we allow it so firewalls can reach it.
+    
+    logger.info(f"Firewall EDL fetch: {safe_filename} from {request.remote_addr}")
+    return send_from_directory(DATA_DIR, safe_filename, mimetype='text/plain')
+
+
 @bp_api.route('/custom_list/count/<int:list_id>')
 @login_required
 def custom_list_count_api(list_id):
