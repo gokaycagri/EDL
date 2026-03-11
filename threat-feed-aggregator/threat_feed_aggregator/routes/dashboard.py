@@ -82,7 +82,8 @@ def index():
 @bp_dashboard.route('/data/<path:filename>')
 @login_required
 def download_file(filename):
-    from flask import send_from_directory
+    from flask import send_from_directory, request
 
     from ..config_manager import DATA_DIR
-    return send_from_directory(DATA_DIR, filename, as_attachment=True)
+    as_attachment = request.args.get('view') != '1'
+    return send_from_directory(DATA_DIR, filename, as_attachment=as_attachment)

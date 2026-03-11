@@ -99,29 +99,37 @@
                             <div class="card-body pt-0">
 
                                 <div class="mb-3">
-
                                     <label class="small text-muted mb-1 fw-bold">Palo Alto Networks</label>
-
-                                    <div class="btn-group w-100 mb-2">
-
-                                        <a href="{{ url_for('dashboard.download_file', filename='palo_alto_ip.txt') }}" class="btn btn-outline-dark btn-sm w-50"><i class="fas fa-network-wired me-1"></i>IP List</a>
-
-                                        <a href="{{ url_for('dashboard.download_file', filename='palo_alto_domain.txt') }}" class="btn btn-outline-dark btn-sm w-50"><i class="fas fa-globe me-1"></i>Domain List</a>
-
+                                    <div class="row g-1 mb-2">
+                                        <div class="col-6">
+                                            <div class="btn-group w-100">
+                                                <a href="{{ url_for('dashboard.download_file', filename='palo_alto_ip.txt', view='1') }}" target="_blank" class="btn btn-outline-dark btn-sm text-truncate px-1"><i class="fas fa-network-wired me-1"></i>IP</a>
+                                                <button type="button" class="btn btn-outline-dark btn-sm px-1" onclick="copyRawToClipboard('{{ url_for('dashboard.download_file', filename='palo_alto_ip.txt', view='1', _external=True) }}')" title="Copy Link"><i class="fas fa-link"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="btn-group w-100">
+                                                <a href="{{ url_for('dashboard.download_file', filename='palo_alto_domain.txt', view='1') }}" target="_blank" class="btn btn-outline-dark btn-sm text-truncate px-1"><i class="fas fa-globe me-1"></i>Domain</a>
+                                                <button type="button" class="btn btn-outline-dark btn-sm px-1" onclick="copyRawToClipboard('{{ url_for('dashboard.download_file', filename='palo_alto_domain.txt', view='1', _external=True) }}')" title="Copy Link"><i class="fas fa-link"></i></button>
+                                            </div>
+                                        </div>
                                     </div>
-
                                     
-
                                     <label class="small text-muted mb-1 fw-bold">Fortinet FortiGate</label>
-
-                                    <div class="btn-group w-100">
-
-                                        <a href="{{ url_for('dashboard.download_file', filename='fortinet_ip.txt') }}" class="btn btn-outline-dark btn-sm w-50"><i class="fas fa-network-wired me-1"></i>IP List</a>
-
-                                        <a href="{{ url_for('dashboard.download_file', filename='fortinet_domain.txt') }}" class="btn btn-outline-dark btn-sm w-50"><i class="fas fa-globe me-1"></i>Domain List</a>
-
+                                    <div class="row g-1">
+                                        <div class="col-6">
+                                            <div class="btn-group w-100">
+                                                <a href="{{ url_for('dashboard.download_file', filename='fortinet_ip.txt', view='1') }}" target="_blank" class="btn btn-outline-dark btn-sm text-truncate px-1"><i class="fas fa-network-wired me-1"></i>IP</a>
+                                                <button type="button" class="btn btn-outline-dark btn-sm px-1" onclick="copyRawToClipboard('{{ url_for('dashboard.download_file', filename='fortinet_ip.txt', view='1', _external=True) }}')" title="Copy Link"><i class="fas fa-link"></i></button>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="btn-group w-100">
+                                                <a href="{{ url_for('dashboard.download_file', filename='fortinet_domain.txt', view='1') }}" target="_blank" class="btn btn-outline-dark btn-sm text-truncate px-1"><i class="fas fa-globe me-1"></i>Domain</a>
+                                                <button type="button" class="btn btn-outline-dark btn-sm px-1" onclick="copyRawToClipboard('{{ url_for('dashboard.download_file', filename='fortinet_domain.txt', view='1', _external=True) }}')" title="Copy Link"><i class="fas fa-link"></i></button>
+                                            </div>
+                                        </div>
                                     </div>
-
                                 </div>
 
                                 <h6 class="form-label-custom small fw-bold mb-2">Custom EDL Manager</h6>
