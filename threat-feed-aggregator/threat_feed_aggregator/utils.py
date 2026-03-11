@@ -345,10 +345,11 @@ def get_proxy_settings():
     proxy_url = f"http://{auth_string}{server}:{port}"
 
     # Proxies dict for 'requests'
+    # Adding explicit internal IPs and domains to bypass proxy
     proxies = {
         "http": proxy_url,
         "https": proxy_url,
-        "no_proxy": "localhost,127.0.0.1,.mfa.gov.tr,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+        "no_proxy": "localhost,127.0.0.1,10.236.79.11,10.235.30.21,10.235.31.11,ddd.mfa.gov.tr,fortiproxy.mfa.gov.tr,fortiproxy01.mfa.gov.tr,.mfa.gov.tr,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     }
 
     return proxies, proxy_url, None

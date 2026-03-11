@@ -7,32 +7,31 @@ from .utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
-async def get_async_session():
+async def get_async_session(verify_ssl=True):
     """
     Creates an aiohttp ClientSession with a robust threaded DNS resolver.
-    Custom DNS nameservers should be configured at the OS/Docker level.
     """
-    # Use ThreadedResolver for maximum compatibility and stability
     resolver = aiohttp.ThreadedResolver()
-    connector = aiohttp.TCPConnector(resolver=resolver)
+    # We set verify_ssl at the connector level
+    connector = aiohttp.TCPConnector(resolver=resolver, verify_ssl=verify_ssl)
 
     return aiohttp.ClientSession(connector=connector)
 
 def fetch_data_from_url(url, auth=None):
     """
     Fetches data from a given URL synchronously.
-
-    Args:
-        url (str): The URL to fetch data from.
-        auth (tuple): Optional (username, password) tuple for Basic Auth (Target Site).
-
-    Returns:
-        str: The content of the response, or None if the request fails.
     """
     try:
         proxies, _, proxy_auth = get_proxy_settings()
-        # Use proxies dict and explicit proxy auth for reliability
-        response = requests.get(url, timeout=30, proxies=proxies, auth=auth, proxy_auth=proxy_auth)
+        
+        # SSL Verification logic: Disable for internal MFA domains
+        verify_ssl = True
+        if "mfa.gov.tr" in url or "10.236.79.11" in url:
+            verify_ssl = False
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+        response = requests.get(url, timeout=30, proxies=proxies, auth=auth, proxy_auth=proxy_auth, verify=verify_ssl)
         if response.status_code == 404:
             logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
             return None
@@ -48,19 +47,18 @@ def fetch_data_from_url(url, auth=None):
 async def fetch_data_from_url_async(url, session=None, auth=None):
     """
     Highly Optimized: Fetches data asynchronously. 
-    Reuses provided session or creates a temporary one with optimized settings.
     """
     try:
         _, proxy_url, _ = get_proxy_settings()
         
-        # Note: For aiohttp, auth is the target site auth, 
-        # proxy_auth is the proxy credentials.
-        # However, our get_proxy_settings returns a pre-encoded proxy_url for aiohttp.
-        # If proxy_url is None, it won't use a proxy.
+        # SSL Verification logic
+        is_internal = "mfa.gov.tr" in url or "10.236.79.11" in url
         
         # Internal helper to perform the actual GET
         async def do_get(s):
-            async with s.get(url, timeout=30, proxy=proxy_url, auth=auth) as response:
+            # For aiohttp, we pass ssl=False to skip verification for internal sites
+            ssl_param = False if is_internal else None
+            async with s.get(url, timeout=30, proxy=proxy_url, auth=auth, ssl=ssl_param) as response:
                 if response.status == 404:
                     return None
                 response.raise_for_status()
@@ -69,7 +67,8 @@ async def fetch_data_from_url_async(url, session=None, auth=None):
         if session:
             return await do_get(session)
         else:
-            async with await get_async_session() as new_session:
+            # For internal sites, we create a session that doesn't verify SSL
+            async with await get_async_session(verify_ssl=not is_internal) as new_session:
                 return await do_get(new_session)
 
     except Exception as e:

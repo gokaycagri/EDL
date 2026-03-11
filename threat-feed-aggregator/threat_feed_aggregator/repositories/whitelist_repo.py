@@ -2,7 +2,7 @@ import logging
 import sqlite3
 from datetime import UTC, datetime
 
-from ..database.connection import DB_WRITE_LOCK, db_transaction, get_db_connection
+from ..database.connection import db_transaction, get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +19,17 @@ def add_whitelist_item(item, item_type='ip', description="", conn=None):
     if inferred_type != 'unknown':
         item_type = inferred_type
 
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                now_iso = datetime.now(UTC).isoformat()
-                db.execute('INSERT INTO whitelist (item, type, description, added_at) VALUES (?, ?, ?, ?)',
-                             (item.strip(), item_type, description, now_iso))
-                db.commit()
-                return True, "Item added to whitelist."
-            except sqlite3.IntegrityError:
-                return False, "Item already in whitelist."
-            except Exception as e:
-                logger.error(f"Error adding to whitelist: {e}")
-                return False, str(e)
+    with db_transaction(conn) as db:
+        try:
+            now_iso = datetime.now(UTC).isoformat()
+            db.execute('INSERT INTO whitelist (item, type, description, added_at) VALUES (?, ?, ?, ?)',
+                         (item.strip(), item_type, description, now_iso))
+            return True, "Item added to whitelist."
+        except sqlite3.IntegrityError:
+            return False, "Item already in whitelist."
+        except Exception as e:
+            logger.error(f"Error adding to whitelist: {e}")
+            return False, str(e)
 
 def get_whitelist(conn=None):
     with db_transaction(conn) as db:
@@ -39,15 +37,13 @@ def get_whitelist(conn=None):
         return [dict(row) for row in cursor.fetchall()]
 
 def remove_whitelist_item(item_id, conn=None):
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                db.execute('DELETE FROM whitelist WHERE id = ?', (item_id,))
-                db.commit()
-                return True
-            except Exception as e:
-                logger.error(f"Error removing from whitelist: {e}")
-                return False
+    with db_transaction(conn) as db:
+        try:
+            db.execute('DELETE FROM whitelist WHERE id = ?', (item_id,))
+            return True
+        except Exception as e:
+            logger.error(f"Error removing from whitelist: {e}")
+            return False
 
 def update_whitelist_item(item_id, new_item, item_type='ip', description="", conn=None):
     """Updates an existing whitelist item."""
@@ -62,18 +58,16 @@ def update_whitelist_item(item_id, new_item, item_type='ip', description="", con
     if inferred_type != 'unknown':
         item_type = inferred_type
 
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                db.execute('UPDATE whitelist SET item = ?, type = ?, description = ? WHERE id = ?',
-                           (new_item.strip(), item_type, description, item_id))
-                db.commit()
-                return True, "Item updated successfully."
-            except sqlite3.IntegrityError:
-                return False, "Item already exists in whitelist."
-            except Exception as e:
-                logger.error(f"Error updating whitelist item: {e}")
-                return False, str(e)
+    with db_transaction(conn) as db:
+        try:
+            db.execute('UPDATE whitelist SET item = ?, type = ?, description = ? WHERE id = ?',
+                       (new_item.strip(), item_type, description, item_id))
+            return True, "Item updated successfully."
+        except sqlite3.IntegrityError:
+            return False, "Item already exists in whitelist."
+        except Exception as e:
+            logger.error(f"Error updating whitelist item: {e}")
+            return False, str(e)
 
 # --- API Blacklist Functions ---
 def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, conn=None, source=None):
@@ -88,18 +82,17 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
     if not is_valid:
         return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
 
-    with DB_WRITE_LOCK:
-        # We handle transaction manually here to manage Postgres state correctly
-        db = conn if conn else get_db_connection()
+    # We use db_transaction to ensure proper locking and transaction management
+    with db_transaction(conn) as db:
         try:
             now_iso = datetime.now(UTC).isoformat()
             
             from ..database.connection import DB_TYPE
             if DB_TYPE == 'postgres':
-                # Optimized UPSERT for Postgres to avoid error logging in connection wrapper
+                # Optimized UPSERT for Postgres
                 query = """
                     INSERT INTO api_blacklist (item, type, comment, added_at, expires_at) 
-                    VALUES (?, ?, ?, ?, ?)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (item) 
                     DO UPDATE SET 
                         comment = EXCLUDED.comment,
@@ -107,45 +100,37 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
                         expires_at = EXCLUDED.expires_at
                 """
                 db.execute(query, (item.strip(), item_type, comment, now_iso, expires_at))
-                db.commit()
                 return True, "Item added or refreshed in blacklist."
             else:
-                # SQLite fallback with try-except (SQLite doesn't log errors automatically in our wrapper)
+                # SQLite fallback
                 try:
                     db.execute('INSERT INTO api_blacklist (item, type, comment, added_at, expires_at) VALUES (?, ?, ?, ?, ?)',
                                  (item.strip(), item_type, comment, now_iso, expires_at))
-                    db.commit()
                     return True, "Item added to blacklist."
                 except Exception:
-                    db.rollback()
+                    # In SQLite, db_transaction handles the rollback if we re-raise,
+                    # but here we want to retry with an UPDATE.
+                    # To do this safely within the same transaction, we use a savepoint or just let it fail and handle.
                     db.execute('UPDATE api_blacklist SET comment = ?, added_at = ?, expires_at = ? WHERE item = ?',
                                (comment, now_iso, expires_at, item.strip()))
-                    db.commit()
                     return True, "Item block refreshed."
         except Exception as e:
             logger.error(f"Error adding to api_blacklist: {e}")
-            try: db.rollback()
-            except: pass
             return False, str(e)
-        finally:
-            if not conn: db.close()
 
 def remove_expired_blacklist_items(conn=None):
     """Removes items from API blacklist that have passed their expiration date."""
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                now_iso = datetime.now(UTC).isoformat()
-                # expires_at is TEXT in ISO format, so we can compare lexicographically
-                cursor = db.execute('DELETE FROM api_blacklist WHERE expires_at IS NOT NULL AND expires_at < ?', (now_iso,))
-                deleted = cursor.rowcount
-                if deleted > 0:
-                    db.commit()
-                    logger.info(f"Cleanup: Removed {deleted} expired blacklist items.")
-                return deleted
-            except Exception as e:
-                logger.error(f"Error removing expired blacklist items: {e}")
-                return 0
+    with db_transaction(conn) as db:
+        try:
+            now_iso = datetime.now(UTC).isoformat()
+            cursor = db.execute('DELETE FROM api_blacklist WHERE expires_at IS NOT NULL AND expires_at < ?', (now_iso,))
+            deleted = cursor.rowcount
+            if deleted > 0:
+                logger.info(f"Cleanup: Removed {deleted} expired blacklist items.")
+            return deleted
+        except Exception as e:
+            logger.error(f"Error removing expired blacklist items: {e}")
+            return 0
 
 def get_api_blacklist_items(conn=None):
     with db_transaction(conn) as db:
@@ -159,19 +144,17 @@ def get_api_blacklist_item_by_value(item, conn=None):
         return dict(row) if row else None
 
 def remove_api_blacklist_item(item, conn=None):
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                # Can remove by ID or exact item string
-                if isinstance(item, int) or (isinstance(item, str) and item.isdigit()):
-                    db.execute('DELETE FROM api_blacklist WHERE id = ?', (item,))
-                else:
-                    db.execute('DELETE FROM api_blacklist WHERE item = ?', (item,))
-                db.commit()
-                return True
-            except Exception as e:
-                logger.error(f"Error removing from api_blacklist: {e}")
-                return False
+    with db_transaction(conn) as db:
+        try:
+            # Can remove by ID or exact item string
+            if isinstance(item, int) or (isinstance(item, str) and item.isdigit()):
+                db.execute('DELETE FROM api_blacklist WHERE id = ?', (item,))
+            else:
+                db.execute('DELETE FROM api_blacklist WHERE item = ?', (item,))
+            return True
+        except Exception as e:
+            logger.error(f"Error removing from api_blacklist: {e}")
+            return False
 
 def update_api_blacklist_item(item_id, new_item, item_type='ip', comment="", conn=None):
     """Updates an existing blacklist item."""
@@ -183,35 +166,29 @@ def update_api_blacklist_item(item_id, new_item, item_type='ip', comment="", con
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
     
-    # Use inferred type if unknown or keep existing logic
     if inferred_type != 'unknown':
         item_type = inferred_type
 
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                db.execute('UPDATE api_blacklist SET item = ?, type = ?, comment = ? WHERE id = ?',
-                           (new_item.strip(), item_type, comment, item_id))
-                db.commit()
-                return True, "Item updated successfully."
-            except sqlite3.IntegrityError:
-                return False, "Item already exists in blacklist."
-            except Exception as e:
-                logger.error(f"Error updating api_blacklist item: {e}")
-                return False, str(e)
+    with db_transaction(conn) as db:
+        try:
+            db.execute('UPDATE api_blacklist SET item = ?, type = ?, comment = ? WHERE id = ?',
+                       (new_item.strip(), item_type, comment, item_id))
+            return True, "Item updated successfully."
+        except sqlite3.IntegrityError:
+            return False, "Item already exists in blacklist."
+        except Exception as e:
+            logger.error(f"Error updating api_blacklist item: {e}")
+            return False, str(e)
 
 def delete_whitelisted_indicators(items_to_delete, conn=None):
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                if items_to_delete:
-                    placeholders = ','.join(['?' for _ in items_to_delete])
-                    db.execute(f'DELETE FROM indicators WHERE indicator IN ({placeholders})', items_to_delete)
-                    # Also delete from sources
-                    db.execute(f'DELETE FROM indicator_sources WHERE indicator IN ({placeholders})', items_to_delete)
-                    db.commit()
-                    return True
-                return False
-            except Exception as e:
-                logger.error(f"Error deleting whitelisted indicators: {e}")
-                return False
+    with db_transaction(conn) as db:
+        try:
+            if items_to_delete:
+                placeholders = ','.join(['?' for _ in items_to_delete])
+                db.execute(f'DELETE FROM indicators WHERE indicator IN ({placeholders})', items_to_delete)
+                db.execute(f'DELETE FROM indicator_sources WHERE indicator IN ({placeholders})', items_to_delete)
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting whitelisted indicators: {e}")
+            return False

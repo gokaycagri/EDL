@@ -15,6 +15,8 @@ services:
     volumes:
       # Persist config and EDLs (DB is now in Postgres service)
       - ./threat-feed-aggregator/data:/app/threat_feed_aggregator/data
+      # Map source code and templates for live updates
+      - ./threat-feed-aggregator/threat_feed_aggregator:/app/threat_feed_aggregator
     environment:
       - SECRET_KEY=${SECRET_KEY:-changeme_in_production}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-123456}

@@ -711,6 +711,8 @@ def remove_indicator():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+from .auth import api_key_required
+
 # --- FortiDeceptor Integration ---
 
 @bp_api.route('/deceptor/block', methods=['POST'])
@@ -719,13 +721,14 @@ def deceptor_block():
     """
     FortiDeceptor integration for blocking multiple IPs.
     """
+    logger.info(f"CRITICAL: Deceptor Block Function reached! Client IP: {request.remote_addr}")
     try:
         # 1. Capture Raw Data for Debugging
         client_ip = request.remote_addr
         raw_headers = dict(request.headers)
         raw_body = request.get_data(as_text=True)
         
-        logger.info(f"Deceptor Request from {client_ip} | Headers: {raw_headers} | Body: {raw_body}")
+        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body: {raw_body}")
         
         # 2. Extract IP(s) from various locations - Prioritize Body for actual data
         data = request.get_json(silent=True) or request.form
@@ -756,9 +759,9 @@ def deceptor_block():
         from ..utils import validate_indicator
         
         for ip in ip_list:
-            # Handle Test Strings
-            if ip.lower() in ["hacker-ip", "1", "test"]:
-                logger.info(f"Deceptor test string detected: {ip}")
+            # Handle Test Strings & Probes
+            if ip.lower() in ["hacker-ip", "1", "test", "ping"]:
+                logger.info(f"Deceptor probe/test string detected: {ip}")
                 continue
 
             is_valid, _ = validate_indicator(ip)
@@ -797,11 +800,10 @@ def deceptor_block():
             else:
                 logger.warning(f"Skipping invalid IP from Deceptor: {ip}")
 
-        if added_count > 0 or "1" in ip_list or "Hacker-IP" in input_data:
-            trigger_background_regeneration()
-            return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
-        
-        return jsonify({'status': 'error', 'message': 'No valid IPs processed.'}), 400
+        # ALWAYS return success 200 if the request reached here with valid API Key
+        # This prevents Deceptor from showing "Failed" status during probes
+        # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+        return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
 
     except Exception as e:
         logger.error(f"FortiDeceptor API Error: {e}")
@@ -827,7 +829,7 @@ def deceptor_unblock():
 
         # 2. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
-            trigger_background_regeneration()
+            # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
 
         return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404

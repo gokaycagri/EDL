@@ -100,70 +100,79 @@ def regenerate_edl_files():
     """
     global _REGEN_ACTIVE
     
-    if not _REGEN_LOCK.acquire(blocking=False):
-        logger.info("EDL regeneration already in progress, skipping redundant call.")
+    if _REGEN_ACTIVE:
+        logger.info("EDL regeneration already in progress, skipping call.")
         return False, "Regeneration already in progress."
-    
-    _REGEN_ACTIVE = True
-    logger.info("Regenerating EDL files from database using streaming...")
-    try:
-        # File paths
-        paths = {
-            "palo_alto_ip": os.path.join(DATA_DIR, "palo_alto_ip.txt"),
-            "palo_alto_domain": os.path.join(DATA_DIR, "palo_alto_domain.txt"),
-            "fortinet_ip": os.path.join(DATA_DIR, "fortinet_ip.txt"),
-            "fortinet_domain": os.path.join(DATA_DIR, "fortinet_domain.txt"),
-            "url_list": os.path.join(DATA_DIR, "url_list.txt")
-        }
 
-        # Open all files for writing
-        with open(paths["palo_alto_ip"], "w") as pa_ip, \
-             open(paths["palo_alto_domain"], "w") as pa_dom, \
-             open(paths["fortinet_ip"], "w") as fn_ip, \
-             open(paths["fortinet_domain"], "w") as fn_dom, \
-             open(paths["url_list"], "w") as url_l:
+    def _task():
+        global _REGEN_ACTIVE
+        if not _REGEN_LOCK.acquire(blocking=False):
+            return
+        
+        _REGEN_ACTIVE = True
+        logger.info("Regenerating EDL files from database using streaming...")
+        try:
+            # File paths
+            paths = {
+                "palo_alto_ip": os.path.join(DATA_DIR, "palo_alto_ip.txt"),
+                "palo_alto_domain": os.path.join(DATA_DIR, "palo_alto_domain.txt"),
+                "fortinet_ip": os.path.join(DATA_DIR, "fortinet_ip.txt"),
+                "fortinet_domain": os.path.join(DATA_DIR, "fortinet_domain.txt"),
+                "url_list": os.path.join(DATA_DIR, "url_list.txt")
+            }
 
-            count = 0
-            # Use iterator to stream from DB
-            for row in get_all_indicators_iter():
-                ind = row['indicator']
-                itype = row['type']
-                
-                if itype in ['ip', 'cidr']:
-                    pa_ip.write(f"{ind}\n")
-                    fn_ip.write(f"{ind}\n")
-                elif itype == 'domain':
-                    pa_dom.write(f"{ind}\n")
-                    fn_dom.write(f"{ind}\n")
-                elif itype == 'url':
-                    url_l.write(f"{ind}\n")
-                
-                count += 1
+            # Open all files for writing
+            with open(paths["palo_alto_ip"], "w") as pa_ip, \
+                 open(paths["palo_alto_domain"], "w") as pa_dom, \
+                 open(paths["fortinet_ip"], "w") as fn_ip, \
+                 open(paths["fortinet_domain"], "w") as fn_dom, \
+                 open(paths["url_list"], "w") as url_l:
 
-            # --- Handle API Blacklist (Treat as Score 100) ---
-            api_blacklist_items = get_api_blacklist_items()
-            for item in api_blacklist_items:
-                ind = item['item']
-                itype = item['type']
-                if itype in ['ip', 'cidr']:
-                    pa_ip.write(f"{ind}\n")
-                    fn_ip.write(f"{ind}\n")
-                elif itype == 'domain':
-                    pa_dom.write(f"{ind}\n")
-                    fn_dom.write(f"{ind}\n")
-                
-            # Legacy file compatibility
-            shutil.copy(paths["palo_alto_ip"], os.path.join(DATA_DIR, "palo_alto_edl.txt"))
-            shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
+                count = 0
+                # Use iterator to stream from DB
+                for row in get_all_indicators_iter():
+                    ind = row['indicator']
+                    itype = row['type']
+                    
+                    if itype in ['ip', 'cidr']:
+                        pa_ip.write(f"{ind}\n")
+                        fn_ip.write(f"{ind}\n")
+                    elif itype == 'domain':
+                        pa_dom.write(f"{ind}\n")
+                        fn_dom.write(f"{ind}\n")
+                    elif itype == 'url':
+                        url_l.write(f"{ind}\n")
+                    
+                    count += 1
 
-        logger.info(f"EDL files regenerated successfully. (Processed: {count} records)")
-        return True, "Lists regenerated successfully."
-    except Exception as e:
-        logger.error(f"Error regenerating EDL files: {e}")
-        return False, str(e)
-    finally:
-        _REGEN_ACTIVE = False
-        _REGEN_LOCK.release()
+                # --- Handle API Blacklist (Treat as Score 100) ---
+                api_blacklist_items = get_api_blacklist_items()
+                for item in api_blacklist_items:
+                    ind = item['item']
+                    itype = item['type']
+                    if itype in ['ip', 'cidr']:
+                        pa_ip.write(f"{ind}\n")
+                        fn_ip.write(f"{ind}\n")
+                    elif itype == 'domain':
+                        pa_dom.write(f"{ind}\n")
+                        fn_dom.write(f"{ind}\n")
+                    
+                # Legacy file compatibility
+                shutil.copy(paths["palo_alto_ip"], os.path.join(DATA_DIR, "palo_alto_edl.txt"))
+                shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
+
+            logger.info(f"EDL files regenerated successfully. (Processed: {count} records)")
+        except Exception as e:
+            logger.error(f"Error regenerating EDL files: {e}")
+        finally:
+            _REGEN_ACTIVE = False
+            _REGEN_LOCK.release()
+
+    thread = threading.Thread(target=_task, name="EDLRegenThread")
+    thread.daemon = True
+    thread.start()
+    logger.info("Started background EDL regeneration task.")
+    return True, "Regeneration started in background."
 
 def trigger_background_regeneration():
     """

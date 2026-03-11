@@ -6,7 +6,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install build dependencies for python-ldap/python-whois extensions
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies to a temporary location
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --prefix=/install --no-warn-script-location -r requirements.txt
 
@@ -34,9 +34,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV PORT=8080
 
-# Install runtime dependencies and utilities
-# whois: Required for IP investigation tools
-# curl: Required for Healthcheck
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libldap2 \
     libsasl2-2 \
@@ -45,31 +43,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed python packages from builder
+# Copy installed packages
 COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY . .
 
-# --- OpenShift / Kubernetes Compatibility ---
-# 1. Ensure directory exists for volume mounting
-# 2. Grant permissions to the root group (GID 0) to allow random UIDs to write
-RUN mkdir -p /app/threat_feed_aggregator/data && \
+# OpenShift / Rootless Compatibility
+RUN mkdir -p /app/threat_feed_aggregator/data \
+             /app/threat_feed_aggregator/certs \
+             /app/threat_feed_aggregator/data/edl_cache \
+             /app/threat_feed_aggregator/data/flask_session && \
     chgrp -R 0 /app && \
-    chmod -R g=u /app
+    chmod -R g=u /app && \
+    chmod g=u /etc/passwd && \
+    chmod +x /app/entrypoint.sh
 
-# Expose unprivileged port
 EXPOSE 8080
 
-# Entrypoint setup
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f -k https://localhost:8080/login || exit 1
+  CMD curl -f http://localhost:8080/login || exit 1
 
-# Run as non-root (OpenShift will override UID, but keeps GID 0)
 USER 1001
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]

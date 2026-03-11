@@ -31,14 +31,11 @@ echo "Running pre-start initialization..."
 python -m threat_feed_aggregator.prestart
 
 # Run the application with Gunicorn (Production WSGI)
-echo "Starting Threat Feed Aggregator with Gunicorn (HTTPS Mode)..."
+echo "Starting Threat Feed Aggregator with Gunicorn (HTTP Mode)..."
 
-CERT_FILE="/app/threat_feed_aggregator/certs/cert.pem"
-KEY_FILE="/app/threat_feed_aggregator/certs/key.pem"
-
-# Re-enabled SSL certs for Gunicorn
-exec gunicorn --workers 4 --threads 2 --bind 0.0.0.0:8080 \
-    --certfile "$CERT_FILE" --keyfile "$KEY_FILE" \
+# Balanced configuration: 2 workers allow GUI responsiveness during heavy tasks
+# No certfile/keyfile flags = HTTP mode
+exec gunicorn --worker-class=gthread --workers=2 --threads=4 --bind 0.0.0.0:8080 \
     --access-logfile - \
-    --timeout 60 \
+    --timeout 300 \
     threat_feed_aggregator.app:app

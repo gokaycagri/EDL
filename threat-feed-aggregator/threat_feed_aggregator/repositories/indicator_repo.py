@@ -63,13 +63,15 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
                     db.execute('''
                         INSERT INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
                         SELECT indicator, %s, country, type, 50, 1 FROM temp_bulk_indicators
-                        ON CONFLICT (indicator) DO UPDATE SET last_seen = EXCLUDED.last_seen
+                        ON CONFLICT (indicator) DO UPDATE SET 
+                            last_seen = EXCLUDED.last_seen
                     ''', (now_iso,))
                     
                     db.execute('''
                         INSERT INTO indicator_sources (indicator, source_name, last_seen)
                         SELECT indicator, %s, %s FROM temp_bulk_indicators
-                        ON CONFLICT (indicator, source_name) DO UPDATE SET last_seen = EXCLUDED.last_seen
+                        ON CONFLICT (indicator, source_name) DO UPDATE SET 
+                            last_seen = EXCLUDED.last_seen
                     ''', (source_name, now_iso))
                 else:
                     db.execute('''
@@ -88,43 +90,42 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
         except Exception as e:
             logger.error(f"Error bulk upserting for {source_name}: {e}")
             raise
-
 def recalculate_scores(source_confidence_map=None, conn=None, target_source=None):
     if source_confidence_map is None: source_confidence_map = {}
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                count_where = ""
-                count_params = []
-                if target_source:
-                    count_where = "WHERE indicators.indicator IN (SELECT indicator FROM indicator_sources WHERE source_name = ?)"
-                    count_params = [target_source]
+    with db_transaction(conn) as db:
+        try:
 
-                db.execute(f'UPDATE indicators SET source_count = (SELECT COUNT(*) FROM indicator_sources WHERE indicator_sources.indicator = indicators.indicator) {count_where}', count_params)
-                db.execute('CREATE TEMPORARY TABLE IF NOT EXISTS temp_source_conf (name TEXT PRIMARY KEY, score INTEGER)')
-                db.execute('DELETE FROM temp_source_conf')
-                
-                conf_data = [(n, s) for n, s in source_confidence_map.items()]
-                if conf_data: db.executemany('INSERT INTO temp_source_conf VALUES (?, ?)', conf_data)
+            count_where = ""
+            count_params = []
+            if target_source:
+                count_where = "WHERE indicators.indicator IN (SELECT indicator FROM indicator_sources WHERE source_name = ?)"
+                count_params = [target_source]
 
-                score_where = "WHERE EXISTS (SELECT 1 FROM indicator_sources WHERE indicator = indicators.indicator)"
-                score_params = []
-                if target_source:
-                    score_where = "WHERE indicators.indicator IN (SELECT indicator FROM indicator_sources WHERE source_name = ?)"
-                    score_params = [target_source]
+            db.execute(f'UPDATE indicators SET source_count = (SELECT COUNT(*) FROM indicator_sources WHERE indicator_sources.indicator = indicators.indicator) {count_where}', count_params)
+            db.execute('CREATE TEMPORARY TABLE IF NOT EXISTS temp_source_conf (name TEXT PRIMARY KEY, score INTEGER)')
+            db.execute('DELETE FROM temp_source_conf')
+            
+            conf_data = [(n, s) for n, s in source_confidence_map.items()]
+            if conf_data: db.executemany('INSERT INTO temp_source_conf VALUES (?, ?)', conf_data)
 
-                if DB_TYPE == 'postgres':
-                    score_calc = "LEAST(100, GREATEST(MAX(COALESCE(sc.score, 50)), 0) + ((indicators.source_count - 1) * 5))"
-                else:
-                    score_calc = "MIN(100, MAX(COALESCE(sc.score, 50)) + ((indicators.source_count - 1) * 5))"
+            score_where = "WHERE EXISTS (SELECT 1 FROM indicator_sources WHERE indicator = indicators.indicator)"
+            score_params = []
+            if target_source:
+                score_where = "WHERE indicators.indicator IN (SELECT indicator FROM indicator_sources WHERE source_name = ?)"
+                score_params = [target_source]
 
-                query = f'UPDATE indicators SET risk_score = (SELECT {score_calc} FROM indicator_sources src LEFT JOIN temp_source_conf sc ON src.source_name = sc.name WHERE src.indicator = indicators.indicator) {score_where}'
-                db.execute(query, score_params)
-                db.commit()
-                invalidate_stats_cache()
-            except Exception as e:
-                logger.error(f"Score error: {e}")
-                db.rollback()
+            if DB_TYPE == 'postgres':
+                score_calc = "LEAST(100, GREATEST(MAX(COALESCE(sc.score, 50)), 0) + ((indicators.source_count - 1) * 5))"
+            else:
+                score_calc = "MIN(100, MAX(COALESCE(sc.score, 50)) + ((indicators.source_count - 1) * 5))"
+
+            query = f'UPDATE indicators SET risk_score = (SELECT {score_calc} FROM indicator_sources src LEFT JOIN temp_source_conf sc ON src.source_name = sc.name WHERE src.indicator = indicators.indicator) {score_where}'
+            db.execute(query, score_params)
+            db.commit()
+            invalidate_stats_cache()
+        except Exception as e:
+            logger.error(f"Score error: {e}")
+            db.rollback()
 
 def get_all_indicators(conn=None):
     with db_transaction(conn) as db:
@@ -284,9 +285,9 @@ def get_indicators_paginated(start=0, length=10, search_value=None, filters=None
 def get_filter_options(column, search_term=None, limit=20, conn=None):
     with db_transaction(conn) as db:
         p = f"%{search_term}%" if search_term else "%"
-        if column == 'source': return [r[0] for row in db.execute("SELECT DISTINCT source_name FROM indicator_sources WHERE source_name LIKE ? ORDER BY source_name LIMIT ?", (p, limit)).fetchall()]
-        if column == 'country': return [r[0] for row in db.execute("SELECT DISTINCT country FROM indicators WHERE country LIKE ? ORDER BY country LIMIT ?", (p, limit)).fetchall() if r[0]]
-        if column == 'type': return [r[0] for row in db.execute("SELECT DISTINCT type FROM indicators WHERE type LIKE ? ORDER BY type LIMIT ?", (p, limit)).fetchall()]
+        if column == 'source': return [row[0] for row in db.execute("SELECT DISTINCT source_name FROM indicator_sources WHERE source_name LIKE ? ORDER BY source_name LIMIT ?", (p, limit)).fetchall()]
+        if column == 'country': return [row[0] for row in db.execute("SELECT DISTINCT country FROM indicators WHERE country LIKE ? ORDER BY country LIMIT ?", (p, limit)).fetchall() if row[0]]
+        if column == 'type': return [row[0] for row in db.execute("SELECT DISTINCT type FROM indicators WHERE type LIKE ? ORDER BY type LIMIT ?", (p, limit)).fetchall()]
         return []
 
 def update_dns_cache_batch(results, conn=None):
@@ -299,7 +300,7 @@ def update_dns_cache_batch(results, conn=None):
 def get_domains_for_resolution(limit=100, retry_days=7, conn=None):
     with db_transaction(conn) as db:
         cutoff = (datetime.now(UTC) - timedelta(days=retry_days)).isoformat()
-        q = 'SELECT i.indicator, i.type FROM indicators i LEFT JOIN dns_resolution_cache c ON i.indicator = c.domain WHERE (i.type = "domain" OR i.type = "url") AND (c.domain IS NULL OR c.last_resolved < ?) LIMIT ?'
+        q = "SELECT i.indicator, i.type FROM indicators i LEFT JOIN dns_resolution_cache c ON i.indicator = c.domain WHERE (i.type = 'domain' OR i.type = 'url') AND (c.domain IS NULL OR c.last_resolved < ?) LIMIT ?"
         return [{'indicator': r[0], 'type': r[1]} for r in db.execute(q, (cutoff, limit)).fetchall()]
 
 def get_dns_resolution_cache_iter(conn=None):

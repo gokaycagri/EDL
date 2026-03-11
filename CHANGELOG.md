@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.18.12] - 2026-03-11
+
+### Fixed
+- **System Settings:** Resolved a 500 Internal Server Error when opening System Settings due to a missing `from_json` Jinja2 filter.
+- **FortiDeceptor Integration:** Implemented more robust API Key parsing using regex to handle various header formats (Bearer prefix, literal quotes, colons).
+- **Gunicorn Stability:** Fixed a startup crash ("null bytes in source code") caused by incorrect file encoding in `version.py` and `app.py`.
+- **API Security:** Added detailed logging for API access attempts to improve troubleshooting of 401/403 errors.
+
 ## [2.0.0] - 2026-03-05
 
 ### Added

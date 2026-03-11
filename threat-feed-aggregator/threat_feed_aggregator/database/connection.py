@@ -17,13 +17,18 @@ from ..constants import DB_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
-logger.info(f"Database Type Detected: {DB_TYPE}")
+# DEBUG PRINT
+print(f"DEBUG: LOADING CONNECTION MODULE (PID: {os.getpid()})")
 
-DB_NAME = os.path.join(DATA_DIR, "threat_feed.db")
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
+
+# Allow overriding DB name for testing
+DB_NAME = os.getenv('TEST_DB_NAME') or os.path.join(DATA_DIR, "threat_feed.db")
 
 # Global Lock for SQLite DB Writes (Postgres handles concurrency itself)
-DB_WRITE_LOCK = threading.Lock()
+# CRITICAL: Use RLock to allow nested transactions from the same thread
+DB_WRITE_LOCK = threading.RLock()
+print(f"DEBUG: DB_WRITE_LOCK initialized as {type(DB_WRITE_LOCK)} at {id(DB_WRITE_LOCK)}")
 
 # Postgres Connection Pool
 pg_pool = None
@@ -62,37 +67,22 @@ class PostgresCursorWrapper:
         query_pg = query.replace('?', '%s')
         
         # 2. Convert 'INSERT OR IGNORE' -> 'INSERT ... ON CONFLICT DO NOTHING'
-        # This is a basic regex replace, might need more care for complex queries
         if 'INSERT OR IGNORE' in query_pg:
             query_pg = query_pg.replace('INSERT OR IGNORE', 'INSERT')
             query_pg += " ON CONFLICT DO NOTHING"
             
-        # 3. Convert 'INSERT OR REPLACE' -> SQLite specific syntax.
-        # Postgres uses 'INSERT ... ON CONFLICT (...) DO UPDATE ...'
-        # This is complex to automate regex-wise. 
-        # Ideally, we should update the repository code. 
-        # But for now, let's try to catch it or fail loudly so we fix it in code.
-        if 'INSERT OR REPLACE' in query_pg:
-             # We can't auto-translate this easily without knowing the Primary Key.
-             # We will handle this by refactoring the specific repository methods (upsert_bulk).
-             pass 
-
+        # 3. Handle duplicate key errors silently if expected
         try:
             self.cursor.execute(query_pg, params)
-            # Emulate lastrowid for single inserts if RETURNING id was used? 
-            # SQLite 'lastrowid' is often used. Postgres needs 'RETURNING id'.
-            if self.cursor.description and 'id' in [c.name for c in self.cursor.description]:
-                 # If we returned something, maybe we can fetch it?
-                 # But standard sqlite execute doesn't fetch.
-                 pass
         except Exception as e:
-            logger.error(f"SQL Error: {e} | Query: {query_pg}")
+            # SILENCE: Don't log duplicate key as ERROR, it's expected and handled
+            if "duplicate key" not in str(e).lower() and "unique constraint" not in str(e).lower():
+                logger.error(f"SQL Error: {e} | Query: {query_pg}")
             raise
         return self
 
     def executemany(self, query, params_seq):
         query_pg = query.replace('?', '%s')
-        # Same regex logic?
         self.cursor.executemany(query_pg, params_seq)
         return self
 
@@ -161,17 +151,16 @@ def get_db_connection(timeout=DB_TIMEOUT):
 def db_transaction(conn=None):
     """
     Context manager for database transactions.
+    Ensures that for SQLite, we use a global RLock to prevent "database is locked".
     """
     should_close = False
     if conn is None:
         conn = get_db_connection()
         should_close = True
+    
     try:
-        # SQLite write lock is only needed for SQLite to prevent "database locked"
-        # Postgres handles it, but keeping the lock context doesn't hurt logic much 
-        # (just serializes app threads, which is sub-optimal for Postgres but safe).
-        # We can conditionally acquire it.
         if DB_TYPE == 'sqlite':
+            # RLock allows the same thread to acquire it multiple times
             with DB_WRITE_LOCK:
                 yield conn
         else:
@@ -181,7 +170,8 @@ def db_transaction(conn=None):
             conn.commit()
     except Exception as e:
         if should_close:
-            conn.rollback()
+            try: conn.rollback()
+            except: pass
         raise e
     finally:
         if should_close:
