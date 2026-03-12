@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.21] - 2026-03-12
+
+### Fixed
+- **Health Check Fix:** Resolved a NameError by adding the missing `jsonify` import in `app.py`, ensuring the `/health` endpoint works correctly for OpenShift probes.
+
 ## [1.18.20] - 2026-03-12
 
 ### Fixed

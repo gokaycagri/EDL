@@ -12,7 +12,7 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
 
