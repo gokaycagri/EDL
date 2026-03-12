@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.18.18] - 2026-03-11
+
+### Fixed
+- **PostgreSQL Stability:** Added thread-safe locking (`pg_pool_lock`) to prevent race conditions during connection pool initialization.
+- **SQL Robustness:** Improved `PostgresCursorWrapper` to handle `INSERT OR IGNORE` (converted to `ON CONFLICT DO NOTHING`) more gracefully, ensuring duplicate key errors are silenced only when explicitly expected.
+- **Dependency Cleanup:** Removed `uvloop` from `requirements.txt` to resolve build failures on Python 3.13, favoring standard `asyncio` for better compatibility.
+- **Requirements Optimization:** Eliminated duplicate and inconsistent package definitions in `requirements.txt` for cleaner builds.
+
+## [1.18.17] - 2026-03-11
+
+### Added
+- **Session-Free API:** Introduced a new `/api/edl/firewall/<filename>` route that bypasses session/MFA requirements. This allows firewalls (FortiGate, Palo Alto) to fetch EDL files without authenticating via a browser session.
+- **UI Update:** Updated the Dashboard's "Copy Link" buttons to point to the new session-free firewall routes.
+
+## [1.18.16] - 2026-03-11
+
+### Added
+- **EDL View Support:** Added `view=1` parameter to the EDL download routes, allowing users to view the raw list content directly in the browser instead of downloading it.
+- **Enhanced Clipboard Integration:** Integrated "Copy Link" icons in the Dashboard EDL table for easier distribution of feed URLs.
+
 ## [1.18.15] - 2026-03-11
 
 ### Fixed

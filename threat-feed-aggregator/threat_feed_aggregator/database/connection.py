@@ -71,25 +71,19 @@ class PostgresCursorWrapper:
         
         # 2. Convert 'INSERT OR IGNORE' -> 'INSERT ... ON CONFLICT DO NOTHING'
         # Note: Postgres doesn't support "INSERT OR IGNORE", it uses "ON CONFLICT DO NOTHING"
-        is_ignore = False
         if 'INSERT OR IGNORE' in query_pg:
             query_pg = query_pg.replace('INSERT OR IGNORE', 'INSERT')
-            if 'ON CONFLICT' not in query_pg:
+            # Only append ON CONFLICT if it's not already there
+            if 'ON CONFLICT' not in query_pg.upper():
                 query_pg += " ON CONFLICT DO NOTHING"
-            is_ignore = True
             
-        # 3. Handle duplicate key errors silently if expected
+        # 3. Execute query
         try:
             self.cursor.execute(query_pg, params)
         except Exception as e:
-            # SILENCE: Don't log duplicate key as ERROR if it's an IGNORE query
-            err_msg = str(e).lower()
-            if is_ignore and ("duplicate key" in err_msg or "unique constraint" in err_msg):
-                # We can't continue with the current transaction if a real PG error occurred,
-                # but ON CONFLICT DO NOTHING should prevent the error from being raised to Python.
-                # If we are here, it means ON CONFLICT didn't catch it or something else failed.
-                return self
-            
+            # We don't silence errors here anymore because ON CONFLICT DO NOTHING 
+            # should handle duplicates without raising an exception.
+            # If an exception occurs, it's a real issue that needs logging/raising.
             logger.error(f"SQL Error: {e} | Query: {query_pg}")
             raise
         return self

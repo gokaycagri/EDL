@@ -1,0 +1,5 @@
+FROM quay.mfa.gov.tr/admin/threat-feed-aggregator:1.18.17
+USER root
+COPY . .
+RUN chgrp -R 0 /app && chmod -R g=u /app && chmod +x /app/entrypoint.sh
+USER 1001
