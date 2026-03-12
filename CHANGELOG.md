@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.25] - 2026-03-12
+
+### Fixed
+- **Scheduler Stability:** Implemented defensive attribute checking (`getattr`) for APScheduler `Job` objects to prevent `AttributeError: next_run_time` during initialization or dashboard refresh.
+
 ## [1.18.24] - 2026-03-12
 
 ### Changed

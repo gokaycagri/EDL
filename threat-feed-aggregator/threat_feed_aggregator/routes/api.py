@@ -360,7 +360,9 @@ def get_scheduled_jobs():
     formatted_jobs = []
 
     for job in jobs:
-        next_run = job.next_run_time.astimezone(target_tz) if job.next_run_time else None
+        # Safely get next_run_time as it might not exist yet if job is being scheduled
+        jt = getattr(job, 'next_run_time', None)
+        next_run = jt.astimezone(target_tz) if jt else None
         time_until = 'N/A'
         if next_run:
             now = datetime.now(target_tz)
