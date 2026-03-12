@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.26] - 2026-03-12
+
+### Fixed
+- **Dashboard Fix:** Corrected a `NameError` in the dashboard index route where an incorrect variable name was used during scheduler job iteration.
+
 ## [1.18.25] - 2026-03-12
 
 ### Fixed

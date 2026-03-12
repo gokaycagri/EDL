@@ -54,7 +54,7 @@ def index():
 
     from apscheduler.triggers.interval import IntervalTrigger
 
-    for job in jobs:
+    for job in scheduled_jobs:
         # Safely get next_run_time as it might not exist yet if job is being scheduled
         jt = getattr(job, 'next_run_time', None)
         next_run = jt.astimezone(target_tz) if jt else None
