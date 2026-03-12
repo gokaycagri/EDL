@@ -41,6 +41,24 @@ from .auth import api_key_required, login_required
 
 logger = logging.getLogger(__name__)
 
+_DECEPTOR_PROBE_STRINGS = {"hacker-ip", "1", "test", "ping"}
+
+
+def _build_type_filter(include_types):
+    """Normalize type filters into a set for O(1) membership checks."""
+    if not include_types:
+        return None
+    return {t.strip() for t in include_types if t and t.strip()}
+
+
+def _sanitize_headers_for_log(headers):
+    """Redact sensitive headers before logging request metadata."""
+    redacted = dict(headers)
+    for key in ("Authorization", "X-API-KEY", "Api-Key"):
+        if key in redacted:
+            redacted[key] = "<redacted>"
+    return redacted
+
 CACHE_DIR = os.path.join(DATA_DIR, 'edl_cache')
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
@@ -114,11 +132,18 @@ def get_saved_custom_edl(token):
 
     # 1. Serve from Cache if valid
     if _is_cache_valid(cache_path):
-        return send_file(cache_path, mimetype='text/plain' if output_format == 'text' else f'text/{output_format}')
+        if output_format == 'text':
+            mimetype = 'text/plain'
+        elif output_format == 'json':
+            mimetype = 'application/json'
+        else:
+            mimetype = 'text/csv'
+        return send_file(cache_path, mimetype=mimetype)
 
     # 2. Regenerate Cache (Streaming)
     include_sources = list_config['sources']
     include_types = list_config['types']
+    include_types_filter = _build_type_filter(include_types)
     
     try:
         iterator = get_filtered_indicators_iter(include_sources)
@@ -131,7 +156,7 @@ def get_saved_custom_edl(token):
                 # Optimized Stream for Text
                 count = 0
                 for row in iterator:
-                    if not include_types or row['type'] in include_types:
+                    if not include_types_filter or row['type'] in include_types_filter:
                         f.write(row['indicator'] + '\n')
                         count += 1
                 if count == 0:
@@ -144,7 +169,7 @@ def get_saved_custom_edl(token):
                     writer = csv.writer(f)
                     writer.writerow(['indicator', 'type', 'risk_score', 'country'])
                     for row in iterator:
-                        if not include_types or row['type'] in include_types:
+                        if not include_types_filter or row['type'] in include_types_filter:
                             writer.writerow([row['indicator'], row['type'], row['risk_score'], row['country']])
                 elif output_format == 'json':
                     # JSON requires loading all to dump list, or complex streaming
@@ -152,7 +177,7 @@ def get_saved_custom_edl(token):
                     import json
                     data = []
                     for row in iterator:
-                        if not include_types or row['type'] in include_types:
+                        if not include_types_filter or row['type'] in include_types_filter:
                             data.append({
                                 'indicator': row['indicator'],
                                 'type': row['type'],
@@ -165,7 +190,13 @@ def get_saved_custom_edl(token):
         import shutil
         shutil.move(temp_path, cache_path)
         
-        return send_file(cache_path, mimetype='text/plain' if output_format == 'text' else f'text/{output_format}')
+        if output_format == 'text':
+            mimetype = 'text/plain'
+        elif output_format == 'json':
+            mimetype = 'application/json'
+        else:
+            mimetype = 'text/csv'
+        return send_file(cache_path, mimetype=mimetype)
 
     except Exception as e:
         logger.error(f"Error generating Custom EDL {token}: {e}")
@@ -190,6 +221,7 @@ def get_generic_edl():
 
     output_format = request.args.get('format', 'text')
     delimiter = request.args.get('delimiter', '\n')
+    include_types_filter = _build_type_filter(include_types)
     
     # Validation
     if output_format not in ['text', 'csv', 'json']:
@@ -205,7 +237,7 @@ def get_generic_edl():
             'risk_score': row['risk_score']
         } for row in iterator}
         
-    output = format_generic(indicators_data, include_types, output_format, delimiter)
+    output = format_generic(indicators_data, include_types_filter, output_format, delimiter)
     
     mimetype = 'text/plain'
     if output_format == 'json':
@@ -675,7 +707,7 @@ def add_indicator():
 
         if action_type.lower() == 'whitelist':
             # Whitelist Logic
-            success, msg = add_whitelist_item(value, description=comment)
+            success, msg = add_whitelist_item(value, item_type=item_type, description=comment)
 
         elif action_type.lower() == 'blacklist':
             # Blacklist Logic
@@ -763,14 +795,14 @@ def deceptor_block():
     try:
         # 1. Capture Raw Data for Debugging
         client_ip = request.remote_addr
-        raw_headers = dict(request.headers)
+        raw_headers = _sanitize_headers_for_log(request.headers)
         raw_body = request.get_data(as_text=True)
+        data_all = request.get_json(silent=True) or request.form
         
         logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body: {raw_body}")
         
         # 2. Extract IP(s) from various locations - Prioritize Body for actual data
-        data = request.get_json(silent=True) or request.form
-        input_data = data.get('whblockdata') or data.get('whblockheader') or data.get('Hacker-IP')
+        input_data = data_all.get('whblockdata') or data_all.get('whblockheader') or data_all.get('Hacker-IP')
         
         # Fallback to headers if body is empty
         if not input_data:
@@ -792,51 +824,50 @@ def deceptor_block():
         # Normalize delimiters to comma
         normalized_ips = re.sub(r'[\s,;]+', ',', input_data).strip(',')
         ip_list = [ip.strip() for ip in normalized_ips.split(',') if ip.strip()]
+
+        config = read_config()
+        default_lifetime_days = config.get("indicator_lifetime_days", 30)
+
+        expiry_input = data_all.get('expiry')
+        if expiry_input:
+            try:
+                seconds = int(expiry_input)
+                expires_at = (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
+                expiry_desc = f"{seconds}s"
+            except Exception:
+                expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
+                expiry_desc = f"{default_lifetime_days} days (system default)"
+        else:
+            expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
+            expiry_desc = f"{default_lifetime_days} days (system default)"
+
+        comment = f"FortiDeceptor block (Expiry: {expiry_desc})"
         
         added_count = 0
+        successful_indicators = []
         from ..utils import validate_indicator
         
         for ip in ip_list:
             # Handle Test Strings & Probes
-            if ip.lower() in ["hacker-ip", "1", "test", "ping"]:
+            if ip.lower() in _DECEPTOR_PROBE_STRINGS:
                 logger.info(f"Deceptor probe/test string detected: {ip}")
                 continue
 
             is_valid, _ = validate_indicator(ip)
             if is_valid:
-                # Handle Expiry - Default to system lifetime if not specified
-                config = read_config()
-                default_lifetime_days = config.get("indicator_lifetime_days", 30)
-                
-                data_all = request.get_json(silent=True) or request.form
-                # If 'expiry' is in request, use it; otherwise use system default days
-                expiry_input = data_all.get('expiry')
-                
-                if expiry_input:
-                    try:
-                        seconds = int(expiry_input)
-                        expires_at = (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
-                        expiry_desc = f"{seconds}s"
-                    except:
-                        # Fallback if invalid input
-                        expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
-                        expiry_desc = f"{default_lifetime_days} days (system default)"
-                else:
-                    # Default: Use global system lifetime
-                    expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
-                    expiry_desc = f"{default_lifetime_days} days (system default)"
-
-                comment = f"FortiDeceptor block (Expiry: {expiry_desc})"
                 success, _ = add_api_blacklist_item(ip, item_type='ip', comment=comment, expires_at=expires_at, source="FortiDeceptor")
                 if success:
                     added_count += 1
-                    # Also record in the main indicators database for persistent visibility
-                    try:
-                        upsert_indicators_bulk([(ip, 'Unknown', 'ip')], source_name="FortiDeceptor")
-                    except Exception as db_err:
-                        logger.error(f"Failed to upsert Deceptor indicator to main DB: {db_err}")
+                    successful_indicators.append((ip, 'Unknown', 'ip'))
             else:
                 logger.warning(f"Skipping invalid IP from Deceptor: {ip}")
+
+        if successful_indicators:
+            # Bulk upsert once to reduce DB transaction overhead for multi-IP payloads.
+            try:
+                upsert_indicators_bulk(successful_indicators, source_name="FortiDeceptor")
+            except Exception as db_err:
+                logger.error(f"Failed to upsert Deceptor indicators to main DB: {db_err}")
 
         # ALWAYS return success 200 if the request reached here with valid API Key
         # This prevents Deceptor from showing "Failed" status during probes

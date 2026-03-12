@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.18.22] - 2026-03-12
+
+### Added
+- **Manual Entries with Context:** Added "Description" field to "Add to Safe List" and "Comment" field to "Add to Block List" modals in the Dashboard. This allows users to provide context and reasons when manually adding indicators.
+- **API Consistency:** Updated the `/api/indicators` endpoint to correctly handle context/comments for both whitelist and blacklist actions.
+
 ## [1.18.21] - 2026-03-12
 
 ### Fixed

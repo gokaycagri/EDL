@@ -455,31 +455,72 @@ function testSource(name) {
 }
 
 function showAddWhitelistModal() {
-    Swal.fire({ title: 'Add to Safe List', input: 'text', showCancelButton: true, confirmButtonText: 'Add' }).then(result => {
-        if (result.isConfirmed) submitForm(AppConfig.urls.addWhitelist, { item: result.value, description: 'Added from Dashboard' });
+    Swal.fire({
+        title: 'Add to Safe List',
+        html: `
+            <div class="text-start">
+                <label class="form-label small fw-bold mb-1">IP, CIDR or Domain</label>
+                <input id="safe-item" class="swal2-input mt-0 mb-3" style="width: 85%;" placeholder="e.g. 1.2.3.4 or example.com">
+                <label class="form-label small fw-bold mb-1">Description / Context (Optional)</label>
+                <input id="safe-desc" class="swal2-input mt-0" style="width: 85%;" placeholder="Why is this safe?">
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Add to Safe List',
+        confirmButtonColor: '#2dce89',
+        preConfirm: () => {
+            const item = document.getElementById('safe-item').value;
+            const desc = document.getElementById('safe-desc').value;
+            if (!item) {
+                Swal.showValidationMessage('Item is required');
+                return false;
+            }
+            return [item, desc];
+        }
+    }).then(result => {
+        if (result.isConfirmed) {
+            const [item, description] = result.value;
+            submitForm(AppConfig.urls.addWhitelist, { 
+                item: item, 
+                description: description || 'Added from Dashboard' 
+            });
+        }
     });
 }
 
 function showAddBlacklistModal() {
-    Swal.fire({ 
-        title: 'Add to Block List', 
-        html: '<input id="swal-input1" class="swal2-input" placeholder="IP/Domain"><input id="swal-input2" class="swal2-input" placeholder="Comment (Optional)">',
-        showCancelButton: true, 
-        confirmButtonText: 'Block',
+    Swal.fire({
+        title: 'Add to Block List',
+        html: `
+            <div class="text-start">
+                <label class="form-label small fw-bold mb-1">IP, CIDR or Domain</label>
+                <input id="block-item" class="swal2-input mt-0 mb-3" style="width: 85%;" placeholder="e.g. 5.6.7.8">
+                <label class="form-label small fw-bold mb-1">Reason / Context (Optional)</label>
+                <input id="block-comment" class="swal2-input mt-0" style="width: 85%;" placeholder="Reason for blocking">
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Block Item',
+        confirmButtonColor: '#f5365c',
         preConfirm: () => {
-            return [
-                document.getElementById('swal-input1').value,
-                document.getElementById('swal-input2').value
-            ]
+            const item = document.getElementById('block-item').value;
+            const comment = document.getElementById('block-comment').value;
+            if (!item) {
+                Swal.showValidationMessage('Item is required');
+                return false;
+            }
+            return [item, comment];
         }
     }).then(result => {
         if (result.isConfirmed) {
             const [item, comment] = result.value;
-            if(item) submitForm(AppConfig.urls.addBlacklist, { item: item, comment: comment });
+            submitForm(AppConfig.urls.addBlacklist, { 
+                item: item, 
+                comment: comment || 'Manual block' 
+            });
         }
     });
 }
-
 function initMap() {
     const data = AppConfig.countryStats;
     try { 
