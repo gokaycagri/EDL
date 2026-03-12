@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.13-slim AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY requirements.txt .
 RUN pip install --prefix=/install --no-warn-script-location -r requirements.txt
 
 # Stage 2: Final
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -62,7 +62,7 @@ RUN mkdir -p /app/threat_feed_aggregator/data \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/login || exit 1
+  CMD curl -f http://localhost:8080/health || exit 1
 
 USER 1001
 

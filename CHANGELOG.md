@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.18.20] - 2026-03-12
+
+### Fixed
+- **Health Check Standardization:** Re-enforced /health endpoint across all configuration files and Docker metadata to resolve persistent pod restarts in OpenShift environments.
+- **Connection Verification:** Confirmed successful firewall connectivity (HTTP 304/200) after path and method updates.
+
+## [1.18.19] - 2026-03-12
+
+### Fixed
+- **Health Check Optimization:** Finalized the /health endpoint and fixed the Docker metadata healthcheck override in Dockerfile.offline to prevent pod crashes in OpenShift.
+- **Firewall EDL Stability:** Added HEAD method support and disabled caching for firewall EDL routes to ensure real-time updates and better connector compatibility.
+
 ## [1.18.18] - 2026-03-11
 
 ### Fixed

@@ -2,4 +2,9 @@ FROM quay.mfa.gov.tr/admin/threat-feed-aggregator:1.18.17
 USER root
 COPY . .
 RUN chgrp -R 0 /app && chmod -R g=u /app && chmod +x /app/entrypoint.sh
+
+# Metadata seviyesindeki Healthcheck'i ezmek için ekledik
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
 USER 1001

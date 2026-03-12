@@ -196,12 +196,12 @@ objects:
           # Healthcheck (Matches Dockerfile logic)
           livenessProbe:
             exec:
-              command: ["curl", "-f", "-k", "https://localhost:8080/login"]
+              command: ["curl", "-f", "-k", "http://localhost:8080/health"]
             initialDelaySeconds: 60
             periodSeconds: 30
           readinessProbe:
             exec:
-              command: ["curl", "-f", "-k", "https://localhost:8080/login"]
+              command: ["curl", "-f", "-k", "http://localhost:8080/health"]
             initialDelaySeconds: 30
             periodSeconds: 10
           securityContext:

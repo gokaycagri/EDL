@@ -66,6 +66,10 @@ app.register_blueprint(bp_system, url_prefix='/system')
 app.register_blueprint(bp_tools, url_prefix='/tools')
 app.register_blueprint(bp_analysis, url_prefix='/analysis')
 
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "healthy", "version": __version__}), 200
+
 @app.context_processor
 def inject_version():
     return {'version': __version__}
