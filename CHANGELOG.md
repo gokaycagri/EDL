@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.23] - 2026-03-12
+
+### Fixed
+- **API Mapping:** Finalized consistency fixes for context/comment field mapping in the `/api/indicators` endpoint.
+
 ## [1.18.22] - 2026-03-12
 
 ### Added

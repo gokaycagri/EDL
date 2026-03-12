@@ -1,4 +1,6 @@
 import io
+import csv
+import json
 import logging
 import os
 import threading
@@ -7,14 +9,13 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 
 import pytz
-from flask import flash, jsonify, redirect, request, send_file, url_for, Response
+from flask import flash, jsonify, redirect, request, send_file, stream_with_context, url_for, Response
 
 from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source, trigger_background_regeneration
 from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..azure_services import process_azure_feeds
 from ..microsoft_services import process_microsoft_feeds
 from ..config_manager import DATA_DIR, read_config, read_stats
-from ..output_formatter import format_generic
 from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
@@ -58,6 +59,14 @@ def _sanitize_headers_for_log(headers):
         if key in redacted:
             redacted[key] = "<redacted>"
     return redacted
+
+
+def _csv_row(values):
+    """Serialize one CSV row without holding the whole output in memory."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(values)
+    return buffer.getvalue()
 
 CACHE_DIR = os.path.join(DATA_DIR, 'edl_cache')
 if not os.path.exists(CACHE_DIR):
@@ -172,19 +181,21 @@ def get_saved_custom_edl(token):
                         if not include_types_filter or row['type'] in include_types_filter:
                             writer.writerow([row['indicator'], row['type'], row['risk_score'], row['country']])
                 elif output_format == 'json':
-                    # JSON requires loading all to dump list, or complex streaming
-                    # For now, load to memory for JSON
-                    import json
-                    data = []
+                    # Write JSON incrementally to avoid holding large lists in memory.
+                    first_item = True
+                    f.write('[')
                     for row in iterator:
                         if not include_types_filter or row['type'] in include_types_filter:
-                            data.append({
+                            if not first_item:
+                                f.write(',\n')
+                            f.write(json.dumps({
                                 'indicator': row['indicator'],
                                 'type': row['type'],
                                 'risk_score': row['risk_score'],
                                 'country': row['country']
-                            })
-                    json.dump(data, f, indent=2)
+                            }))
+                            first_item = False
+                    f.write(']')
 
         # Move temp file to cache path
         import shutil
@@ -227,25 +238,52 @@ def get_generic_edl():
     if output_format not in ['text', 'csv', 'json']:
         return jsonify({'error': 'Invalid format'}), 400
 
-    # Fetch Data
     iterator = get_filtered_indicators_iter(include_sources)
-    
-    indicators_data = {row['indicator']: {
-            'last_seen': row['last_seen'],
-            'country': row['country'],
-            'type': row['type'],
-            'risk_score': row['risk_score']
-        } for row in iterator}
-        
-    output = format_generic(indicators_data, include_types_filter, output_format, delimiter)
-    
-    mimetype = 'text/plain'
-    if output_format == 'json':
-        mimetype = 'application/json'
-    elif output_format == 'csv':
-        mimetype = 'text/csv'
 
-    return Response(output, mimetype=mimetype)
+    if output_format == 'text':
+        @stream_with_context
+        def generate_text():
+            first_item = True
+            for row in iterator:
+                if include_types_filter and row['type'] not in include_types_filter:
+                    continue
+                if not first_item:
+                    yield delimiter
+                yield row['indicator']
+                first_item = False
+
+        return Response(generate_text(), mimetype='text/plain')
+
+    if output_format == 'csv':
+        @stream_with_context
+        def generate_csv():
+            yield _csv_row(['indicator', 'type', 'risk_score', 'country'])
+            for row in iterator:
+                if include_types_filter and row['type'] not in include_types_filter:
+                    continue
+                yield _csv_row([row['indicator'], row['type'], row['risk_score'], row['country']])
+
+        return Response(generate_csv(), mimetype='text/csv')
+
+    @stream_with_context
+    def generate_json():
+        first_item = True
+        yield '['
+        for row in iterator:
+            if include_types_filter and row['type'] not in include_types_filter:
+                continue
+            if not first_item:
+                yield ','
+            yield json.dumps({
+                'indicator': row['indicator'],
+                'type': row['type'],
+                'risk_score': row['risk_score'],
+                'country': row['country']
+            })
+            first_item = False
+        yield ']'
+
+    return Response(generate_json(), mimetype='application/json')
 
 
 def aggregation_task(update_status=True):
