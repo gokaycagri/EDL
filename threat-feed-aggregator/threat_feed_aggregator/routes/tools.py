@@ -100,13 +100,15 @@ def save_dedup_schedule():
         start_time = request.form.get('start_time', '00:00')
         end_time = request.form.get('end_time', '23:59')
         interval = request.form.get('interval', type=int) or 60
+        batch_size = request.form.get('batch_size', type=int) or 50
         
         config['dns_dedup_schedule'] = {
             'enabled': enabled,
             'auto_delete': auto_delete,
             'start_time': start_time,
             'end_time': end_time,
-            'interval_minutes': interval
+            'interval_minutes': interval,
+            'batch_size': batch_size
         }
         
         write_config(config)
@@ -123,12 +125,17 @@ def analyze_dns_duplicates():
     try:
         import asyncio
         from ..services.dns_deduplication import process_background_dns_batch, run_deduplication_sweep
+
+        logger.info("DNS Deduplication Analyze: Manual run requested.")
         
         # Trigger single batch processing
         processed_count = asyncio.run(process_background_dns_batch(batch_size=50))
         
         # Trigger sweep immediately
         deleted_count = run_deduplication_sweep()
+        logger.info(
+            f"DNS Deduplication Analyze: Completed manual run (resolved={processed_count}, deleted={deleted_count})."
+        )
         
         return jsonify({
             'success': True, 

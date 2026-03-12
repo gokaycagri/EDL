@@ -45,11 +45,13 @@ async def process_background_dns_batch(batch_size=50):
     """
     # 1. Get candidates (Domains not resolved recently)
     candidates = get_domains_for_resolution(limit=batch_size, retry_days=7)
+    logger.info(f"DNS Batch: Started (batch_size={batch_size}).")
     
     if not candidates:
+        logger.info("DNS Batch: No domains found for resolution.")
         return 0
-        
-    # logger.info(f"DNS Batch: Resolving {len(candidates)} domains...")
+
+    logger.info(f"DNS Batch: Resolving {len(candidates)} domains...")
 
     # 2. Resolve Async
     loop = asyncio.get_running_loop()
@@ -89,6 +91,13 @@ async def process_background_dns_batch(batch_size=50):
     # 4. Update Cache Only
     if cache_updates:
         update_dns_cache_batch(cache_updates)
+        resolved_non_empty = sum(1 for item in cache_updates if item['resolved_ips'])
+        logger.info(
+            f"DNS Batch: Cache updated for {len(cache_updates)} domains; "
+            f"{resolved_non_empty} resolved with at least one A record."
+        )
+    else:
+        logger.info("DNS Batch: No cache updates were generated.")
         
     return len(candidates)
 

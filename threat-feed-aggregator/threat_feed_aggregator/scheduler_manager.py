@@ -91,7 +91,9 @@ def check_and_run_dns_dedup():
     
     config = read_config()
     conf = config.get('dns_dedup_schedule', {})
-    if not conf.get('enabled', False): return
+    if not conf.get('enabled', False):
+        logger.info("DNS Deduplication: Scheduler trigger skipped (disabled in config).")
+        return
 
     now = datetime.now().time()
     try:
@@ -102,6 +104,16 @@ def check_and_run_dns_dedup():
             
         if in_window:
             batch_size = conf.get('batch_size', 50)
-            asyncio.run(process_background_dns_batch(batch_size=batch_size))
-            if conf.get('auto_delete', False): run_deduplication_sweep()
+            logger.info(f"DNS Deduplication: Running batch (batch_size={batch_size}).")
+            processed_count = asyncio.run(process_background_dns_batch(batch_size=batch_size))
+            logger.info(f"DNS Deduplication: Batch completed (processed={processed_count}).")
+            if conf.get('auto_delete', False):
+                deleted_count = run_deduplication_sweep()
+                logger.info(f"DNS Deduplication: Auto-delete sweep completed (deleted={deleted_count}).")
+            else:
+                logger.info("DNS Deduplication: Auto-delete disabled; sweep skipped.")
+        else:
+            logger.info(
+                f"DNS Deduplication: Scheduler trigger skipped (outside window {start_time}-{end_time})."
+            )
     except Exception as e: logger.error(f"Background DNS Dedup failed: {e}")
