@@ -569,6 +569,20 @@ function copyToClipboard(elementId) {
     });
 }
 
+function copyRawToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        Swal.fire({
+            title: 'Copied!',
+            text: 'Direct URL copied to clipboard.',
+            icon: 'success',
+            timer: 1500,
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false
+        });
+    });
+}
+
 function toggleAllSources() {
     const checks = document.querySelectorAll('.source-check');
     if (checks.length === 0) return;
@@ -585,6 +599,7 @@ window.viewAllHistory = viewAllHistory;
 window.updateScheduledJobs = updateScheduledJobs;
 window.viewAllSchedules = viewAllSchedules;
 window.copyToClipboard = copyToClipboard;
+window.copyRawToClipboard = copyRawToClipboard;
 window.toggleAllSources = toggleAllSources;
 window.updateLogs = updateLogs;
 window.clearTerminal = clearTerminal;

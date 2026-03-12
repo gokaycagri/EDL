@@ -1,5 +1,87 @@
 # Changelog
 
+## [1.18.15] - 2026-03-11
+
+### Fixed
+- **Proxy Authentication:** Implemented automatic URL-encoding for proxy credentials to handle special characters (e.g. '@' in usernames like `user@domain`), resolving 407 authentication errors.
+- **Service Whitelists:** Fixed a 500 error when accessing Microsoft/GitHub/Azure lists by adding the missing `format_generic` import in `api.py`.
+- **API Key Parsing:** Further refined the regex-based API key extraction to handle redundant "Bearer" prefixes and joined strings from FortiDeceptor.
+- **System Settings:** Ensured the `from_json` filter is correctly registered globally in `app.py`.
+
+## [1.18.12] - 2026-03-11
+
+## [2.0.0] - 2026-03-05
+
+### Added
+- **FortiDeceptor Integration:** Full webhook support for automatic IP blocking/unblocking from FortiDeceptor honeypots
+  - `/api/deceptor/block` endpoint with multi-IP support and customizable expiration
+  - `/api/deceptor/unblock` endpoint for removing blocks
+  - Automatic tagging of FortiDeceptor-originated indicators
+  - Special badge display in dashboard and internal search for FortiDeceptor blocks
+- **API Blacklist Expiration:** Time-based automatic expiration of blacklisted items
+  - Configurable expiration duration per item
+  - Background cleanup task for expired entries
+  - Visual expiry timestamp display in UI
+- **System Base URL Configuration:** Optional base URL setting for external link generation
+  - Used in FortiDeceptor webhook URLs
+  - Configurable via System Settings page
+- **OpenShift Deployment:** Production-ready Kubernetes/OpenShift deployment manifests
+  - Complete YAML configuration with PostgreSQL, Redis, and App containers
+  - PVC definitions for persistent storage
+  - Security context configurations
+  - Health probes (liveness/readiness)
+- **Enhanced Internal Search:** Improved investigate tool with FortiDeceptor metadata
+  - Shows blacklist comments and expiry info
+  - Visual distinction for manual vs automated blocks
+- **Comprehensive Test Suite:** 23+ unit tests covering core functionality
+  - Parser tests (5/5 passing)
+  - Aggregation tests (5/5 passing)
+  - Filter tests (10/10 passing)
+  - FortiDeceptor integration tests
+  - System settings tests
+- **Integrations Tab:** New UI section in System Settings for third-party integrations
+  - FortiDeceptor configuration wizard
+  - Visual simulation of Deceptor webhook settings
+  - Copy-to-clipboard for API keys and URLs
+
+### Improved
+- **Authentication Robustness:** Enhanced API key authentication to support multiple header formats
+  - Support for `Authorization: Bearer <key>` header
+  - Support for traditional `X-API-KEY` header
+  - Automatic quote stripping for compatibility
+  - Better error logging for unauthorized attempts
+- **Proxy Configuration:** Enhanced proxy settings for corporate environments
+  - URL-encoded credentials support
+  - Internal domain bypass (no_proxy for .mfa.gov.tr, private IPs)
+  - HTTP fallback for problematic HTTPS proxies
+  - More descriptive error messages
+- **2FA User Experience:** Improved MFA code input field
+  - Auto-focus on page load
+  - Input validation for digits only
+  - Support for space-separated format
+- **Background EDL Regeneration:** Non-blocking file regeneration after API changes
+  - Prevents API response delays
+  - Triggered automatically on blacklist/whitelist changes
+
+### Fixed
+- **Database Schema:** Fixed `api_blacklist` table initialization in test environments
+- **Import Paths:** Resolved circular dependency issues in whitelist logic tests
+- **Proxy Authentication:** Fixed 407 errors with special characters in credentials
+- **MFA Code Length:** Increased input maxlength to accommodate spaces in 2FA codes
+- **2FA Logging:** Added warning logs for failed 2FA attempts
+
+### Technical
+- **Database Migrations:** Added `expires_at` column to `api_blacklist` table
+- **Repository Pattern:** Introduced `get_api_blacklist_item_by_value()` function
+- **Connection Management:** Better database transaction handling in repository layer
+- **Postgres Compatibility:** Optimized UPSERT operations for both SQLite and PostgreSQL
+- **Test Infrastructure:** Created custom test runners bypassing pytest dependency issues
+
+### Documentation
+- **Test Reports:** Generated comprehensive Turkish test reports (TEST_RESULTS_FINAL_TR.md)
+- **Unit Test Report:** Detailed English test execution report (UNIT_TEST_REPORT.md)
+- **Test Status:** Environment compatibility documentation (TEST_STATUS_REPORT.md)
+
 ## [1.15.1] - 2026-01-23
 
 ### Added

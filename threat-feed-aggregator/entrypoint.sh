@@ -31,25 +31,11 @@ echo "Running pre-start initialization..."
 python -m threat_feed_aggregator.prestart
 
 # Run the application with Gunicorn (Production WSGI)
-echo "Starting Threat Feed Aggregator with Gunicorn..."
+echo "Starting Threat Feed Aggregator with Gunicorn (HTTP Mode)..."
 
-# Check if custom certs exist, otherwise use ad-hoc (or let Gunicorn fail if configured to require them)
-# For this setup, we assume certs are generated or provided in the image/volume.
-# If using self-signed for dev, usually we handled it in python.
-# For Gunicorn, we point to the cert files.
-
-CERT_FILE="/app/threat_feed_aggregator/certs/cert.pem"
-KEY_FILE="/app/threat_feed_aggregator/certs/key.pem"
-
-# Arguments for Gunicorn
-# -w 4: 4 Worker processes
-# --threads 2: 2 Threads per worker
-# -b 0.0.0.0:8080: Bind address
-# --certfile & --keyfile: SSL Config
-# --access-logfile -: Log access to stdout
-
-exec gunicorn --workers 4 --threads 2 --bind 0.0.0.0:8080 \
-    --certfile "$CERT_FILE" --keyfile "$KEY_FILE" \
+# Balanced configuration: 2 workers allow GUI responsiveness during heavy tasks
+# No certfile/keyfile flags = HTTP mode
+exec gunicorn --worker-class=gthread --workers=2 --threads=4 --bind 0.0.0.0:8080 \
     --access-logfile - \
-    --timeout 60 \
+    --timeout 300 \
     threat_feed_aggregator.app:app

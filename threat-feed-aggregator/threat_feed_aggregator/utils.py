@@ -317,9 +317,11 @@ def validate_indicator(item):
 def get_proxy_settings():
     """
     Retrieves proxy settings from config and formats them for requests/aiohttp.
+    Ensures internal/local domains bypass the proxy.
     Returns:
-        tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, auth_for_aiohttp)
+        tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, None)
     """
+    import urllib.parse
     from .config_manager import read_config
     config = read_config()
     proxy_config = config.get('proxy', {})
@@ -335,19 +337,21 @@ def get_proxy_settings():
     if not server or not port:
         return None, None, None
 
-    # Format: http://user:pass@host:port or http://host:port
+    # URL-encode credentials for the proxy URL to handle special characters (@, \, etc)
     auth_string = ""
     if username and password:
-        auth_string = f"{username}:{password}@"
+        encoded_user = urllib.parse.quote(username)
+        encoded_pass = urllib.parse.quote(password)
+        auth_string = f"{encoded_user}:{encoded_pass}@"
 
     proxy_url = f"http://{auth_string}{server}:{port}"
 
-    # Requests format
+    # Proxies dict for 'requests'
+    # Adding explicit internal IPs and domains to bypass proxy
     proxies = {
         "http": proxy_url,
-        "https": proxy_url
+        "https": proxy_url,
+        "no_proxy": "localhost,127.0.0.1,10.236.79.11,10.235.30.21,10.235.31.11,ddd.mfa.gov.tr,fortiproxy.mfa.gov.tr,fortiproxy01.mfa.gov.tr,.mfa.gov.tr,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
     }
 
-    # Aiohttp Auth (if separate auth object needed, though URL encoding usually works)
-    # Usually returning just the URL is enough for aiohttp if auth is embedded
     return proxies, proxy_url, None

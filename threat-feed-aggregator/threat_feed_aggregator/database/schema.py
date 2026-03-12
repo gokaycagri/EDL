@@ -82,9 +82,21 @@ def init_db(conn=None):
                     item TEXT NOT NULL UNIQUE,
                     type TEXT NOT NULL DEFAULT 'ip',
                     comment TEXT,
-                    added_at TEXT NOT NULL
+                    added_at TEXT NOT NULL,
+                    expires_at TEXT
                 )
             ''')
+
+            # Migration for api_blacklist (Add 'expires_at' if missing)
+            if DB_TYPE == 'sqlite':
+                cursor = db.execute("PRAGMA table_info(api_blacklist)")
+                columns = [info[1] for info in cursor.fetchall()]
+                if 'expires_at' not in columns: db.execute("ALTER TABLE api_blacklist ADD COLUMN expires_at TEXT")
+            else:
+                try:
+                    db.execute('ALTER TABLE api_blacklist ADD COLUMN IF NOT EXISTS expires_at TEXT')
+                except:
+                    pass
 
             # Users Table
             db.execute('''

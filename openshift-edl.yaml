@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: threat-feed-aggregator
+  labels:
+    app: threat-feed-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: threat-feed-aggregator
+  template:
+    metadata:
+      labels:
+        app: threat-feed-aggregator
+    spec:
+      containers:
+      - name: aggregator
+        image: <IMAGE_ADRESINIZ> # Örn: image-registry.openshift-image-registry.svc:5000/proje/aggregator:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SECRET_KEY
+          value: "SizinGizliAnahtariniz"
+        - name: DB_TYPE
+          value: "postgres"
+        - name: DB_HOST
+          value: "threat-feed-postgres" # OpenShift Service adı
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/threat_feed_aggregator/data
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: threat-feed-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: threat-feed-aggregator
+spec:
+  ports:
+  - port: 443
+    targetPort: 8080
+  selector:
+    app: threat-feed-aggregator
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: threat-feed-aggregator
+spec:
+  to:
+    kind: Service
+    name: threat-feed-aggregator
+  tls:
+    termination: passthrough # SSL sertifikasını uygulama kendisi yönetiyor

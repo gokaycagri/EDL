@@ -60,7 +60,10 @@ def generate_self_signed_cert():
         # Valid for 10 years
         datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=3650)
     ).add_extension(
-        x509.SubjectAlternativeName([x509.DNSName("localhost")]),
+        x509.SubjectAlternativeName([
+            x509.DNSName("localhost"),
+            x509.IPAddress(os.net.ip_address("10.9.102.12") if hasattr(os, 'net') else __import__('ipaddress').ip_address("10.9.102.12"))
+        ]),
         critical=False,
     ).sign(key, hashes.SHA256())
 

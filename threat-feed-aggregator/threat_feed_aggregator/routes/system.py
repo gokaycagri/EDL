@@ -482,12 +482,19 @@ def remove_source(index):
 def update_settings():
     lifetime = request.form.get('indicator_lifetime_days')
     timezone = request.form.get('timezone')
+    base_url = request.form.get('base_url')
 
     config = read_config()
     if lifetime:
         config['indicator_lifetime_days'] = int(lifetime)
     if timezone:
         config['timezone'] = timezone
+    if base_url is not None:
+        # Ensure it ends with /
+        base_url = base_url.strip()
+        if base_url and not base_url.endswith('/'):
+            base_url += '/'
+        config['base_url'] = base_url
 
     write_config(config)
     flash('Global settings updated successfully.', 'success')
@@ -725,31 +732,12 @@ def check_proxy_status():
     Checks if the configured Proxy is working by connecting to a site.
     """
     import requests
+    from ..utils import get_proxy_settings
 
-    from ..config_manager import read_config
+    proxies, _, _ = get_proxy_settings()
 
-    config = read_config()
-    proxy_config = config.get('proxy', {})
-
-    enabled = proxy_config.get('enabled')
-    server = proxy_config.get('server')
-    port = proxy_config.get('port')
-    username = proxy_config.get('username')
-    password = proxy_config.get('password')
-
-    if not enabled:
-        return jsonify({'status': 'disabled', 'message': 'Proxy Disabled'})
-
-    if not server or not port:
-        return jsonify({'status': 'error', 'message': 'Incomplete Configuration'})
-
-    # Construct Proxy URL
-    auth_string = ""
-    if username and password:
-        auth_string = f"{username}:{password}@"
-
-    proxy_url = f"http://{auth_string}{server}:{port}"
-    proxies = {"http": proxy_url, "https": proxy_url}
+    if not proxies:
+        return jsonify({'status': 'disabled', 'message': 'Proxy Disabled or Incomplete'})
 
     try:
         # Test connection to a reliable external site
@@ -761,8 +749,8 @@ def check_proxy_status():
         else:
             return jsonify({'status': 'offline', 'message': f'HTTP {response.status_code}'})
 
-    except Exception:
-        return jsonify({'status': 'offline', 'message': 'Connection Failed'})
+    except Exception as e:
+        return jsonify({'status': 'offline', 'message': f'Connection Failed: {str(e)}'})
 
 @bp_system.route('/update_proxy', methods=['POST'])
 @login_required
@@ -866,6 +854,8 @@ def check_dns_status():
 @login_required
 def test_proxy_connection():
     import requests
+    import urllib.parse
+    import base64
 
     data = request.get_json()
     enabled = data.get('enabled', False)
@@ -880,29 +870,56 @@ def test_proxy_connection():
     if not server or not port:
         return jsonify({'status': 'error', 'message': 'Server and Port are required.'})
 
-    # Clean server address (remove protocol if user added it)
+    # Clean server address
     server = server.replace('http://', '').replace('https://', '').strip('/')
 
-    # Construct Proxy URL
+    # URL-encode credentials for the proxy URL
+    encoded_user = urllib.parse.quote(username) if username else ""
+    encoded_pass = urllib.parse.quote(password) if password else ""
+
     auth_string = ""
-    if username and password:
-        auth_string = f"{username}:{password}@"
+    if encoded_user and encoded_pass:
+        auth_string = f"{encoded_user}:{encoded_pass}@"
 
     proxy_url = f"http://{auth_string}{server}:{port}"
     proxies = {"http": proxy_url, "https": proxy_url}
+    
+    # Standard Browser User-Agent
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
     try:
-        # Test connection to a reliable external site
-        test_url = "https://www.google.com"
-        response = requests.get(test_url, proxies=proxies, timeout=10)
+        # Use a session for more consistent behavior
+        session = requests.Session()
+        session.proxies = proxies
+        session.headers.update(headers)
+        
+        # Test 1: Simple HTTP (Bypasses HTTPS Tunneling issues)
+        test_url_http = "http://www.google.com"
+        try:
+            resp_http = session.get(test_url_http, timeout=10)
+            if resp_http.status_code < 400:
+                return jsonify({'status': 'success', 'message': f'Success! Connected via Proxy (HTTP).'})
+        except Exception as e_http:
+            # If HTTP fails, we continue to try HTTPS or report the error
+            logger.warning(f"Proxy HTTP Test failed: {e_http}")
+
+        # Test 2: HTTPS (Standard)
+        test_url_https = "https://www.google.com"
+        response = session.get(test_url_https, timeout=10, verify=False)
 
         if response.status_code == 200:
-            return jsonify({'status': 'success', 'message': f'Successfully connected to {test_url} via proxy.'})
+            return jsonify({'status': 'success', 'message': f'Successfully connected to {test_url_https} via proxy.'})
         else:
             return jsonify({'status': 'error', 'message': f'Proxy connected but returned status code: {response.status_code}'})
 
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Connection failed: {str(e)}'})
+        # If it still says 407, provide a more helpful hint
+        err_msg = str(e)
+        if "407" in err_msg:
+            err_msg += " | Hint: Check if username needs DOMAIN\\ prefix or if password has unsupported characters."
+        return jsonify({'status': 'error', 'message': f'Connection failed: {err_msg}'})
 
 @bp_system.route('/upload_cert', methods=['POST'])
 @login_required

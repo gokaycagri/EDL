@@ -4,16 +4,17 @@ import os
 import threading
 import time
 import zipfile
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytz
 from flask import flash, jsonify, redirect, request, send_file, url_for, Response
 
-from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source
+from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source, trigger_background_regeneration
 from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..azure_services import process_azure_feeds
 from ..microsoft_services import process_microsoft_feeds
 from ..config_manager import DATA_DIR, read_config, read_stats
+from ..output_formatter import format_generic
 from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
@@ -29,6 +30,7 @@ from ..db_manager import (
     get_filtered_indicators_iter,
     get_custom_list_by_token,
     get_custom_list_count,
+    upsert_indicators_bulk,
 )
 from ..github_services import process_github_feeds
 from ..log_manager import clear_logs, get_live_logs
@@ -52,6 +54,27 @@ def _is_cache_valid(path, ttl_seconds=600):
     mtime = os.stat(path).st_mtime
     age = time.time() - mtime
     return age < ttl_seconds
+
+@bp_api.route('/edl/firewall/<path:filename>')
+def get_firewall_edl(filename):
+    """
+    Public-ish endpoint for firewalls to fetch EDL files.
+    Does NOT require session login.
+    """
+    from flask import send_from_directory
+    from ..config_manager import DATA_DIR, read_config
+    
+    # Security: Ensure we only serve .txt files from the DATA_DIR root (no path traversal)
+    safe_filename = os.path.basename(filename)
+    if not safe_filename.endswith('.txt'):
+        return jsonify({'error': 'Invalid file type'}), 403
+
+    # Optional: Basic IP restriction could be added here if needed
+    # for now, we allow it so firewalls can reach it.
+    
+    logger.info(f"Firewall EDL fetch: {safe_filename} from {request.remote_addr}")
+    return send_from_directory(DATA_DIR, safe_filename, mimetype='text/plain')
+
 
 @bp_api.route('/custom_list/count/<int:list_id>')
 @login_required
@@ -645,12 +668,8 @@ def add_indicator():
             # Ideally we should, but for performance maybe just let it be picked up on next run
             # or we can force a quick update of the files.
             if success:
-                # Regenerate files to reflect changes immediately
-                # Note: This doesn't run the full fetch, just DB -> File generation
-                try:
-                    regenerate_edl_files()
-                except Exception:
-                    pass
+                # Regenerate files to reflect changes immediately in background
+                trigger_background_regeneration()
         else:
             return jsonify({'status': 'error', 'message': 'Invalid type. Use whitelist or blacklist'}), 400
 
@@ -704,14 +723,139 @@ def remove_indicator():
         deleted, msgs = _handle_api_indicator_removal(value, type_hint)
 
         if deleted:
-            try:
-                regenerate_edl_files()
-            except Exception:
-                pass
+            trigger_background_regeneration()
             return jsonify({'status': 'success', 'message': ", ".join(msgs)})
 
         return jsonify({'status': 'error', 'message': 'Item not found'}), 404
 
     except Exception as e:
         logger.error(f"API Error removing indicator: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+from .auth import api_key_required
+
+# --- FortiDeceptor Integration ---
+
+@bp_api.route('/deceptor/block', methods=['POST'])
+@api_key_required
+def deceptor_block():
+    """
+    FortiDeceptor integration for blocking multiple IPs.
+    """
+    logger.info(f"CRITICAL: Deceptor Block Function reached! Client IP: {request.remote_addr}")
+    try:
+        # 1. Capture Raw Data for Debugging
+        client_ip = request.remote_addr
+        raw_headers = dict(request.headers)
+        raw_body = request.get_data(as_text=True)
+        
+        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body: {raw_body}")
+        
+        # 2. Extract IP(s) from various locations - Prioritize Body for actual data
+        data = request.get_json(silent=True) or request.form
+        input_data = data.get('whblockdata') or data.get('whblockheader') or data.get('Hacker-IP')
+        
+        # Fallback to headers if body is empty
+        if not input_data:
+            input_data = request.headers.get('whblockheader') or request.headers.get('Hacker-IP')
+            
+        if not input_data:
+            # Fallback regex scan in body
+            import re
+            ip_matches = re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', raw_body)
+            if ip_matches:
+                input_data = ",".join(ip_matches)
+
+        if not input_data:
+            logger.error(f"Deceptor BLOCK Failed: No IP found. Body: {raw_body}")
+            return jsonify({'status': 'error', 'message': 'No IP found'}), 400
+
+        # 3. Process Multiple IPs (Split by comma or space)
+        import re
+        # Normalize delimiters to comma
+        normalized_ips = re.sub(r'[\s,;]+', ',', input_data).strip(',')
+        ip_list = [ip.strip() for ip in normalized_ips.split(',') if ip.strip()]
+        
+        added_count = 0
+        from ..utils import validate_indicator
+        
+        for ip in ip_list:
+            # Handle Test Strings & Probes
+            if ip.lower() in ["hacker-ip", "1", "test", "ping"]:
+                logger.info(f"Deceptor probe/test string detected: {ip}")
+                continue
+
+            is_valid, _ = validate_indicator(ip)
+            if is_valid:
+                # Handle Expiry - Default to system lifetime if not specified
+                config = read_config()
+                default_lifetime_days = config.get("indicator_lifetime_days", 30)
+                
+                data_all = request.get_json(silent=True) or request.form
+                # If 'expiry' is in request, use it; otherwise use system default days
+                expiry_input = data_all.get('expiry')
+                
+                if expiry_input:
+                    try:
+                        seconds = int(expiry_input)
+                        expires_at = (datetime.now(UTC) + timedelta(seconds=seconds)).isoformat()
+                        expiry_desc = f"{seconds}s"
+                    except:
+                        # Fallback if invalid input
+                        expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
+                        expiry_desc = f"{default_lifetime_days} days (system default)"
+                else:
+                    # Default: Use global system lifetime
+                    expires_at = (datetime.now(UTC) + timedelta(days=default_lifetime_days)).isoformat()
+                    expiry_desc = f"{default_lifetime_days} days (system default)"
+
+                comment = f"FortiDeceptor block (Expiry: {expiry_desc})"
+                success, _ = add_api_blacklist_item(ip, item_type='ip', comment=comment, expires_at=expires_at, source="FortiDeceptor")
+                if success:
+                    added_count += 1
+                    # Also record in the main indicators database for persistent visibility
+                    try:
+                        upsert_indicators_bulk([(ip, 'Unknown', 'ip')], source_name="FortiDeceptor")
+                    except Exception as db_err:
+                        logger.error(f"Failed to upsert Deceptor indicator to main DB: {db_err}")
+            else:
+                logger.warning(f"Skipping invalid IP from Deceptor: {ip}")
+
+        # ALWAYS return success 200 if the request reached here with valid API Key
+        # This prevents Deceptor from showing "Failed" status during probes
+        # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+        return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
+
+    except Exception as e:
+        logger.error(f"FortiDeceptor API Error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@bp_api.route('/deceptor/unblock', methods=['POST'])
+@api_key_required
+def deceptor_unblock():
+    """
+    FortiDeceptor integration for unblocking IPs.
+    Extracts IP from 'whunblockheader' or 'whunblockdata'.
+    """
+    try:
+        # 1. Extract IP
+        ip = request.headers.get('whunblockheader')
+        if not ip:
+            data = request.get_json(silent=True) or request.form
+            ip = data.get('whunblockdata')
+
+        if not ip:
+            return jsonify({'status': 'error', 'message': 'Missing IP (Hacker-IP)'}), 400
+
+        # 2. Remove from API Blacklist
+        if remove_api_blacklist_item(ip):
+            # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+            return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
+
+        return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404
+
+    except Exception as e:
+        logger.error(f"FortiDeceptor API Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
