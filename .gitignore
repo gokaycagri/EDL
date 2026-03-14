@@ -11,19 +11,27 @@ lib64/
 Python.h
 .venv/
 .pytest_cache/
+.ruff_cache/
 
-# Editor-specific
+# Editor / IDE / AI tools
 .idea/
 .vscode/
+.history/
+.claude/
+.gemini/
 *.swp
 *~
 .DS_Store
+Thumbs.db
 
 # Environment
 .env
+.env.local
+.env.*.local
 
 # Logs and databases
 *.log
+*.log.*
 *.sqlite
 *.db
 *.db-shm
@@ -31,17 +39,26 @@ Python.h
 db.json
 stats.json
 
+# SSL / TLS certificates and keys
+*.crt
+*.key
+*.pfx
+*.pem
+*.p12
+
+# GeoIP databases
+*.mmdb
+
 # Local Data & Config (Runtime artifacts)
+data/
+temp_restore/
 threat-feed-aggregator/threat_feed_aggregator/data/config.json
 threat-feed-aggregator/threat_feed_aggregator/data/*.txt
-threat-feed-aggregator/threat_feed_aggregator/data/*.mmdb
-threat-feed-aggregator/threat_feed_aggregator/data/*.pem
 threat-feed-aggregator/threat_feed_aggregator/certs/*.pem
 threat-feed-aggregator/data/config.json
 threat-feed-aggregator/data/*.txt
-threat-feed-aggregator/data/*.mmdb
-threat-feed-aggregator/data/*.pem
 threat-feed-aggregator/data/flask_session/
+threat-feed-aggregator/data/edl_cache/
 
 # Dependencies
 /node_modules
@@ -55,9 +72,7 @@ threat-feed-aggregator/data/flask_session/
 build/
 dist/
 threat_feed_aggregator.egg-info/
-.gemini/
 gha-creds-*.json
-.gemini/settings.json
 
 # Large binary files (Docker images, database dumps, backups)
 *.tar
@@ -65,8 +80,7 @@ gha-creds-*.json
 *.tar.bz2
 *.zip
 *.sql.done
-threat-feed-aggregator/data/migration.sql.done
-postgres.tar
-redis.tar
-threat-feed-aggregator.tar
-threat-feed-bundle.tar
+
+# Misc
+azure_page_dump.html
+*.spec
