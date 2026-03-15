@@ -22,6 +22,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="${REPO_ROOT}/threat-feed-aggregator/threat_feed_aggregator/version.py"
 README_FILE="${REPO_ROOT}/README.md"
 CHANGELOG_FILE="${REPO_ROOT}/CHANGELOG.md"
+CHART_FILE="${REPO_ROOT}/helm/threat-feed-aggregator/Chart.yaml"
+VALUES_FILE="${REPO_ROOT}/helm/threat-feed-aggregator/values.yaml"
 TODAY=$(date +%Y-%m-%d)
 
 # Validate semver format
@@ -48,7 +50,18 @@ echo "  Updated: version.py"
 sed -i "s/Version-[0-9]*\.[0-9]*\.[0-9]*/Version-${NEW_VERSION}/g" "${README_FILE}"
 echo "  Updated: README.md badge"
 
-# 3. Prepend CHANGELOG entry
+# 3. Update Helm chart
+if [ -f "${CHART_FILE}" ]; then
+    sed -i "s/^version: .*/version: ${NEW_VERSION}/" "${CHART_FILE}"
+    sed -i "s/^appVersion: .*/appVersion: \"${NEW_VERSION}\"/" "${CHART_FILE}"
+    echo "  Updated: helm Chart.yaml"
+fi
+if [ -f "${VALUES_FILE}" ]; then
+    sed -i "s/  tag: \".*\"/  tag: \"${NEW_VERSION}\"/" "${VALUES_FILE}"
+    echo "  Updated: helm values.yaml"
+fi
+
+# 4. Prepend CHANGELOG entry
 TEMP_FILE=$(mktemp)
 {
     head -1 "${CHANGELOG_FILE}"
@@ -59,7 +72,7 @@ mv "${TEMP_FILE}" "${CHANGELOG_FILE}"
 echo "  Updated: CHANGELOG.md"
 
 # 4. Stage, commit, and tag
-git -C "${REPO_ROOT}" add "${VERSION_FILE}" "${README_FILE}" "${CHANGELOG_FILE}"
+git -C "${REPO_ROOT}" add "${VERSION_FILE}" "${README_FILE}" "${CHANGELOG_FILE}" "${CHART_FILE}" "${VALUES_FILE}"
 git -C "${REPO_ROOT}" commit -m "release: v${NEW_VERSION}"
 git -C "${REPO_ROOT}" tag -a "v${NEW_VERSION}" -m "v${NEW_VERSION}"
 

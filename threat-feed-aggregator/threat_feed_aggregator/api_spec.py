@@ -3,11 +3,13 @@ OpenAPI 3.1 specification for the Threat Feed Aggregator API.
 Served at /api/docs as JSON.
 """
 
+from .version import __version__
+
 OPENAPI_SPEC = {
     "openapi": "3.1.0",
     "info": {
         "title": "Threat Feed Aggregator API",
-        "version": "1.19.0",
+        "version": __version__,
         "description": "Enterprise threat intelligence aggregation platform API for managing EDLs, indicators, and integrations.",
     },
     "paths": {
