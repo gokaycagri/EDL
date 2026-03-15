@@ -11,11 +11,9 @@ from ..db_manager import (
     get_sources_for_indicator,
     get_domains_for_resolution,
     update_dns_cache_batch,
-    get_existing_ips,
     delete_indicators,
     get_dns_resolution_cache_iter
 )
-from ..database.connection import DB_WRITE_LOCK
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +31,10 @@ def extract_domain(indicator, itype):
             parsed = urlparse(indicator)
             if parsed.hostname:
                 return parsed.hostname
-        except:
+        except Exception:
             pass
-        return indicator.split('/')[0]
+        # If urlparse fails, skip rather than return nonsense like "http:"
+        return None
     return indicator
 
 async def process_background_dns_batch(batch_size=50):
@@ -64,7 +63,10 @@ async def process_background_dns_batch(batch_size=50):
         original = item['indicator']
         itype = item['type']
         domain = extract_domain(original, itype)
-        
+
+        if not domain:
+            continue
+
         items_to_process.append({
             'original': original,
             'domain': domain

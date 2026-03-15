@@ -24,9 +24,9 @@ def api_key_required(f):
             return f(*args, **kwargs)
 
         config = read_config()
+        # Use remote_addr only — X-Forwarded-For is client-spoofable.
+        # Configure Flask ProxyFix middleware if behind a trusted reverse proxy.
         client_ip = request.remote_addr
-        if request.headers.getlist('X-Forwarded-For'):
-             client_ip = request.headers.getlist('X-Forwarded-For')[0]
 
         request_key = None
         auth_header = request.headers.get('Authorization') or request.headers.get('X-API-KEY')
@@ -45,9 +45,9 @@ def api_key_required(f):
                 request_key = cleaned
 
         if request_key:
-            logger.info(f"API Access Attempt | Final Key: {request_key[:10]}... | IP: {client_ip}")
+            logger.info(f"API Access Attempt | Key: {request_key[:6]}*** | IP: {client_ip}")
         else:
-            logger.warning(f"API Key Missing! Headers: {dict(request.headers)}")
+            logger.warning(f"API Key Missing! IP: {client_ip} Path: {request.path}")
             return api_error("Unauthorized: Missing API Key", "AUTH_MISSING_KEY", 401)
 
         api_clients = config.get('api_clients', [])
@@ -71,14 +71,19 @@ def api_key_required(f):
 @bp_auth.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+        username = request.form.get('username', '')
+        password = request.form.get('password', '')
         if username and password:
             success, message, info = check_credentials(username, password)
             if success:
+                from ..services.audit_service import log_action
+                log_action(username, 'login', ip_address=request.remote_addr)
                 if is_mfa_enabled(username):
+                    session.clear()
                     session['pre_mfa_auth'] = {'username': username, 'permissions': info.get('permissions', {}), 'profile_name': info.get('profile_name', 'Local')}
                     return redirect(url_for('auth.verify_2fa'))
+                # Regenerate session to prevent session fixation
+                session.clear()
                 session['logged_in'] = True
                 session['username'] = username
                 session['permissions'] = info.get('permissions', {})
@@ -86,6 +91,8 @@ def login():
                 flash(message, 'success')
                 return redirect(url_for('dashboard.index'))
             else:
+                from ..services.audit_service import log_action
+                log_action(username, 'login_failed', ip_address=request.remote_addr)
                 flash(message, 'danger')
     return render_template('login.html')
 
@@ -98,11 +105,12 @@ def verify_2fa():
         username = user_data['username']
         secret = get_user_mfa_secret(username)
         if verify_totp(secret, code):
+            # Regenerate session to prevent session fixation
+            session.clear()
             session['logged_in'] = True
             session['username'] = username
             session['permissions'] = user_data['permissions']
             session['profile_name'] = user_data['profile_name']
-            session.pop('pre_mfa_auth', None)
             return redirect(url_for('dashboard.index'))
         else:
             flash('Invalid Code', 'danger')

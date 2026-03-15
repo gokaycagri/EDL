@@ -1,0 +1,70 @@
+replicaCount: 1
+
+image:
+  repository: threat-feed-aggregator
+  tag: "1.19.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  hosts:
+    - host: edl.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+env:
+  SECRET_KEY: ""  # REQUIRED — set via --set or secrets
+  ADMIN_PASSWORD: ""
+  DB_TYPE: postgres
+  DB_HOST: postgresql
+  DB_PORT: "5432"
+  DB_NAME: threat_feed
+  DB_USER: threat_user
+  DB_PASS: ""
+  REDIS_HOST: ""
+  SESSION_TIMEOUT_MINUTES: "60"
+
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: ""
+    username: threat_user
+    password: ""
+    database: threat_feed
+
+redis:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: ""
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10

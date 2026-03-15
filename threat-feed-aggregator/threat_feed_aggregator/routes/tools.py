@@ -23,6 +23,14 @@ def lookup_ip():
         if not ip_address:
             return api_error("No IP address provided", "VALIDATION_ERROR", 400)
 
+        # Validate IP address format
+        import ipaddress
+        try:
+            ip_obj = ipaddress.ip_address(ip_address.strip())
+        except ValueError:
+            return api_error("Invalid IP address format", "VALIDATION_ERROR", 400)
+        ip_address = str(ip_obj)
+
         from ..services.investigation_service import InvestigationService
         result = InvestigationService.lookup_ip(ip_address)
 

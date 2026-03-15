@@ -54,8 +54,10 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+import threading
 _config_cache = None
 _config_cache_mtime = 0
+_config_lock = threading.Lock()
 
 def read_config():
     global _config_cache, _config_cache_mtime
@@ -71,25 +73,17 @@ def read_config():
         return {"source_urls": []}
 
     try:
-        current_mtime = os.stat(target_file).st_mtime
-        if _config_cache and current_mtime == _config_cache_mtime:
-            return _config_cache
+        with _config_lock:
+            current_mtime = os.stat(target_file).st_mtime
+            if _config_cache is not None and current_mtime == _config_cache_mtime:
+                return _config_cache
 
-        # Debug: Check file stats
-        # stats = os.stat(target_file)
-        # logger.info(f"[Config] Reading {target_file} | Size: {stats.st_size} | Mtime: {stats.st_mtime}")
-
-        with open(target_file) as f:
-            data = json.load(f)
-            _config_cache = data
-            _config_cache_mtime = current_mtime
-
-            # Check specific keys to debug the issue
-            # if 'proxy' in data:
-            #      logger.info(f"[Config] READ CONTENT: Proxy Enabled={data['proxy'].get('enabled')}, Server={data['proxy'].get('server')}")
-            # else:
-            #      logger.info(f"[Config] READ CONTENT: Proxy key MISSING")
-            return data
+            with open(target_file) as f:
+                data = json.load(f)
+                _validate_config_safe(data)
+                _config_cache = data
+                _config_cache_mtime = current_mtime
+                return data
     except Exception as e:
         logger.error(f"[Config] ERROR reading {target_file}: {e}")
         # Emergency fallback logic remains...
@@ -102,18 +96,42 @@ def read_config():
                  pass
         return {"source_urls": []}
 
+def _validate_config_safe(config):
+    """Validate config and log errors. Returns True if valid."""
+    try:
+        from .config.schema import validate_config
+        errors = validate_config(config)
+        if errors:
+            for err in errors:
+                logger.warning(f"[Config Validation] {err}")
+            return False
+        return True
+    except ImportError:
+        return True  # pydantic not installed, skip validation
+    except Exception as e:
+        logger.error(f"[Config Validation] Unexpected error: {e}")
+        return True  # don't block writes on validation crashes
+
+
 def write_config(config):
     global _config_cache, _config_cache_mtime
+
+    # Validate before writing — log warnings but don't block
+    _validate_config_safe(config)
+
     try:
-        # logger.info(f"[Config] WRITING to {CONFIG_FILE}. Proxy Enabled: {config.get('proxy', {}).get('enabled')}")
-        with open(CONFIG_FILE, "w") as f:
+        # Write to temp file then rename for atomicity
+        tmp_path = CONFIG_FILE + ".tmp"
+        with open(tmp_path, "w") as f:
             json.dump(config, f, indent=4)
             f.flush()
-            os.fsync(f.fileno()) # Force write to disk
+            os.fsync(f.fileno())
+        os.replace(tmp_path, CONFIG_FILE)
 
         # Update cache immediately to prevent stale reads
-        _config_cache = config
-        _config_cache_mtime = os.stat(CONFIG_FILE).st_mtime
+        with _config_lock:
+            _config_cache = config
+            _config_cache_mtime = os.stat(CONFIG_FILE).st_mtime
 
         # Verify write (Optional, can be removed for production speed)
         # with open(CONFIG_FILE, "r") as f: ...

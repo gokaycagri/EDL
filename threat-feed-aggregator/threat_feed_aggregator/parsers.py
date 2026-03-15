@@ -115,11 +115,11 @@ def normalize_indicator(indicator, itype=None):
     elif itype == 'cidr':
         try:
             return str(ipaddress.ip_network(indicator, strict=False)), itype
-        except: pass
+        except (ValueError, TypeError): pass
     elif itype == 'ip':
         try:
             return str(ipaddress.ip_address(indicator)), itype
-        except: pass
+        except (ValueError, TypeError): pass
     
     return indicator, itype
 
@@ -151,7 +151,7 @@ def parse_json_with_type(raw_data, key=None, **kwargs):
 
 def parse_csv_with_type(raw_data, column=0, **kwargs):
     try: column = int(column)
-    except: column = 0
+    except (ValueError, TypeError): column = 0
     items = parse_csv(raw_data, column)
     return [normalize_indicator(item) for item in items]
 

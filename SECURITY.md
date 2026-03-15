@@ -6,9 +6,9 @@ Security updates are provided for the following versions of Threat Feed Aggregat
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.9.x   | :white_check_mark: |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 1.19.x  | :white_check_mark: |
+| 1.18.x  | :white_check_mark: |
+| < 1.18  | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -32,12 +32,19 @@ In your report, please include:
 
 ## Built-in Security Features
 
-The Threat Feed Aggregator includes several enterprise-grade security features:
+The Threat Feed Aggregator includes the following security features:
 
-1.  **Role-Based Access Control (RBAC):** Granular permissions for Dashboard, System, and Tools modules.
-2.  **Multi-Client API Management:** Unique API keys for different consumers (SOAR, SIEM) instead of a single global key.
-3.  **Trusted Host Enforcement:** Each API client can be restricted to specific source IP addresses.
-4.  **CSRF Protection:** All state-changing operations via the web UI are protected by CSRF tokens.
-5.  **Non-Root Docker:** The container is designed to run as a non-privileged user (UID 1001) and is compatible with OpenShift arbitrary UIDs.
-6.  **Secure Proxy Support:** Centralized proxy configuration ensures all outbound threat intelligence traffic is routed securely.
-7.  **Input Validation:** Strict validation for all threat indicators (IP/CIDR/URL) to prevent injection and data corruption.
+1.  **CSRF Protection:** Global CSRF enforcement via Flask-WTF CSRFProtect. All HTML forms and AJAX calls include CSRF tokens. Machine-to-machine API endpoints are selectively exempted.
+2.  **Session Security:** Sessions are regenerated on login to prevent session fixation. Cookie signing via `SESSION_USE_SIGNER`.
+3.  **Role-Based Access Control (RBAC):** Granular permissions for Dashboard, System, Tools, and Analysis modules.
+4.  **Multi-Factor Authentication (MFA):** TOTP-based 2FA compatible with Google/Microsoft Authenticator.
+5.  **Multi-Client API Management:** Unique API keys for different consumers (SOAR, SIEM) with IP allowlist enforcement.
+6.  **LDAP Injection Prevention:** All user input is escaped before LDAP filter construction.
+7.  **Input Validation:** IP addresses validated with `ipaddress` module. Indicators validated before DB insertion.
+8.  **Path Traversal Prevention:** File download endpoint restricts to basename with extension allowlist.
+9.  **XXE Protection:** XML file imports use `defusedxml` to prevent entity expansion attacks.
+10. **Atomic File Writes:** EDL files and config are written to temp files first, then renamed — prevents serving partial/empty data.
+11. **Non-Root Docker:** Container runs as non-privileged user (UID 1001), compatible with OpenShift arbitrary UIDs.
+12. **Secure Proxy Support:** Centralized proxy configuration for all outbound traffic.
+13. **JWT Token Security:** SSO tokens require `exp` claim. Signature verified with constant-time comparison.
+14. **No Sensitive Logging:** API keys, TOTP codes, and request headers are not logged.

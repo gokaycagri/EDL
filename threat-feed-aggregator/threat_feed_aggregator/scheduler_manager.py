@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 db_type = os.getenv('DB_TYPE', 'sqlite')
 if db_type == 'postgres':
     db_user = os.getenv('DB_USER', 'threat_user')
-    db_pass = os.getenv('DB_PASS', 'secure_password')
+    db_pass = os.getenv('DB_PASS', '')
     db_host = os.getenv('DB_HOST', 'postgres')
     db_port = os.getenv('DB_PORT', '5432')
     db_name = os.getenv('DB_NAME', 'threat_feed')

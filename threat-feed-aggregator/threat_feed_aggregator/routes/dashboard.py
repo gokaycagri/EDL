@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime
 
 from flask import render_template
@@ -85,8 +86,13 @@ def index():
 @bp_dashboard.route('/data/<path:filename>')
 @login_required
 def download_file(filename):
-    from flask import send_from_directory, request
+    from flask import send_from_directory, request, abort
 
     from ..config_manager import DATA_DIR
+    # Prevent path traversal — only serve basename
+    safe_filename = os.path.basename(filename)
+    ALLOWED_EXTENSIONS = ('.txt', '.json', '.csv', '.zip')
+    if not safe_filename or not safe_filename.endswith(ALLOWED_EXTENSIONS):
+        abort(403)
     as_attachment = request.args.get('view') != '1'
-    return send_from_directory(DATA_DIR, filename, as_attachment=as_attachment)
+    return send_from_directory(DATA_DIR, safe_filename, as_attachment=as_attachment)

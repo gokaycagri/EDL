@@ -1,6 +1,7 @@
 import ipaddress
 import logging
 import os
+import re
 from datetime import datetime
 
 import pytz
@@ -355,3 +356,24 @@ def get_proxy_settings():
     }
 
     return proxies, proxy_url, None
+
+
+# --- Password Complexity ---
+
+_PASSWORD_MIN_LENGTH = 8
+
+
+def validate_password_strength(password):
+    """
+    Validate password complexity.
+    Returns (is_valid, error_message).
+    """
+    if not password or len(password) < _PASSWORD_MIN_LENGTH:
+        return False, f"Password must be at least {_PASSWORD_MIN_LENGTH} characters."
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter."
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter."
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one digit."
+    return True, ""

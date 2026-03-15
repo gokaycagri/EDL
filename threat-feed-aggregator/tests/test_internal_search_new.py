@@ -48,8 +48,8 @@ def test_lookup_internal_endpoint_integration(client, app):
         sess['logged_in'] = True
         sess['username'] = 'admin'
 
-    with patch('threat_feed_aggregator.routes.tools.get_sources_for_indicator', return_value=mock_global_sources.copy()), 
-         patch('threat_feed_aggregator.routes.tools.get_api_blacklist_item_by_value', return_value=mock_blacklist_item):
+    with (patch('threat_feed_aggregator.routes.tools.get_sources_for_indicator', return_value=mock_global_sources.copy()),
+          patch('threat_feed_aggregator.routes.tools.get_api_blacklist_item_by_value', return_value=mock_blacklist_item)):
         
         response = client.post('/tools/api/lookup_internal', 
                                 data=json.dumps({'indicator': test_ip}),
@@ -79,8 +79,8 @@ def test_lookup_internal_no_blacklist_match(client, app):
         sess['logged_in'] = True
         sess['username'] = 'admin'
 
-    with patch('threat_feed_aggregator.routes.tools.get_sources_for_indicator', return_value=mock_global_sources), 
-         patch('threat_feed_aggregator.routes.tools.get_api_blacklist_item_by_value', return_value=None):
+    with (patch('threat_feed_aggregator.routes.tools.get_sources_for_indicator', return_value=mock_global_sources),
+          patch('threat_feed_aggregator.routes.tools.get_api_blacklist_item_by_value', return_value=None)):
         
         response = client.post('/tools/api/lookup_internal', 
                                 data=json.dumps({'indicator': test_ip}),

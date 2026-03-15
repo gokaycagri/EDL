@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
 import pytz
+import structlog
 
 from .config_manager import DATA_DIR
 
@@ -113,3 +114,35 @@ def setup_memory_logging():
     
     # Add Filter to ignore noisy session warnings
     root_logger.addFilter(SessionFilter())
+
+    # Configure structlog
+    _configure_structlog()
+
+
+def _configure_structlog():
+    """Configure structlog to work with stdlib logging."""
+    is_production = os.environ.get("FLASK_ENV") == "production"
+
+    shared_processors = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+    ]
+
+    if is_production:
+        renderer = structlog.processors.JSONRenderer()
+    else:
+        renderer = structlog.dev.ConsoleRenderer()
+
+    structlog.configure(
+        processors=[
+            *shared_processors,
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )

@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytz
 from flask import flash, jsonify, redirect, request, send_file, stream_with_context, url_for, Response
 
-from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source, trigger_background_regeneration
+from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source
 from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..azure_services import process_azure_feeds
 from ..microsoft_services import process_microsoft_feeds
@@ -40,10 +40,18 @@ from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, v
 from ..services.job_service import job_service
 from . import bp_api
 from .auth import api_key_required, login_required
+from ..auth_manager import permission_required
+from ..api_spec import OPENAPI_SPEC
 
 logger = logging.getLogger(__name__)
 
 _DECEPTOR_PROBE_STRINGS = {"hacker-ip", "1", "test", "ping"}
+
+
+@bp_api.route('/docs')
+def api_docs():
+    """Serve OpenAPI 3.1 specification as JSON."""
+    return jsonify(OPENAPI_SPEC)
 
 
 def _build_type_filter(include_types):
@@ -212,6 +220,12 @@ def get_saved_custom_edl(token):
 
     except Exception as e:
         logger.error(f"Error generating Custom EDL {token}: {e}")
+        # Clean up temp file on error
+        try:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        except OSError:
+            pass
         return jsonify({'error': 'Generation failed'}), 500
 
 
@@ -305,16 +319,23 @@ def aggregation_task(update_status=True):
     logging.debug("aggregation_task completed.")
 
 
+_aggregation_lock = threading.Lock()
+
 @bp_api.route('/run')
 @login_required
 def run_script():
     logging.debug("Received request to /api/run endpoint.")
-    if job_service.aggregation_status == "running":
+    if not _aggregation_lock.acquire(blocking=False):
         logging.info("Aggregation already running, returning status.")
         return api_response({"aggregation_status": "running"}, message="Aggregation already running")
 
-    job_service.aggregation_status = "running"
-    thread = threading.Thread(target=aggregation_task)
+    def _run():
+        try:
+            aggregation_task()
+        finally:
+            _aggregation_lock.release()
+
+    thread = threading.Thread(target=_run)
     thread.start()
     logging.info("Aggregation task started in a new thread.")
     return api_response({"aggregation_status": "running"}, message="Aggregation started")
@@ -466,6 +487,14 @@ def clear_live_logs_route():
     return api_response(message="Live logs cleared.")
 
 
+@bp_api.route('/feed_health')
+@login_required
+def feed_health_api():
+    """Returns health status for all feeds."""
+    from ..services.feed_health import get_all_health_statuses
+    return api_response(get_all_health_statuses())
+
+
 @bp_api.route('/source_stats')
 @login_required
 def source_stats_api():
@@ -587,14 +616,20 @@ def api_update_azure():
 
 @bp_api.route('/backup', methods=['GET'])
 @login_required
+@permission_required('system', 'rw')
 def backup_system():
     try:
-        # Create in-memory zip
+        from ..services.audit_service import log_action
+        log_action(
+            request.cookies.get('session', 'unknown'),
+            'backup_download',
+            ip_address=request.remote_addr,
+            details=f"User: {request.cookies.get('session', 'unknown')}",
+        )
+
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # Files to backup
             files_to_backup = ['config.json', 'threat_feed.db', 'safe_list.txt', 'jobs.sqlite']
-
             for filename in files_to_backup:
                 file_path = os.path.join(DATA_DIR, filename)
                 if os.path.exists(file_path):
@@ -752,7 +787,7 @@ def add_indicator():
         elif action_type.lower() == 'blacklist':
             success, msg = add_api_blacklist_item(value, item_type=item_type, comment=comment)
             if success:
-                trigger_background_regeneration()
+                regenerate_edl_files()
         else:
             return api_error("Invalid type. Use whitelist or blacklist", "VALIDATION_ERROR", 400)
 
@@ -806,7 +841,7 @@ def remove_indicator():
         deleted, msgs = _handle_api_indicator_removal(value, type_hint)
 
         if deleted:
-            trigger_background_regeneration()
+            regenerate_edl_files()
             return api_response({"value": value}, message=", ".join(msgs))
 
         return api_error("Item not found", "NOT_FOUND", 404)
@@ -906,7 +941,7 @@ def deceptor_block():
 
         # ALWAYS return success 200 if the request reached here with valid API Key
         # This prevents Deceptor from showing "Failed" status during probes
-        # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+        # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
         return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
 
     except Exception as e:
@@ -933,7 +968,7 @@ def deceptor_unblock():
 
         # 2. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
-            # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+            # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
 
         return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404

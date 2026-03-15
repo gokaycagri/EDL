@@ -23,7 +23,9 @@ from ..db_manager import (
     remove_whitelist_item,
     set_admin_password,
     update_admin_profile,
+    update_api_blacklist_item,
     update_local_user_password,
+    update_whitelist_item,
     is_mfa_enabled,
     create_custom_list,
     delete_custom_list
@@ -95,12 +97,24 @@ def remove_custom_list_route():
 @bp_system.route('/')
 @login_required
 def index():
+    from ..services.feed_health import get_all_health_statuses
     config = read_config()
     users = get_all_users()
     profiles = get_admin_profiles()
     ldap_mappings = get_ldap_group_mappings()
     user_mfa_status = is_mfa_enabled(session.get('username'))
-    return render_template('system.html', config=config, users=users, profiles=profiles, ldap_mappings=ldap_mappings, mfa_enabled=user_mfa_status)
+    feed_health = get_all_health_statuses()
+    return render_template('system.html', config=config, users=users, profiles=profiles, ldap_mappings=ldap_mappings, mfa_enabled=user_mfa_status, feed_health=feed_health)
+
+@bp_system.route('/feed_health/reenable', methods=['POST'])
+@login_required
+def reenable_feed():
+    from ..services.feed_health import reenable_source
+    source_name = request.form.get('source_name')
+    if source_name:
+        reenable_source(source_name)
+        flash(f'Feed "{source_name}" re-enabled.', 'success')
+    return redirect(url_for('system.index'))
 
 @bp_system.route('/ldap/mappings/add', methods=['POST'])
 @login_required
@@ -144,13 +158,20 @@ def delete_ldap_mapping():
 @bp_system.route('/users/add', methods=['POST'])
 @login_required
 def add_user():
+    from ..utils import validate_password_strength
     username = request.form.get('username')
     password = request.form.get('password')
     profile_id = request.form.get('profile_id', type=int)
 
     if username and password:
+        valid, pw_msg = validate_password_strength(password)
+        if not valid:
+            flash(pw_msg, 'danger')
+            return redirect(url_for('system.index'))
         success, message = add_local_user(username, password, profile_id)
         if success:
+            from ..services.audit_service import log_action
+            log_action(session.get('username'), 'user_create', target=username)
             flash(f'User {username} added successfully.', 'success')
         else:
             flash(f'Error adding user: {message}', 'danger')
@@ -252,8 +273,8 @@ def _parse_import_file(file):
     Parses uploaded file (txt, json, xml) and returns unique items set.
     """
     import json
-    import xml.etree.ElementTree as ET
-    
+    import defusedxml.ElementTree as ET
+
     filename = file.filename.lower()
     content = file.read().decode('utf-8', errors='ignore')
     items = set()
@@ -464,7 +485,7 @@ def update_source(index):
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/remove_source/<int:index>')
+@bp_system.route('/remove_source/<int:index>', methods=['POST'])
 @login_required
 def remove_source(index):
     # Note: In app.py this was /remove/<int:index>
@@ -994,7 +1015,7 @@ def add_whitelist():
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/whitelist/remove/<int:item_id>', methods=['GET'])
+@bp_system.route('/whitelist/remove/<int:item_id>', methods=['POST'])
 @login_required
 def remove_whitelist(item_id):
     # Note: In app.py this was /remove_whitelist/<int:item_id>
@@ -1051,7 +1072,7 @@ def add_blacklist():
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/blacklist/remove/<path:item_val>', methods=['GET'])
+@bp_system.route('/blacklist/remove/<path:item_val>', methods=['POST'])
 @login_required
 def remove_blacklist(item_val):
     remove_api_blacklist_item(item_val)

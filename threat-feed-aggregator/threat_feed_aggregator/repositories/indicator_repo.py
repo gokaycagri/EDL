@@ -1,35 +1,39 @@
 import logging
+import os
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 
-from ..database.connection import DB_WRITE_LOCK, db_transaction, DB_TYPE
+from ..database.connection import db_transaction, DB_TYPE
 
 logger = logging.getLogger(__name__)
 
 # --- CACHING LOGIC ---
+
 _STATS_CACHE = {}
 _STATS_CACHE_TTL = 300  # 5 minutes
+_STATS_CACHE_LOCK = threading.Lock()
 
 def invalidate_stats_cache():
     """Invalidates the in-memory stats cache."""
-    global _STATS_CACHE
-    _STATS_CACHE.clear()
+    with _STATS_CACHE_LOCK:
+        _STATS_CACHE.clear()
     logger.debug("Stats cache invalidated.")
 
 def _get_cached_stat(key, fetch_func, *args, **kwargs):
     """Helper to get a stat from cache or fetch it."""
-    global _STATS_CACHE
     now = time.time()
-    
-    # Check cache
-    if key in _STATS_CACHE:
-        val, timestamp = _STATS_CACHE[key]
-        if now - timestamp < _STATS_CACHE_TTL:
-            return val
-    
-    # Cache miss
+
+    with _STATS_CACHE_LOCK:
+        if key in _STATS_CACHE:
+            val, timestamp = _STATS_CACHE[key]
+            if now - timestamp < _STATS_CACHE_TTL:
+                return val
+
+    # Cache miss — fetch outside lock to avoid holding it during DB query
     val = fetch_func(*args, **kwargs)
-    _STATS_CACHE[key] = (val, now)
+    with _STATS_CACHE_LOCK:
+        _STATS_CACHE[key] = (val, now)
     return val
 
 # --- SCORING & UPSERT LOGIC ---
@@ -63,28 +67,32 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
                     db.execute('''
                         INSERT INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
                         SELECT indicator, %s, country, type, 50, 1 FROM temp_bulk_indicators
-                        ON CONFLICT (indicator) DO UPDATE SET 
-                            last_seen = EXCLUDED.last_seen
+                        ON CONFLICT (indicator) DO UPDATE SET last_seen = EXCLUDED.last_seen
                     ''', (now_iso,))
-                    
                     db.execute('''
                         INSERT INTO indicator_sources (indicator, source_name, last_seen)
                         SELECT indicator, %s, %s FROM temp_bulk_indicators
-                        ON CONFLICT (indicator, source_name) DO UPDATE SET 
-                            last_seen = EXCLUDED.last_seen
+                        ON CONFLICT (indicator, source_name) DO UPDATE SET last_seen = EXCLUDED.last_seen
                     ''', (source_name, now_iso))
                 else:
+                    # SQLite: INSERT OR IGNORE + UPDATE (ON CONFLICT not supported with SELECT subquery)
                     db.execute('''
-                        INSERT OR REPLACE INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
+                        INSERT OR IGNORE INTO indicators (indicator, last_seen, country, type, risk_score, source_count)
                         SELECT indicator, ?, country, type, 50, 1 FROM temp_bulk_indicators
                     ''', (now_iso,))
-                    
                     db.execute('''
-                        INSERT OR REPLACE INTO indicator_sources (indicator, source_name, last_seen)
+                        UPDATE indicators SET last_seen = ?
+                        WHERE indicator IN (SELECT indicator FROM temp_bulk_indicators)
+                    ''', (now_iso,))
+                    db.execute('''
+                        INSERT OR IGNORE INTO indicator_sources (indicator, source_name, last_seen)
                         SELECT indicator, ?, ? FROM temp_bulk_indicators
                     ''', (source_name, now_iso))
+                    db.execute('''
+                        UPDATE indicator_sources SET last_seen = ?
+                        WHERE source_name = ? AND indicator IN (SELECT indicator FROM temp_bulk_indicators)
+                    ''', (now_iso, source_name))
 
-            db.commit()
             invalidate_stats_cache()
             logger.info(f"Bulk upsert completed for {source_name}: {len(deduplicated_indicators)} items.")
         except Exception as e:
@@ -121,11 +129,10 @@ def recalculate_scores(source_confidence_map=None, conn=None, target_source=None
 
             query = f'UPDATE indicators SET risk_score = (SELECT {score_calc} FROM indicator_sources src LEFT JOIN temp_source_conf sc ON src.source_name = sc.name WHERE src.indicator = indicators.indicator) {score_where}'
             db.execute(query, score_params)
-            db.commit()
             invalidate_stats_cache()
         except Exception as e:
             logger.error(f"Score error: {e}")
-            db.rollback()
+            raise
 
 def get_all_indicators(conn=None):
     with db_transaction(conn) as db:
@@ -137,9 +144,23 @@ def get_all_indicators(conn=None):
 
 def clean_database_vacuum(conn=None):
     """Performs VACUUM to shrink DB size and optimize indexes."""
-    with db_transaction(conn) as db:
-        db.execute('VACUUM')
-        logger.info("Database vacuumed and optimized.")
+    if DB_TYPE == 'sqlite':
+        # VACUUM cannot run inside a transaction in SQLite — use a raw connection in autocommit
+        from ..config_manager import DATA_DIR
+        from ..constants import DB_TIMEOUT
+        import sqlite3 as _sqlite3
+        db_path = os.getenv('TEST_DB_NAME') or os.path.join(DATA_DIR, "threat_feed.db")
+        raw_conn = _sqlite3.connect(db_path, timeout=DB_TIMEOUT)
+        try:
+            raw_conn.isolation_level = None
+            raw_conn.execute('VACUUM')
+            logger.info("Database vacuumed and optimized.")
+        finally:
+            raw_conn.close()
+    else:
+        with db_transaction(conn) as db:
+            db.execute('VACUUM')
+            logger.info("Database vacuumed and optimized.")
 
 def get_all_indicators_iter(conn=None):
     with db_transaction(conn) as db:
@@ -157,23 +178,21 @@ def get_filtered_indicators_iter(source_names=None, conn=None):
 
 def remove_old_indicators(source_retention_map=None, default_days=30, conn=None):
     if source_retention_map is None: source_retention_map = {}
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                now = datetime.now(UTC)
-                cursor = db.execute("SELECT DISTINCT source_name FROM indicator_sources")
-                for row in cursor.fetchall():
-                    src = row['source_name']
-                    cutoff = now - timedelta(days=source_retention_map.get(src, default_days))
-                    db.execute("DELETE FROM indicator_sources WHERE source_name = ? AND last_seen < ?", (src, cutoff.isoformat()))
-                
-                cur = db.execute('DELETE FROM indicators WHERE indicator NOT IN (SELECT DISTINCT indicator FROM indicator_sources)')
-                db.commit()
-                invalidate_stats_cache()
-                return cur.rowcount
-            except Exception as e:
-                logger.error(f"Cleanup error: {e}")
-                return 0
+    with db_transaction(conn) as db:
+        try:
+            now = datetime.now(UTC)
+            cursor = db.execute("SELECT DISTINCT source_name FROM indicator_sources")
+            for row in cursor.fetchall():
+                src = row['source_name']
+                cutoff = now - timedelta(days=source_retention_map.get(src, default_days))
+                db.execute("DELETE FROM indicator_sources WHERE source_name = ? AND last_seen < ?", (src, cutoff.isoformat()))
+
+            cur = db.execute('DELETE FROM indicators WHERE indicator NOT IN (SELECT DISTINCT indicator FROM indicator_sources)')
+            invalidate_stats_cache()
+            return cur.rowcount
+        except Exception as e:
+            logger.error(f"Cleanup error: {e}")
+            return 0
 
 def get_unique_indicator_count(itype=None, conn=None):
     def _fetch(t, c):
@@ -195,15 +214,14 @@ def get_country_stats(conn=None):
     return _get_cached_stat("country_stats", _fetch, conn)
 
 def save_historical_stats(conn=None):
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            try:
-                total = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
-                counts = {row[0]: row[1] for row in db.execute("SELECT type, COUNT(*) FROM indicators GROUP BY type").fetchall()}
-                db.execute('INSERT INTO stats_history (timestamp, total_indicators, ip_count, domain_count, url_count) VALUES (?, ?, ?, ?, ?)',
-                           (datetime.now(UTC).isoformat(), total, counts.get('ip', 0)+counts.get('cidr', 0), counts.get('domain', 0), counts.get('url', 0)))
-                db.commit()
-            except Exception as e: logger.error(f"History error: {e}")
+    with db_transaction(conn) as db:
+        try:
+            total = db.execute("SELECT COUNT(*) FROM indicators").fetchone()[0]
+            counts = {row[0]: row[1] for row in db.execute("SELECT type, COUNT(*) FROM indicators GROUP BY type").fetchall()}
+            db.execute('INSERT INTO stats_history (timestamp, total_indicators, ip_count, domain_count, url_count) VALUES (?, ?, ?, ?, ?)',
+                       (datetime.now(UTC).isoformat(), total, counts.get('ip', 0)+counts.get('cidr', 0), counts.get('domain', 0), counts.get('url', 0)))
+        except Exception as e:
+            logger.error(f"History error: {e}")
 
 def get_historical_stats(days=30, conn=None):
     with db_transaction(conn) as db:
@@ -259,7 +277,7 @@ def get_indicators_paginated(start=0, length=10, search_value=None, filters=None
                     elif v.startswith('<'): op, v = "<", v[1:]
                     elif v.startswith('='): op, v = "=", v[1:]
                     try: conds.append(f"i.risk_score {op} ?"); params.append(int(v))
-                    except: pass
+                    except (ValueError, TypeError): pass
                 elif col == 'source':
                     if "JOIN indicator_sources s" not in joins: joins.append("JOIN indicator_sources s ON i.indicator = s.indicator")
                     conds.append("s.source_name LIKE ?"); params.append(f"%{val}%")
@@ -277,7 +295,8 @@ def get_indicators_paginated(start=0, length=10, search_value=None, filters=None
         filtered_records = db.execute(count_query, params).fetchone()[0] if conds else total_records
 
         cols = {'indicator':'i.indicator','type':'i.type','country':'i.country','risk_score':'i.risk_score','source_count':'i.source_count','last_seen':'i.last_seen'}
-        base_query += f" ORDER BY {cols.get(order_col, 'i.risk_score')} {order_dir if order_dir.lower() in ['asc','desc'] else 'desc'} LIMIT ? OFFSET ?"
+        safe_dir = 'asc' if order_dir.lower() == 'asc' else 'desc'
+        base_query += f" ORDER BY {cols.get(order_col, 'i.risk_score')} {safe_dir} LIMIT ? OFFSET ?"
         params.extend([length, start])
         
         return total_records, filtered_records, [dict(row) for row in db.execute(base_query, params).fetchall()]
@@ -295,7 +314,6 @@ def update_dns_cache_batch(results, conn=None):
         q = 'INSERT INTO dns_resolution_cache (domain, resolved_ips, last_resolved) VALUES (?, ?, ?) ON CONFLICT(domain) DO UPDATE SET resolved_ips=EXCLUDED.resolved_ips, last_resolved=EXCLUDED.last_resolved'
         if DB_TYPE == 'postgres': q = q.replace('?', '%s')
         db.executemany(q, [(r['domain'], r['resolved_ips'], r['last_resolved']) for r in results])
-        db.commit()
 
 def get_domains_for_resolution(limit=100, retry_days=7, conn=None):
     with db_transaction(conn) as db:
@@ -310,14 +328,12 @@ def get_dns_resolution_cache_iter(conn=None):
 
 def delete_indicators(indicators_list, conn=None):
     if not indicators_list: return 0
-    with DB_WRITE_LOCK:
-        with db_transaction(conn) as db:
-            p = ','.join(['?'] * len(indicators_list))
-            db.execute(f"DELETE FROM indicator_sources WHERE indicator IN ({p})", indicators_list)
-            cur = db.execute(f"DELETE FROM indicators WHERE indicator IN ({p})", indicators_list)
-            db.commit()
-            invalidate_stats_cache()
-            return cur.rowcount
+    with db_transaction(conn) as db:
+        p = ','.join(['?'] * len(indicators_list))
+        db.execute(f"DELETE FROM indicator_sources WHERE indicator IN ({p})", indicators_list)
+        cur = db.execute(f"DELETE FROM indicators WHERE indicator IN ({p})", indicators_list)
+        invalidate_stats_cache()
+        return cur.rowcount
 
 def get_existing_ips(ip_list, conn=None):
     if not ip_list: return set()

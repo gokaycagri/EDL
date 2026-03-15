@@ -54,6 +54,9 @@ def register_itai_middleware(app):
         logger.info("ITAI_MODE is disabled — middleware inactive (SSO endpoint returns 403).")
         return
 
+    if not ITAI_JWT_SECRET:
+        logger.error("ITAI_MODE is enabled but ITAI_JWT_SECRET is not set! SSO will not work.")
+
     logger.info("ITAI_MODE is enabled — registering middleware.")
 
     # iframe cookie settings
@@ -117,9 +120,12 @@ def _verify_hs256_token(token: str, secret: str) -> dict | None:
 
         payload = json.loads(payload_b)
 
-        # Check expiration
+        # Check expiration — tokens without exp are rejected
         exp = payload.get("exp")
-        if exp and time.time() > exp:
+        if not exp:
+            logger.warning("SSO token rejected: missing 'exp' claim.")
+            return None
+        if time.time() > exp:
             logger.warning("SSO token expired.")
             return None
 
@@ -156,16 +162,25 @@ def sso_login():
     if payload is None:
         return api_error("Invalid or expired token", "SSO_INVALID_TOKEN", 401)
 
-    # Create Flask session
+    # Create Flask session — regenerate to prevent session fixation
     username = payload.get("preferred_username") or payload.get("sub", "itai_user")
+
+    # Read permissions from JWT if available, otherwise default to full access
+    jwt_permissions = payload.get("permissions")
+    if isinstance(jwt_permissions, dict):
+        permissions = jwt_permissions
+    else:
+        permissions = {
+            "dashboard": "rw",
+            "system": "rw",
+            "tools": "rw",
+            "analysis": "rw",
+        }
+
+    session.clear()
     session["logged_in"] = True
     session["username"] = username
-    session["permissions"] = {
-        "dashboard": "rw",
-        "system": "rw",
-        "tools": "rw",
-        "analysis": "rw",
-    }
+    session["permissions"] = permissions
     session["profile_name"] = "ITAI SSO"
 
     logger.info(f"SSO login successful for user: {username}")

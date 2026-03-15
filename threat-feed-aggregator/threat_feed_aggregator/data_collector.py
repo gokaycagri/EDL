@@ -3,6 +3,7 @@ import logging
 import aiohttp
 import requests
 
+from .config_manager import read_config
 from .utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,16 @@ async def get_async_session(verify_ssl=True):
     """
     resolver = aiohttp.ThreadedResolver()
     # We set verify_ssl at the connector level
-    connector = aiohttp.TCPConnector(resolver=resolver, verify_ssl=verify_ssl)
+    ssl_context = None if verify_ssl else False
+    connector = aiohttp.TCPConnector(resolver=resolver, ssl=ssl_context)
 
     return aiohttp.ClientSession(connector=connector)
+
+def _is_ssl_bypass_url(url):
+    """Check if URL is in the configured SSL bypass list."""
+    config = read_config()
+    bypass_hosts = config.get('ssl_bypass_hosts', [])
+    return any(host in url for host in bypass_hosts)
 
 def fetch_data_from_url(url, auth=None):
     """
@@ -23,11 +31,10 @@ def fetch_data_from_url(url, auth=None):
     """
     try:
         proxies, _, proxy_auth = get_proxy_settings()
-        
-        # SSL Verification logic: Disable for internal MFA domains
-        verify_ssl = True
-        if "mfa.gov.tr" in url or "10.236.79.11" in url:
-            verify_ssl = False
+
+        # SSL verification — bypass only for configured internal hosts
+        verify_ssl = not _is_ssl_bypass_url(url)
+        if not verify_ssl:
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -38,7 +45,7 @@ def fetch_data_from_url(url, auth=None):
         response.raise_for_status()
         return response.text
     except requests.exceptions.RequestException as e:
-        if hasattr(e.response, 'status_code') and e.response.status_code == 404:
+        if getattr(e, 'response', None) is not None and e.response.status_code == 404:
              logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
         else:
              logger.error(f"Error fetching data from {url}: {e}")
@@ -50,15 +57,15 @@ async def fetch_data_from_url_async(url, session=None, auth=None):
     """
     try:
         _, proxy_url, _ = get_proxy_settings()
-        
-        # SSL Verification logic
-        is_internal = "mfa.gov.tr" in url or "10.236.79.11" in url
-        
+
+        # SSL verification — bypass only for configured hosts
+        is_internal = _is_ssl_bypass_url(url)
+        _timeout = aiohttp.ClientTimeout(total=30)
+
         # Internal helper to perform the actual GET
         async def do_get(s):
-            # For aiohttp, we pass ssl=False to skip verification for internal sites
             ssl_param = False if is_internal else None
-            async with s.get(url, timeout=30, proxy=proxy_url, auth=auth, ssl=ssl_param) as response:
+            async with s.get(url, timeout=_timeout, proxy=proxy_url, auth=auth, ssl=ssl_param) as response:
                 if response.status == 404:
                     return None
                 response.raise_for_status()

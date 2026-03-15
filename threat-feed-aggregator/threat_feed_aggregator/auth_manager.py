@@ -46,7 +46,7 @@ def verify_totp(secret, code):
         if result:
             logger.info("TOTP verification successful.")
         else:
-            logger.warning(f"TOTP verification failed for code: {code} (Invalid Code)")
+            logger.warning("TOTP verification failed (Invalid Code)")
         return result
     except Exception as e:
         logger.error(f"Error during TOTP verification: {e}")
@@ -158,8 +158,10 @@ def _check_ldap_credentials(username, password):
                     if conn.bound:
                         logger.info(f"LDAP bind SUCCESS for user: {username} (DN: {test_dn})")
                         # Success! Now fetch groups for RBAC
-                        short_username = username.split('\\')[-1]
-                        search_filter = f"( |(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={test_dn}))"
+                        from ldap3.utils.conv import escape_filter_chars
+                        short_username = escape_filter_chars(username.split('\\')[-1])
+                        safe_dn = escape_filter_chars(test_dn)
+                        search_filter = f"(|(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={safe_dn}))"
                         conn.search(base_dn, search_filter, attributes=['memberOf', 'distinguishedName'])
 
                         user_groups = []
@@ -189,20 +191,19 @@ def _check_ldap_credentials(username, password):
                         import json
                         permissions = json.loads(profile_data['permissions']) if profile_data else {}
 
-                        # --- NEW: Sync LDAP user to local users table for MFA support ---
+                        # Sync LDAP user to local users table for MFA support
                         try:
-                            from .database.connection import db_transaction, DB_WRITE_LOCK, DB_TYPE
-                            with DB_WRITE_LOCK:
-                                with db_transaction() as db:
-                                    if DB_TYPE == 'postgres':
-                                        db.execute('''
-                                            INSERT INTO users (username, password_hash, profile_id)
-                                            VALUES (%s, %s, %s)
-                                            ON CONFLICT (username) DO UPDATE SET profile_id = EXCLUDED.profile_id
-                                        ''', (username, 'LDAP_USER', profile_id))
-                                    else:
-                                        db.execute('INSERT OR REPLACE INTO users (username, password_hash, profile_id) VALUES (?, ?, ?)',
-                                                    (username, 'LDAP_USER', profile_id))
+                            from .database.connection import db_transaction, DB_TYPE
+                            with db_transaction() as db:
+                                if DB_TYPE == 'postgres':
+                                    db.execute('''
+                                        INSERT INTO users (username, password_hash, profile_id)
+                                        VALUES (%s, %s, %s)
+                                        ON CONFLICT (username) DO UPDATE SET profile_id = EXCLUDED.profile_id
+                                    ''', (username, 'LDAP_USER', profile_id))
+                                else:
+                                    db.execute('INSERT OR REPLACE INTO users (username, password_hash, profile_id) VALUES (?, ?, ?)',
+                                                (username, 'LDAP_USER', profile_id))
                         except Exception as sync_e:
                             logger.error(f"Failed to sync LDAP user to local DB: {sync_e}")
                         # --- End Sync ---

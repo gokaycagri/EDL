@@ -1,7 +1,7 @@
 import json
 import logging
 
-from ..database.connection import DB_WRITE_LOCK, db_transaction, DB_TYPE
+from ..database.connection import db_transaction, DB_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def init_db(conn=None):
                 # Postgres Column Checks (Attempt add and ignore error)
                 try:
                     db.execute('ALTER TABLE whitelist ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT \'ip\'')
-                except:
+                except Exception:
                     pass
 
             # API Blacklist Table
@@ -95,7 +95,7 @@ def init_db(conn=None):
             else:
                 try:
                     db.execute('ALTER TABLE api_blacklist ADD COLUMN IF NOT EXISTS expires_at TEXT')
-                except:
+                except Exception:
                     pass
 
             # Users Table
@@ -174,7 +174,29 @@ def init_db(conn=None):
                     last_resolved TEXT
                 )
             ''')
-            # Index moved to create_indexes_safely
+            # Audit Log
+            db.execute(f'''
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id {pk_def},
+                    timestamp TEXT NOT NULL,
+                    username TEXT,
+                    action TEXT NOT NULL,
+                    target TEXT,
+                    details TEXT,
+                    ip_address TEXT
+                )
+            ''')
+
+            # Indicator Tags
+            db.execute('''
+                CREATE TABLE IF NOT EXISTS indicator_tags (
+                    indicator TEXT NOT NULL,
+                    tag TEXT NOT NULL,
+                    PRIMARY KEY (indicator, tag),
+                    FOREIGN KEY(indicator) REFERENCES indicators(indicator) ON DELETE CASCADE
+                )
+            ''')
+
             logger.info("All tables checked.")
 
             # Seed Default Profiles
