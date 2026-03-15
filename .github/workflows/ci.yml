@@ -3,8 +3,13 @@ name: Threat Feed Aggregator CI
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/edl
 
 jobs:
   lint:
@@ -60,3 +65,55 @@ jobs:
       working-directory: ./threat-feed-aggregator
       run: |
         python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v --tb=short
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read version from source
+        id: version
+        working-directory: ./threat-feed-aggregator
+        run: |
+          APP_VERSION=$(python -c "from threat_feed_aggregator.version import __version__; print(__version__)")
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine Docker tags
+        id: tags
+        run: |
+          TAGS="${REGISTRY}/${IMAGE_NAME}:latest"
+          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${{ steps.version.outputs.app_version }}"
+          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:sha-${{ steps.version.outputs.short_sha }}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./threat-feed-aggregator
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
