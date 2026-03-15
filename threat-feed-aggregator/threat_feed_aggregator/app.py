@@ -42,7 +42,9 @@ app.config['WTF_CSRF_CHECK_DEFAULT'] = False
 
 if os.environ.get('REDIS_HOST'):
     app.config['SESSION_TYPE'] = 'redis'
-    app.config['SESSION_REDIS'] = redis.from_url(f'redis://{os.environ['REDIS_HOST']}:{os.environ.get('REDIS_PORT', 6379)}')
+    redis_host = os.environ['REDIS_HOST']
+    redis_port = os.environ.get('REDIS_PORT', 6379)
+    app.config['SESSION_REDIS'] = redis.from_url(f'redis://{redis_host}:{redis_port}')
 else:
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_FILE_DIR'] = os.path.join(DATA_DIR, 'flask_session')
