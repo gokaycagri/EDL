@@ -1,5 +1,5 @@
-import io
 import csv
+import io
 import json
 import logging
 import os
@@ -9,17 +9,20 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 
 import pytz
-from flask import flash, jsonify, redirect, request, send_file, stream_with_context, url_for, Response
+from flask import Response, flash, jsonify, redirect, request, send_file, session, stream_with_context, url_for
 
 from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source
-from ..scheduler_manager import scheduler, update_scheduled_jobs
+from ..api_spec import OPENAPI_SPEC
+from ..auth_manager import permission_required
 from ..azure_services import process_azure_feeds
-from ..microsoft_services import process_microsoft_feeds
 from ..config_manager import DATA_DIR, read_config, read_stats
 from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
     clear_job_history,
+    get_custom_list_by_token,
+    get_custom_list_count,
+    get_filtered_indicators_iter,
     get_historical_stats,
     get_indicator_counts_by_type,
     get_job_history,
@@ -27,21 +30,17 @@ from ..db_manager import (
     get_whitelist,
     remove_api_blacklist_item,
     remove_whitelist_item,
-    get_all_indicators_iter,
-    get_filtered_indicators_iter,
-    get_custom_list_by_token,
-    get_custom_list_count,
     upsert_indicators_bulk,
 )
 from ..github_services import process_github_feeds
 from ..log_manager import clear_logs, get_live_logs
+from ..microsoft_services import process_microsoft_feeds
 from ..response_helpers import api_error, api_response
-from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
+from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..services.job_service import job_service
+from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
 from . import bp_api
 from .auth import api_key_required, login_required
-from ..auth_manager import permission_required
-from ..api_spec import OPENAPI_SPEC
 
 logger = logging.getLogger(__name__)
 
@@ -97,18 +96,18 @@ def get_firewall_edl(filename):
     Public-ish endpoint for firewalls to fetch EDL files.
     Does NOT require session login.
     """
-    from flask import send_from_directory, make_response
-    
+    from flask import make_response, send_from_directory
+
     # Security: Ensure we only serve .txt files (no path traversal)
     safe_filename = os.path.basename(filename)
     if not safe_filename.endswith('.txt'):
         return jsonify({'error': 'Invalid file type'}), 403
 
     from ..config_manager import DATA_DIR
-    
+
     file_path = os.path.join(DATA_DIR, safe_filename)
     logger.info(f"Firewall EDL request: {safe_filename} from {request.remote_addr} (Method: {request.method})")
-    
+
     if not os.path.exists(file_path):
         logger.error(f"Firewall EDL File NOT FOUND: {file_path}")
         return jsonify({'error': 'File not found'}), 404
@@ -162,13 +161,13 @@ def get_saved_custom_edl(token):
     include_sources = list_config['sources']
     include_types = list_config['types']
     include_types_filter = _build_type_filter(include_types)
-    
+
     try:
         iterator = get_filtered_indicators_iter(include_sources)
-        
+
         # Write to temporary file then rename (atomic-ish)
         temp_path = cache_path + ".tmp"
-        
+
         with open(temp_path, 'w', encoding='utf-8') as f:
             if output_format == 'text':
                 # Optimized Stream for Text
@@ -209,7 +208,7 @@ def get_saved_custom_edl(token):
         # Move temp file to cache path
         import shutil
         shutil.move(temp_path, cache_path)
-        
+
         if output_format == 'text':
             mimetype = 'text/plain'
         elif output_format == 'json':
@@ -241,14 +240,14 @@ def get_generic_edl():
     """
     types_str = request.args.get('types')
     include_types = types_str.split(',') if types_str else None
-    
+
     sources_str = request.args.get('sources')
     include_sources = sources_str.split(',') if sources_str and sources_str.strip() else None
 
     output_format = request.args.get('format', 'text')
     delimiter = request.args.get('delimiter', '\n')
     include_types_filter = _build_type_filter(include_types)
-    
+
     # Validation
     if output_format not in ['text', 'csv', 'json']:
         return jsonify({'error': 'Invalid format'}), 400
@@ -321,7 +320,7 @@ def aggregation_task(update_status=True):
 
 _aggregation_lock = threading.Lock()
 
-@bp_api.route('/run')
+@bp_api.route('/run', methods=['POST'])
 @login_required
 def run_script():
     logging.debug("Received request to /api/run endpoint.")
@@ -341,7 +340,7 @@ def run_script():
     return api_response({"aggregation_status": "running"}, message="Aggregation started")
 
 
-@bp_api.route('/run_single/<path:name>')
+@bp_api.route('/run_single/<path:name>', methods=['POST'])
 @login_required
 def run_single_feed(name):
     """Triggers a single feed update in the background."""
@@ -499,14 +498,8 @@ def feed_health_api():
 @login_required
 def source_stats_api():
     """Returns current counts and last updated times for all sources."""
-    from ..config_manager import read_config, read_stats
-    from ..db_manager import (
-        get_country_stats,
-        get_indicator_counts_by_type,
-        get_unique_indicator_count,
-        get_source_counts,
-        get_latest_job_times
-    )
+    from ..config_manager import read_config
+    from ..db_manager import get_country_stats, get_latest_job_times, get_source_counts
 
     stats = read_stats()
     config = read_config()
@@ -514,7 +507,7 @@ def source_stats_api():
     total_count = get_unique_indicator_count()
     counts_by_type = get_indicator_counts_by_type()
     country_stats = get_country_stats()
-    
+
     # Fetch real-time data from DB to ensure accuracy
     real_db_counts = get_source_counts()
     real_db_times = get_latest_job_times()
@@ -529,23 +522,23 @@ def source_stats_api():
         if isinstance(data, dict):
             # Use DB count if available, otherwise fallback to stats file
             current_count = real_db_counts.get(name, data.get('count', 0))
-            
+
             # Use DB timestamp if available, otherwise fallback
             last_ts = real_db_times.get(name, data.get('last_updated'))
-            
+
             formatted_stats[name] = {
                 "count": current_count,
                 "last_updated": format_timestamp(last_ts)
             }
         else:
             formatted_stats[name] = data
-            
+
     # 2. Ensure sources in DB (but maybe missing in stats.json) are included if they match config
     configured_sources = [s['name'] for s in config.get('source_urls', [])]
-    
+
     # Merge keys from both DB counts and DB times to catch all active sources
     all_known_sources = set(real_db_counts.keys()) | set(real_db_times.keys())
-    
+
     for name in all_known_sources:
         if name in configured_sources and name not in formatted_stats:
              formatted_stats[name] = {
@@ -614,17 +607,18 @@ def api_update_azure():
         return api_error(str(e), "AZURE_UPDATE_ERROR", 500)
 
 
-@bp_api.route('/backup', methods=['GET'])
+@bp_api.route('/backup', methods=['POST'])
 @login_required
 @permission_required('system', 'rw')
 def backup_system():
     try:
         from ..services.audit_service import log_action
+        username = session.get('username', 'unknown')
         log_action(
-            request.cookies.get('session', 'unknown'),
+            username,
             'backup_download',
             ip_address=request.remote_addr,
-            details=f"User: {request.cookies.get('session', 'unknown')}",
+            details=f"User: {username}",
         )
 
         memory_file = io.BytesIO()
@@ -649,6 +643,7 @@ def backup_system():
 
 @bp_api.route('/restore', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def restore_system():
     if 'backup_file' not in request.files:
         flash('No file part', 'danger')
@@ -864,20 +859,19 @@ def deceptor_block():
     logger.info(f"CRITICAL: Deceptor Block Function reached! Client IP: {request.remote_addr}")
     try:
         # 1. Capture Raw Data for Debugging
-        client_ip = request.remote_addr
         raw_headers = _sanitize_headers_for_log(request.headers)
         raw_body = request.get_data(as_text=True)
         data_all = request.get_json(silent=True) or request.form
-        
-        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body: {raw_body}")
-        
+
+        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body length: {len(raw_body)}")
+
         # 2. Extract IP(s) from various locations - Prioritize Body for actual data
         input_data = data_all.get('whblockdata') or data_all.get('whblockheader') or data_all.get('Hacker-IP')
-        
+
         # Fallback to headers if body is empty
         if not input_data:
             input_data = request.headers.get('whblockheader') or request.headers.get('Hacker-IP')
-            
+
         if not input_data:
             # Fallback regex scan in body
             import re
@@ -886,7 +880,7 @@ def deceptor_block():
                 input_data = ",".join(ip_matches)
 
         if not input_data:
-            logger.error(f"Deceptor BLOCK Failed: No IP found. Body: {raw_body}")
+            logger.error(f"Deceptor BLOCK Failed: No IP found in request (body length: {len(raw_body)})")
             return jsonify({'status': 'error', 'message': 'No IP found'}), 400
 
         # 3. Process Multiple IPs (Split by comma or space)
@@ -912,11 +906,11 @@ def deceptor_block():
             expiry_desc = f"{default_lifetime_days} days (system default)"
 
         comment = f"FortiDeceptor block (Expiry: {expiry_desc})"
-        
+
         added_count = 0
         successful_indicators = []
         from ..utils import validate_indicator
-        
+
         for ip in ip_list:
             # Handle Test Strings & Probes
             if ip.lower() in _DECEPTOR_PROBE_STRINGS:
@@ -966,7 +960,12 @@ def deceptor_unblock():
         if not ip:
             return jsonify({'status': 'error', 'message': 'Missing IP (Hacker-IP)'}), 400
 
-        # 2. Remove from API Blacklist
+        # 2. Validate IP before removal
+        is_valid, _ = validate_indicator(ip)
+        if not is_valid:
+            return jsonify({'status': 'error', 'message': f'Invalid indicator: {ip}'}), 400
+
+        # 3. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
             # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})

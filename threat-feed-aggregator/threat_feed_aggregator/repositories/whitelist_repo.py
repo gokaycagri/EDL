@@ -7,7 +7,7 @@ try:
 except ImportError:
     PgIntegrityError = type(None)
 
-from ..database.connection import db_transaction, get_db_connection
+from ..database.connection import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def add_whitelist_item(item, item_type='ip', description="", conn=None):
     is_valid, inferred_type = validate_indicator(item)
     if not is_valid:
         return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 
@@ -59,7 +59,7 @@ def update_whitelist_item(item_id, new_item, item_type='ip', description="", con
     is_valid, inferred_type = validate_indicator(new_item)
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 
@@ -91,15 +91,15 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
     with db_transaction(conn) as db:
         try:
             now_iso = datetime.now(UTC).isoformat()
-            
+
             from ..database.connection import DB_TYPE
             if DB_TYPE == 'postgres':
                 # Optimized UPSERT for Postgres
                 query = """
-                    INSERT INTO api_blacklist (item, type, comment, added_at, expires_at) 
+                    INSERT INTO api_blacklist (item, type, comment, added_at, expires_at)
                     VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (item) 
-                    DO UPDATE SET 
+                    ON CONFLICT (item)
+                    DO UPDATE SET
                         comment = EXCLUDED.comment,
                         added_at = EXCLUDED.added_at,
                         expires_at = EXCLUDED.expires_at
@@ -163,7 +163,7 @@ def update_api_blacklist_item(item_id, new_item, item_type='ip', comment="", con
     is_valid, inferred_type = validate_indicator(new_item)
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 

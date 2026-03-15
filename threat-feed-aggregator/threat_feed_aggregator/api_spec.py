@@ -100,7 +100,7 @@ OPENAPI_SPEC = {
             }
         },
         "/api/run": {
-            "get": {
+            "post": {
                 "summary": "Trigger full aggregation",
                 "tags": ["Aggregation"],
                 "security": [{"Session": []}],

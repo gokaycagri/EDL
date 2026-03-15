@@ -55,6 +55,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 import threading
+
 _config_cache = None
 _config_cache_mtime = 0
 _config_lock = threading.Lock()
@@ -126,10 +127,10 @@ def write_config(config):
             json.dump(config, f, indent=4)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, CONFIG_FILE)
 
-        # Update cache immediately to prevent stale reads
+        # Invalidate cache under lock BEFORE os.replace to prevent stale reads
         with _config_lock:
+            os.replace(tmp_path, CONFIG_FILE)
             _config_cache = config
             _config_cache_mtime = os.stat(CONFIG_FILE).st_mtime
 

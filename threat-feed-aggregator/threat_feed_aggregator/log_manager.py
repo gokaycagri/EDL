@@ -1,8 +1,8 @@
 import collections
 import logging
 import os
-from logging.handlers import RotatingFileHandler
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 import pytz
 import structlog
@@ -56,7 +56,7 @@ def _load_buffer_from_file():
         return
 
     try:
-        with open(LOG_FILE_PATH, 'r', encoding='utf-8', errors='ignore') as f:
+        with open(LOG_FILE_PATH, encoding='utf-8', errors='ignore') as f:
             # Efficiently read last 1000 lines
             # For simplicity in this context, reading all and taking last 1000 is okay for moderate file sizes (5MB rotation)
             lines = f.readlines()
@@ -111,7 +111,7 @@ def setup_memory_logging():
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
         root_logger.addHandler(file_handler)
-    
+
     # Add Filter to ignore noisy session warnings
     root_logger.addFilter(SessionFilter())
 
@@ -133,9 +133,9 @@ def _configure_structlog():
     ]
 
     if is_production:
-        renderer = structlog.processors.JSONRenderer()
+        structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer()
+        structlog.dev.ConsoleRenderer()
 
     structlog.configure(
         processors=[

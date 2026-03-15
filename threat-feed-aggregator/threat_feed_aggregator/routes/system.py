@@ -1,8 +1,9 @@
 import threading
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import flash, redirect, render_template, request, session, url_for
 
 from ..aggregator import fetch_and_process_single_feed
+from ..auth_manager import permission_required
 from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..config_manager import read_config, write_config
 from ..db_manager import (
@@ -12,13 +13,16 @@ from ..db_manager import (
     add_local_user,
     add_whitelist_item,
     check_admin_credentials,
+    create_custom_list,
     delete_admin_profile,
+    delete_custom_list,
     delete_ldap_group_mapping,
     delete_local_user,
     delete_whitelisted_indicators,
     get_admin_profiles,
     get_all_users,
     get_ldap_group_mappings,
+    is_mfa_enabled,
     remove_api_blacklist_item,
     remove_whitelist_item,
     set_admin_password,
@@ -26,9 +30,6 @@ from ..db_manager import (
     update_api_blacklist_item,
     update_local_user_password,
     update_whitelist_item,
-    is_mfa_enabled,
-    create_custom_list,
-    delete_custom_list
 )
 from ..response_helpers import api_error, api_response
 from . import bp_system
@@ -38,14 +39,13 @@ from .auth import login_required
 @bp_system.route('/custom_lists/add', methods=['POST'])
 @login_required
 def add_custom_list_route():
-    import json
     name = request.form.get('name')
     data_format = request.form.get('format', 'text')
-    
+
     # Types and Sources come as comma-separated or list from form
     # If using checkboxes with same name:
     sources = request.form.getlist('sources')
-    
+
     # If types are sent as comma separated string "ip,domain" or array
     types_input = request.form.get('types') # If hidden input
     if not types_input:
@@ -60,20 +60,23 @@ def add_custom_list_route():
             types.append('url')
         else:
             # Fallback for API or legacy calls
-            if request.form.get('type_ip'): types.extend(['ip', 'cidr'])
-            if request.form.get('type_domain'): types.append('domain')
-            if request.form.get('type_url'): types.append('url')
+            if request.form.get('type_ip'):
+                types.extend(['ip', 'cidr'])
+            if request.form.get('type_domain'):
+                types.append('domain')
+            if request.form.get('type_url'):
+                types.append('url')
     else:
         types = types_input.split(',')
 
     if not name:
         flash('List Name is required.', 'danger')
         return redirect(url_for('dashboard.index'))
-    
+
     if not sources:
         flash('At least one source must be selected.', 'danger')
         return redirect(url_for('dashboard.index'))
-        
+
     try:
         _, token = create_custom_list(name, sources, types, data_format)
         flash(f'Custom EDL "{name}" created successfully.', 'success')
@@ -121,10 +124,10 @@ def reenable_feed():
 def add_ldap_mapping():
     import logging
     logger = logging.getLogger(__name__)
-    
+
     group_dn = request.form.get('group_dn')
     profile_id = request.form.get('profile_id', type=int)
-    
+
     logger.info(f"Attempting to add LDAP mapping - Group: {group_dn}, Profile ID: {profile_id}")
 
     if group_dn and profile_id:
@@ -252,14 +255,18 @@ def delete_user():
 
 @bp_system.route('/users/change_password', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def change_user_password():
+    from ..utils import validate_password_strength
     username = request.form.get('username')
     password = request.form.get('password')
 
-    # Optional: Verify current admin password for security before changing others?
-    # For now, assuming logged-in admin has rights.
-
     if username and password:
+        valid, pw_msg = validate_password_strength(password)
+        if not valid:
+            flash(pw_msg, 'danger')
+            return redirect(url_for('system.index'))
+
         success, message = update_local_user_password(username, password)
         if success:
             flash(f'Password for {username} updated successfully.', 'success')
@@ -273,6 +280,7 @@ def _parse_import_file(file):
     Parses uploaded file (txt, json, xml) and returns unique items set.
     """
     import json
+
     import defusedxml.ElementTree as ET
 
     filename = file.filename.lower()
@@ -294,7 +302,7 @@ def _parse_import_file(file):
                                 break
             elif isinstance(data, dict):
                  # Try to find a list in the dict
-                 for key, value in data.items():
+                 for value in data.values():
                      if isinstance(value, list):
                          for entry in value:
                              if isinstance(entry, str):
@@ -315,7 +323,7 @@ def _parse_import_file(file):
                     items.add(line.split()[0] if ' ' in line else line)
     except Exception as e:
         return None, str(e)
-    
+
     return list(items), None
 
 @bp_system.route('/whitelist/import', methods=['POST'])
@@ -336,24 +344,23 @@ def import_whitelist():
         return redirect(url_for('dashboard.index'))
 
     from ..utils import validate_indicator
-    
+
     count = 0
     errors = 0
-    
+    added_items = []
+
     for item in items:
         is_valid, _ = validate_indicator(item)
         if is_valid:
-            # We add description as "Imported from <filename>"
             success, _ = add_whitelist_item(item, f"Imported from {file.filename}")
             if success:
                 count += 1
+                added_items.append(item)
         else:
             errors += 1
 
-    if count > 0:
-        # Cleanup whitelisted items from DB immediately
-        valid_items = [i for i in items if validate_indicator(i)[0]]
-        delete_whitelisted_indicators(valid_items)
+    if added_items:
+        delete_whitelisted_indicators(added_items)
         flash(f'Successfully imported {count} items to Safe List. ({errors} skipped/invalid)', 'success')
     else:
         flash(f'No valid items imported. ({errors} skipped/invalid)', 'warning')
@@ -378,10 +385,10 @@ def import_blacklist():
         return redirect(url_for('dashboard.index'))
 
     from ..utils import validate_indicator
-    
+
     count = 0
     errors = 0
-    
+
     for item in items:
         is_valid, inferred_type = validate_indicator(item)
         if is_valid:
@@ -431,11 +438,16 @@ def add_source():
             "format": data_format,
             "confidence": confidence
         }
-        if key_or_column: new_source["key_or_column"] = key_or_column
-        if auth_user: new_source["auth_user"] = auth_user
-        if auth_pass: new_source["auth_pass"] = auth_pass
-        if schedule_interval_minutes: new_source["schedule_interval_minutes"] = schedule_interval_minutes
-        if retention_days: new_source["retention_days"] = retention_days
+        if key_or_column:
+            new_source["key_or_column"] = key_or_column
+        if auth_user:
+            new_source["auth_user"] = auth_user
+        if auth_pass:
+            new_source["auth_pass"] = auth_pass
+        if schedule_interval_minutes:
+            new_source["schedule_interval_minutes"] = schedule_interval_minutes
+        if retention_days:
+            new_source["retention_days"] = retention_days
 
         config["source_urls"].append(new_source)
         write_config(config)
@@ -468,11 +480,16 @@ def update_source(index):
                 "format": data_format,
                 "confidence": confidence
             }
-            if key_or_column: updated_source["key_or_column"] = key_or_column
-            if auth_user: updated_source["auth_user"] = auth_user
-            if auth_pass: updated_source["auth_pass"] = auth_pass
-            if schedule_interval_minutes: updated_source["schedule_interval_minutes"] = schedule_interval_minutes
-            if retention_days: updated_source["retention_days"] = retention_days
+            if key_or_column:
+                updated_source["key_or_column"] = key_or_column
+            if auth_user:
+                updated_source["auth_user"] = auth_user
+            if auth_pass:
+                updated_source["auth_pass"] = auth_pass
+            if schedule_interval_minutes:
+                updated_source["schedule_interval_minutes"] = schedule_interval_minutes
+            if retention_days:
+                updated_source["retention_days"] = retention_days
 
             config["source_urls"][index] = updated_source
             write_config(config)
@@ -617,7 +634,8 @@ def update_ldap():
     # Iterate and construct config objects
     for server in servers:
         server = server.strip().replace('ldap://', '').replace('ldaps://', '')
-        if not server: continue # Skip empty
+        if not server:
+            continue  # Skip empty
 
         ldap_servers_config.append({
             'server': server,
@@ -628,7 +646,8 @@ def update_ldap():
         })
 
     config = read_config()
-    if 'auth' not in config: config['auth'] = {}
+    if 'auth' not in config:
+        config['auth'] = {}
 
     config['auth']['ldap_enabled'] = enabled
     config['auth']['ldap_servers'] = ldap_servers_config
@@ -685,7 +704,8 @@ def check_ldap_server_status():
         host = srv.get('server')
         port = srv.get('port', 389)
 
-        if not host: continue
+        if not host:
+            continue
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -748,6 +768,7 @@ def check_proxy_status():
     Checks if the configured Proxy is working by connecting to a site.
     """
     import requests
+
     from ..utils import get_proxy_settings
 
     proxies, _, _ = get_proxy_settings()
@@ -838,8 +859,10 @@ def check_dns_status():
         return api_response({"dns_status": "disabled"}, message="No Custom DNS Configured")
 
     servers_to_test = []
-    if primary: servers_to_test.append(primary)
-    if secondary: servers_to_test.append(secondary)
+    if primary:
+        servers_to_test.append(primary)
+    if secondary:
+        servers_to_test.append(secondary)
 
     working_servers = []
     failed_servers = []
@@ -871,9 +894,12 @@ def check_dns_status():
 @bp_system.route('/proxy/test', methods=['POST'])
 @login_required
 def test_proxy_connection():
-    import requests
+    import logging
     import urllib.parse
-    import base64
+
+    import requests
+
+    logger = logging.getLogger(__name__)
 
     data = request.get_json()
     enabled = data.get('enabled', False)
@@ -901,7 +927,7 @@ def test_proxy_connection():
 
     proxy_url = f"http://{auth_string}{server}:{port}"
     proxies = {"http": proxy_url, "https": proxy_url}
-    
+
     # Standard Browser User-Agent
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -912,7 +938,7 @@ def test_proxy_connection():
         session = requests.Session()
         session.proxies = proxies
         session.headers.update(headers)
-        
+
         # Test 1: Simple HTTP (Bypasses HTTPS Tunneling issues)
         test_url_http = "http://www.google.com"
         try:
@@ -925,7 +951,7 @@ def test_proxy_connection():
 
         # Test 2: HTTPS (Standard)
         test_url_https = "https://www.google.com"
-        response = session.get(test_url_https, timeout=10, verify=False)
+        response = session.get(test_url_https, timeout=10, verify=True)
 
         if response.status_code == 200:
             return api_response({"proxy_status": "online"}, message=f"Successfully connected to {test_url_https} via proxy.")
@@ -1002,7 +1028,7 @@ def add_whitelist():
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
             return redirect(url_for('dashboard.index'))
-        
+
         if inferred_type and inferred_type != 'unknown':
             item_type = inferred_type
 
@@ -1033,7 +1059,7 @@ def update_whitelist():
     if item_id and item:
         success, message = update_whitelist_item(item_id, item, item_type, description)
         if success:
-            flash(f'Safe List item updated successfully.', 'success')
+            flash('Safe List item updated successfully.', 'success')
             # Trigger cleanup for the new item if it was added to DB
             delete_whitelisted_indicators([item])
         else:
@@ -1057,7 +1083,7 @@ def add_blacklist():
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
             return redirect(url_for('dashboard.index'))
-        
+
         if inferred_type and inferred_type != 'unknown':
              item_type = inferred_type
 
@@ -1092,7 +1118,7 @@ def update_blacklist():
     if item_id and item:
         success, message = update_api_blacklist_item(item_id, item, item_type, comment)
         if success:
-            flash(f'Block List item updated successfully.', 'success')
+            flash('Block List item updated successfully.', 'success')
             from ..aggregator import regenerate_edl_files
             regenerate_edl_files()
         else:

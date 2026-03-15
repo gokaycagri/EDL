@@ -1,13 +1,13 @@
 import json
 import logging
 
-from ..database.connection import db_transaction, DB_TYPE
+from ..database.connection import DB_TYPE, db_transaction
 
 logger = logging.getLogger(__name__)
 
 def init_db(conn=None):
     logger.info("Starting init_db...")
-    
+
     with db_transaction(conn) as db:
         try:
             logger.info("Creating tables...")
@@ -16,13 +16,13 @@ def init_db(conn=None):
                 pk_def = "SERIAL PRIMARY KEY"
 
             # 1. Indicators Table
-            db.execute(f'''
+            db.execute('''
                 CREATE TABLE IF NOT EXISTS indicators (
                     indicator TEXT PRIMARY KEY,
                     last_seen TEXT NOT NULL,
                     country TEXT,
                     type TEXT NOT NULL DEFAULT 'ip',
-                    risk_score INTEGER DEFAULT 50, 
+                    risk_score INTEGER DEFAULT 50,
                     source_count INTEGER DEFAULT 1
                 )
             ''')
@@ -31,10 +31,14 @@ def init_db(conn=None):
             if DB_TYPE == 'sqlite':
                 cursor = db.execute("PRAGMA table_info(indicators)")
                 columns = [info[1] for info in cursor.fetchall()]
-                if 'country' not in columns: db.execute('ALTER TABLE indicators ADD COLUMN country TEXT')
-                if 'type' not in columns: db.execute("ALTER TABLE indicators ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
-                if 'risk_score' not in columns: db.execute("ALTER TABLE indicators ADD COLUMN risk_score INTEGER DEFAULT 50")
-                if 'source_count' not in columns: db.execute("ALTER TABLE indicators ADD COLUMN source_count INTEGER DEFAULT 1")
+                if 'country' not in columns:
+                    db.execute('ALTER TABLE indicators ADD COLUMN country TEXT')
+                if 'type' not in columns:
+                    db.execute("ALTER TABLE indicators ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
+                if 'risk_score' not in columns:
+                    db.execute("ALTER TABLE indicators ADD COLUMN risk_score INTEGER DEFAULT 50")
+                if 'source_count' not in columns:
+                    db.execute("ALTER TABLE indicators ADD COLUMN source_count INTEGER DEFAULT 1")
 
             # 2. Indicator Sources Table
             db.execute('''
@@ -67,7 +71,8 @@ def init_db(conn=None):
             if DB_TYPE == 'sqlite':
                 cursor = db.execute("PRAGMA table_info(whitelist)")
                 columns = [info[1] for info in cursor.fetchall()]
-                if 'type' not in columns: db.execute("ALTER TABLE whitelist ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
+                if 'type' not in columns:
+                    db.execute("ALTER TABLE whitelist ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
             else:
                 # Postgres Column Checks (Attempt add and ignore error)
                 try:
@@ -91,7 +96,8 @@ def init_db(conn=None):
             if DB_TYPE == 'sqlite':
                 cursor = db.execute("PRAGMA table_info(api_blacklist)")
                 columns = [info[1] for info in cursor.fetchall()]
-                if 'expires_at' not in columns: db.execute("ALTER TABLE api_blacklist ADD COLUMN expires_at TEXT")
+                if 'expires_at' not in columns:
+                    db.execute("ALTER TABLE api_blacklist ADD COLUMN expires_at TEXT")
             else:
                 try:
                     db.execute('ALTER TABLE api_blacklist ADD COLUMN IF NOT EXISTS expires_at TEXT')
@@ -115,7 +121,7 @@ def init_db(conn=None):
                     source_name TEXT NOT NULL,
                     start_time TEXT NOT NULL,
                     end_time TEXT,
-                    status TEXT NOT NULL, 
+                    status TEXT NOT NULL,
                     items_processed INTEGER DEFAULT 0,
                     message TEXT
                 )
@@ -139,8 +145,8 @@ def init_db(conn=None):
                     id {pk_def},
                     name TEXT NOT NULL,
                     token TEXT NOT NULL UNIQUE,
-                    sources TEXT NOT NULL, 
-                    types TEXT NOT NULL,   
+                    sources TEXT NOT NULL,
+                    types TEXT NOT NULL,
                     format TEXT NOT NULL DEFAULT 'text',
                     created_at TEXT NOT NULL
                 )
@@ -206,7 +212,7 @@ def init_db(conn=None):
                 insert_cmd = 'INSERT INTO admin_profiles (name, description, permissions) VALUES (?, ?, ?)'
                 if DB_TYPE == 'postgres':
                     insert_cmd = insert_cmd.replace('?', '%s')
-                
+
                 db.execute(insert_cmd,
                            ('Super_User', 'Full access to all modules', json.dumps({
                                "dashboard": "rw", "system": "rw", "tools": "rw"
@@ -224,7 +230,7 @@ def init_db(conn=None):
             if DB_TYPE == 'sqlite':
                 cursor = db.execute("PRAGMA table_info(users)")
                 user_columns = [info[1] for info in cursor.fetchall()]
-                
+
                 if 'profile_id' not in user_columns:
                     try:
                         db.execute('ALTER TABLE users ADD COLUMN profile_id INTEGER DEFAULT 1')
@@ -251,13 +257,13 @@ def create_indexes_safely(conn=None):
             # Indexes for Indicators
             db.execute('CREATE INDEX IF NOT EXISTS idx_indicators_type ON indicators(type)')
             db.execute('CREATE INDEX IF NOT EXISTS idx_indicators_country ON indicators(country)')
-            
+
             # Indexes for Sources
             db.execute('CREATE INDEX IF NOT EXISTS idx_indicator_sources_name_seen ON indicator_sources(source_name, last_seen)')
-            
+
             # Indexes for DNS Cache
             db.execute('CREATE INDEX IF NOT EXISTS idx_dns_cache_last_resolved ON dns_resolution_cache(last_resolved)')
-            
+
             logger.info("Background index creation completed.")
         except Exception as e:
             logger.error(f"Error creating indexes: {e}")

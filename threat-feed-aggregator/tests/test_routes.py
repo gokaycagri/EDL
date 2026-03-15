@@ -35,8 +35,12 @@ class TestAuthRoutes:
         response = auth_client.get("/")
         assert response.status_code == 200
 
-    def test_logout_clears_session(self, auth_client):
+    def test_logout_requires_post(self, auth_client):
         response = auth_client.get("/auth/logout")
+        assert response.status_code == 405
+
+    def test_logout_clears_session(self, auth_client):
+        response = auth_client.post("/auth/logout")
         assert response.status_code == 302
         response = auth_client.get("/")
         assert response.status_code == 302
@@ -60,15 +64,15 @@ class TestDestructiveEndpointsRequirePOST:
 
 class TestBackupPermission:
     def test_backup_requires_auth(self, client):
-        response = client.get("/api/backup")
+        response = client.post("/api/backup")
         assert response.status_code == 302
 
     def test_backup_requires_system_rw(self, readonly_client):
-        response = readonly_client.get("/api/backup")
+        response = readonly_client.post("/api/backup")
         assert response.status_code == 302
 
     def test_backup_allowed_for_admin(self, auth_client):
-        response = auth_client.get("/api/backup")
+        response = auth_client.post("/api/backup")
         assert response.status_code in (200, 500)
 
 

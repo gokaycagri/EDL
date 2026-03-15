@@ -53,7 +53,7 @@ def fetch_data_from_url(url, auth=None):
 
 async def fetch_data_from_url_async(url, session=None, auth=None):
     """
-    Highly Optimized: Fetches data asynchronously. 
+    Highly Optimized: Fetches data asynchronously.
     """
     try:
         _, proxy_url, _ = get_proxy_settings()

@@ -2,11 +2,12 @@ import csv
 import io
 import json
 
-from flask import Blueprint, render_template, request, jsonify, Response, stream_with_context
-from ..response_helpers import api_response
-from .auth import login_required
-from ..services.analysis_service import get_analysis_data
+from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
+
 from ..db_manager import get_filter_options, get_indicators_paginated
+from ..response_helpers import api_response
+from ..services.analysis_service import get_analysis_data
+from .auth import login_required
 
 bp_analysis = Blueprint('analysis', __name__, url_prefix='/analysis')
 
@@ -21,7 +22,7 @@ def filter_options():
     """Returns autocomplete options for filters."""
     column = request.args.get('column')
     search = request.args.get('q', '')
-    
+
     if not column:
         return api_response({"items": []})
 
@@ -50,11 +51,11 @@ def data():
     start = request.args.get('start', default=0, type=int)
     length = request.args.get('length', default=10, type=int)
     search_value = request.args.get('search[value]', default=None)
-    
+
     # Ordering
-    order_column_index = request.args.get('order[0][column]', default=3, type=int) 
+    order_column_index = request.args.get('order[0][column]', default=3, type=int)
     order_dir = request.args.get('order[0][dir]', default='desc')
-    
+
     # Map index to column name
     columns_map = ['indicator', 'type', 'country', 'risk_score', 'level', 'source_count', 'tags', 'last_seen']
     order_col = columns_map[order_column_index] if order_column_index < len(columns_map) else 'risk_score'

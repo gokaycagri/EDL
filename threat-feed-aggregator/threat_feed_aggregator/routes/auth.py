@@ -1,9 +1,11 @@
 import logging
 from functools import wraps
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
-from ..auth_manager import check_credentials, generate_totp_secret, generate_qr_code, verify_totp
-from ..db_manager import is_mfa_enabled, update_user_mfa_secret, get_user_mfa_secret
+
+from flask import flash, redirect, render_template, request, session, url_for
+
+from ..auth_manager import check_credentials, verify_totp
 from ..config_manager import read_config
+from ..db_manager import get_user_mfa_secret, is_mfa_enabled
 from ..response_helpers import api_error
 from . import bp_auth
 
@@ -30,12 +32,12 @@ def api_key_required(f):
 
         request_key = None
         auth_header = request.headers.get('Authorization') or request.headers.get('X-API-KEY')
-        
+
         if auth_header:
             import re
             # Step 1: Remove any quotes, colons, and joiners
             cleaned = auth_header.replace('"', '').replace("'", "").replace(':', '').strip()
-            
+
             # Step 2: Extract key if 'Bearer' exists (case insensitive)
             # Handle cases like 'bearer4Sb...', 'bearer 4Sb...', or 'Bearer Bearer 4Sb...'
             match = re.search(r'(?:bearer\s*)?([a-zA-Z0-9]{10,})', cleaned, re.IGNORECASE)
@@ -98,7 +100,8 @@ def login():
 
 @bp_auth.route('/login/verify-2fa', methods=['GET', 'POST'])
 def verify_2fa():
-    if 'pre_mfa_auth' not in session: return redirect(url_for('auth.login'))
+    if 'pre_mfa_auth' not in session:
+        return redirect(url_for('auth.login'))
     if request.method == 'POST':
         code = request.form.get('code')
         user_data = session['pre_mfa_auth']
@@ -116,7 +119,7 @@ def verify_2fa():
             flash('Invalid Code', 'danger')
     return render_template('login_2fa.html')
 
-@bp_auth.route('/logout')
+@bp_auth.route('/logout', methods=['POST'])
 def logout():
     session.clear()
     return redirect(url_for('auth.login'))

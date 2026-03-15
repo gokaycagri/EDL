@@ -6,49 +6,74 @@
     <!-- jsVectorMap CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/jsvectormap.min.css') }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <style>
-        .stat-card { border: none; border-radius: var(--card-border-radius); transition: transform 0.2s, box-shadow 0.2s; overflow: hidden; }
-        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); }
-        .stat-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: 0.75rem; background: rgba(255,255,255,0.2); font-size: 1.5rem; }
-        .log-window { background-color: #0f172a; color: #38bdf8; font-family: 'Fira Code', monospace; border-radius: 0.75rem; padding: 1rem; font-size: 0.85rem; height: 300px; overflow-y: auto; border: 1px solid #1e293b; }
-        .status-badge { font-weight: 700; text-transform: uppercase; font-size: 0.7rem; padding: 0.4em 0.8em; border-radius: 0.5rem; }
-    </style>
 {% endblock %}
 
 {% block content %}
     <!-- Header -->
     <div class="row align-items-center mb-4">
         <div class="col-md-6">
-            <h3 class="fw-bold text-slate-800 mb-1">Operational Overview</h3>
+            <h3 class="fw-bold mb-1">Operational Overview</h3>
             <p class="text-muted small">Comprehensive dashboard for threat feed management.</p>
         </div>
         <div class="col-md-6 text-md-end">
-            <button class="btn btn-primary shadow-sm px-4 py-2" onclick="runAggregator()">
+            <button class="btn btn-primary px-4 py-2" onclick="runAggregator()">
                 <i class="fas fa-sync-alt me-2"></i> Run Aggregator Now
             </button>
         </div>
     </div>
 
-    <!-- Quick Stats -->
+    <!-- Quick Stats — Asymmetric Layout -->
     <div class="row g-4 mb-4">
-        <div class="col-md-3">
-            <div class="card stat-card bg-primary text-white p-3 h-100 shadow-sm" style="background: var(--primary-gradient);">
-                <div class="d-flex align-items-center"><div class="stat-icon"><i class="fas fa-list-ul"></i></div><div class="ms-3"><small class="opacity-75 text-uppercase fw-bold small">Total Indicators</small><h2 class="mb-0 fw-bold" id="stat-total">{{ total_indicator_count }}</h2></div></div>
+        <!-- Hero Card: Total Indicators -->
+        <div class="col-md-5 stat-card-animate">
+            <div class="card stat-card stat-card-hero p-4 h-100">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-soft-cyan">
+                        <i class="fas fa-list-ul"></i>
+                    </div>
+                    <div class="ms-3">
+                        <div class="stat-card-title">Total Indicators</div>
+                        <div class="stat-card-value" id="stat-total">{{ total_indicator_count }}</div>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card stat-card bg-white p-3 h-100 shadow-sm border-0">
-                <div class="d-flex align-items-center"><div class="stat-icon bg-soft-info text-info"><i class="fas fa-network-wired"></i></div><div class="ms-3"><small class="text-muted text-uppercase fw-bold small">IP Addresses</small><h2 class="mb-0 fw-bold text-dark" id="stat-ip">{{ indicator_counts_by_type.get('ip', 0) + indicator_counts_by_type.get('cidr', 0) }}</h2></div></div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card bg-white p-3 h-100 shadow-sm border-0">
-                <div class="d-flex align-items-center"><div class="stat-icon bg-soft-warning text-warning"><i class="fas fa-globe"></i></div><div class="ms-3"><small class="text-muted text-uppercase fw-bold small">Domains & URLs</small><h2 class="mb-0 fw-bold text-dark" id="stat-domain">{{ indicator_counts_by_type.get('domain', 0) + indicator_counts_by_type.get('url', 0) }}</h2></div></div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card bg-white p-3 h-100 shadow-sm border-0">
-                <div class="d-flex align-items-center"><div class="stat-icon bg-soft-success text-success"><i class="fas fa-rss"></i></div><div class="ms-3"><small class="text-muted text-uppercase fw-bold small">Active Feeds</small><h2 class="mb-0 fw-bold text-dark" id="stat-feeds">{{ urls|length }}</h2></div></div>
+        <!-- Secondary Stats -->
+        <div class="col-md-7">
+            <div class="row g-4">
+                <div class="col-md-4 stat-card-animate">
+                    <div class="card stat-card p-3 h-100">
+                        <div class="d-flex align-items-center">
+                            <div class="stat-icon bg-soft-info"><i class="fas fa-network-wired"></i></div>
+                            <div class="ms-3">
+                                <div class="stat-card-title">IP Addresses</div>
+                                <div class="stat-card-value" style="font-size:1.5rem;" id="stat-ip">{{ indicator_counts_by_type.get('ip', 0) + indicator_counts_by_type.get('cidr', 0) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 stat-card-animate">
+                    <div class="card stat-card p-3 h-100">
+                        <div class="d-flex align-items-center">
+                            <div class="stat-icon bg-soft-warning"><i class="fas fa-globe"></i></div>
+                            <div class="ms-3">
+                                <div class="stat-card-title">Domains & URLs</div>
+                                <div class="stat-card-value" style="font-size:1.5rem;" id="stat-domain">{{ indicator_counts_by_type.get('domain', 0) + indicator_counts_by_type.get('url', 0) }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 stat-card-animate">
+                    <div class="card stat-card p-3 h-100">
+                        <div class="d-flex align-items-center">
+                            <div class="stat-icon bg-soft-success"><i class="fas fa-rss"></i></div>
+                            <div class="ms-3">
+                                <div class="stat-card-title">Active Feeds</div>
+                                <div class="stat-card-value" style="font-size:1.5rem;" id="stat-feeds">{{ urls|length }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -56,9 +81,9 @@
     <div class="row g-4 mb-4">
         <!-- Active Sources Management -->
         <div class="col-md-8">
-            <div class="card settings-card shadow-sm h-100 border-0">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-rss-square me-2 text-primary"></i>Active Threat Feed Sources</h6>
+            <div class="card settings-card h-100 border-0">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-rss-square me-2 text-primary"></i>Active Threat Feed Sources</h6>
                     <button class="btn btn-sm btn-primary px-3" onclick="showAddSourceModal()"><i class="fas fa-plus me-1"></i> Add Source</button>
                 </div>
                 <div class="card-body p-0">
@@ -92,9 +117,9 @@
 
                     <div class="col-md-4">
 
-                        <div class="card settings-card shadow-sm mb-4 border-0">
+                        <div class="card settings-card mb-4 border-0">
 
-                            <div class="card-header bg-white py-3 border-0"><h6 class="fw-bold mb-0 text-dark"><i class="fas fa-file-export me-2 text-warning"></i>Output Lists (EDL)</h6></div>
+                            <div class="card-header py-3 border-0"><h6 class="fw-bold mb-0"><i class="fas fa-file-export me-2 text-warning"></i>Output Lists (EDL)</h6></div>
 
                             <div class="card-body pt-0">
 
@@ -114,7 +139,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     <label class="small text-muted mb-1 fw-bold">Fortinet FortiGate</label>
                                     <div class="row g-1">
                                         <div class="col-6">
@@ -134,9 +159,9 @@
 
                                 <h6 class="form-label-custom small fw-bold mb-2">Custom EDL Manager</h6>
 
-        
+
                     <div class="card border mb-3">
-                        <div class="card-header bg-light p-1">
+                        <div class="card-header p-1">
                             <ul class="nav nav-tabs card-header-tabs m-0 small" id="edlTabs" role="tablist">
                                 <li class="nav-item" role="presentation"><button class="nav-link active py-1 px-2" id="saved-tab" data-bs-toggle="tab" data-bs-target="#saved" type="button" role="tab">Saved Lists</button></li>
                                 <li class="nav-item" role="presentation"><button class="nav-link py-1 px-2" id="create-tab" data-bs-toggle="tab" data-bs-target="#create" type="button" role="tab">Create New</button></li>
@@ -185,10 +210,10 @@
                                             <div class="btn-group w-100" role="group">
                                                 <input type="radio" class="btn-check" name="content_type" id="type_ip" value="ip" checked>
                                                 <label class="btn btn-outline-primary btn-xs" for="type_ip">IP/CIDR</label>
-                                                
+
                                                 <input type="radio" class="btn-check" name="content_type" id="type_domain" value="domain">
                                                 <label class="btn btn-outline-primary btn-xs" for="type_domain">Domain</label>
-                                                
+
                                                 <input type="radio" class="btn-check" name="content_type" id="type_url" value="url">
                                                 <label class="btn btn-outline-primary btn-xs" for="type_url">URL</label>
                                             </div>
@@ -198,7 +223,7 @@
                                                 <label class="small text-muted mb-0">Sources</label>
                                                 <a href="#" onclick="toggleAllSources(); return false;" class="small text-decoration-none" style="font-size: 0.7rem;">Toggle All</a>
                                             </div>
-                                            <div class="bg-white border rounded p-2" style="max-height: 120px; overflow-y: auto;" id="edl_sources_list">
+                                            <div class="border rounded p-2" style="max-height: 120px; overflow-y: auto;" id="edl_sources_list">
                                                 <!-- Sources populated by JS -->
                                             </div>
                                         </div>
@@ -222,7 +247,7 @@
                         <div class="btn-group w-100 d-flex">
                             <button onclick="updateMS365()" class="btn btn-light btn-sm text-start border flex-grow-1 text-truncate"><i class="fab fa-microsoft me-2 text-info"></i>Update MS365</button>
                             <button type="button" class="btn btn-light btn-sm border dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" style="flex: 0 0 auto;"><span class="visually-hidden">Toggle Dropdown</span></button>
-                            <ul class="dropdown-menu shadow border-0">
+                            <ul class="dropdown-menu border-0">
                                 <li><h6 class="dropdown-header small text-uppercase">Common</h6></li>
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='ms365_common_ips.txt') }}"><i class="fas fa-download me-2 text-secondary"></i>IPs</a></li>
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='ms365_common_urls.txt') }}"><i class="fas fa-download me-2 text-secondary"></i>URLs</a></li>
@@ -243,9 +268,9 @@
 
                         <!-- GitHub -->
                         <div class="btn-group w-100 d-flex">
-                            <button onclick="updateGitHub()" class="btn btn-light btn-sm text-start border flex-grow-1 text-truncate"><i class="fab fa-github me-2 text-dark"></i>Update GitHub</button>
+                            <button onclick="updateGitHub()" class="btn btn-light btn-sm text-start border flex-grow-1 text-truncate"><i class="fab fa-github me-2"></i>Update GitHub</button>
                             <button type="button" class="btn btn-light btn-sm border dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" style="flex: 0 0 auto;"><span class="visually-hidden">Toggle Dropdown</span></button>
-                            <ul class="dropdown-menu shadow border-0">
+                            <ul class="dropdown-menu border-0">
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='github_git_ips.txt') }}">Git Operations</a></li>
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='github_web_ips.txt') }}">Web Access</a></li>
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='github_actions_ips.txt') }}">Actions Runners</a></li>
@@ -258,7 +283,7 @@
                         <div class="btn-group w-100 d-flex">
                             <button onclick="updateAzure()" class="btn btn-light btn-sm text-start border flex-grow-1 text-truncate"><i class="fas fa-cloud me-2 text-primary"></i>Update Azure</button>
                             <button type="button" class="btn btn-light btn-sm border dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false" style="flex: 0 0 auto;"><span class="visually-hidden">Toggle Dropdown</span></button>
-                            <ul class="dropdown-menu shadow border-0">
+                            <ul class="dropdown-menu border-0">
                                 <li><a class="dropdown-item small" href="{{ url_for('dashboard.download_file', filename='azure_all_ips.txt') }}">All Public IPs</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><h6 class="dropdown-header small text-uppercase">Services</h6></li>
@@ -273,10 +298,10 @@
                     </div>
                 </div>
             </div>
-            
-            <div class="card settings-card shadow-sm border-0 border-start border-4 border-success">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-shield-alt me-2 text-success"></i>Safe List</h6>
+
+            <div class="card settings-card border-0 border-start border-4 border-success">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-shield-alt me-2 text-success"></i>Safe List</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-success" onclick="showImportWhitelistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
                         <button class="btn btn-xs btn-outline-success" data-bs-toggle="modal" data-bs-target="#safeListModal">View All</button>
@@ -290,9 +315,9 @@
                 </div>
             </div>
 
-            <div class="card settings-card shadow-sm border-0 border-start border-4 border-danger mt-4">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-ban me-2 text-danger"></i>Block List</h6>
+            <div class="card settings-card border-0 border-start border-4 border-danger mt-4">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-ban me-2 text-danger"></i>Block List</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-danger" onclick="showImportBlacklistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
                         <button class="btn btn-xs btn-outline-danger" data-bs-toggle="modal" data-bs-target="#blockListModal">View All</button>
@@ -341,9 +366,9 @@
     <!-- Safe List Modal -->
     <div class="modal fade" id="safeListModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-                <div class="modal-header border-0 bg-light py-3">
-                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-shield-alt me-2 text-success"></i>Full Safe List</h5>
+            <div class="modal-content border-0" style="border-radius: 1rem;">
+                <div class="modal-header border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-shield-alt me-2 text-success"></i>Full Safe List</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
@@ -379,9 +404,9 @@
     <!-- Block List Modal -->
     <div class="modal fade" id="blockListModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-                <div class="modal-header border-0 bg-light py-3">
-                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-ban me-2 text-danger"></i>Full Block List</h5>
+            <div class="modal-content border-0" style="border-radius: 1rem;">
+                <div class="modal-header border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-ban me-2 text-danger"></i>Full Block List</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
@@ -431,9 +456,9 @@
     <!-- Task Activity & Schedules -->
     <div class="row g-4 mb-4">
         <div class="col-md-6">
-            <div class="card settings-card shadow-sm h-100 border-0">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-history me-2 text-secondary"></i>Recent Task Activity</h6>
+            <div class="card settings-card h-100 border-0">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-history me-2 text-secondary"></i>Recent Task Activity</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-primary" onclick="viewAllHistory()">View All</button>
                         <button class="btn btn-xs btn-outline-danger" onclick="clearHistory()">Clear History</button>
@@ -448,9 +473,9 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="card settings-card shadow-sm h-100 border-0">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-calendar-alt me-2 text-info"></i>Scheduled Runs</h6>
+            <div class="card settings-card h-100 border-0">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-calendar-alt me-2 text-info"></i>Scheduled Runs</h6>
                     <button class="btn btn-xs btn-outline-primary" onclick="viewAllSchedules()">View All</button>
                 </div>
                 <div class="card-body p-0">
@@ -467,9 +492,9 @@
     <!-- Schedules Modal -->
     <div class="modal fade" id="schedulesModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-                <div class="modal-header border-0 bg-light py-3">
-                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-calendar-alt me-2 text-info"></i>All Scheduled Tasks</h5>
+            <div class="modal-content border-0" style="border-radius: 1rem;">
+                <div class="modal-header border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-calendar-alt me-2 text-info"></i>All Scheduled Tasks</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
@@ -498,9 +523,9 @@
     <!-- History Modal -->
     <div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
-                <div class="modal-header border-0 bg-light py-3">
-                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-history me-2 text-primary"></i>Full Task History</h5>
+            <div class="modal-content border-0" style="border-radius: 1rem;">
+                <div class="modal-header border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-history me-2 text-primary"></i>Full Task History</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
@@ -530,23 +555,42 @@
 
     <!-- Map & Terminal -->
     <div class="row g-4 mb-4">
-        <div class="col-md-12"><div class="card settings-card shadow-sm border-0">
-            <div class="card-header bg-white py-3 border-0"><h6 class="fw-bold mb-0 text-dark"><i class="fas fa-globe-americas me-2 text-primary"></i>Global Threat Distribution</h6></div>
-            <div class="card-body"><div class="row"><div class="col-md-9"><div id="world-map" style="height: 400px; width: 100%;" class="border rounded-3 bg-light"></div></div><div class="col-md-3">
-                <table class="table table-sm border-0"><thead class="border-0"><tr class="small text-muted border-0"><th class="border-0">Country</th><th class="text-end border-0">Count</th></tr></thead>
-                <tbody id="countryStatsTableBody">{% for country in country_stats %}<tr><td class="small py-2">{{ country.country_code }}</td><td class="text-end small py-2 fw-bold text-primary">{{ country.count }}</td></tr>{% endfor %}</tbody></table>
-            </div></div></div>
-        </div></div>
-        <div class="col-md-12"><div class="card settings-card shadow-sm border-0">
-            <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-terminal me-2 text-info"></i>Live Operational Logs</h6>
-                <div class="d-flex align-items-center gap-3">
-                    <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="hidePolls" checked onchange="updateLogs()"><label class="form-check-label small text-muted" for="hidePolls">Hide Polls</label></div>
-                    <button class="btn btn-xs btn-outline-secondary" onclick="clearTerminal()">Clear</button>
+        <!-- Map: Full-width without card wrapper -->
+        <div class="col-md-12">
+            <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center" style="background: var(--surface-1); border-radius: var(--card-radius) var(--card-radius) 0 0; border: 1px solid var(--border-color); border-bottom: none;">
+                <h6 class="fw-bold mb-0"><i class="fas fa-globe-americas me-2 text-primary"></i>Global Threat Distribution</h6>
+            </div>
+            <div class="row g-0" style="border: 1px solid var(--border-color); border-radius: 0 0 var(--card-radius) var(--card-radius); overflow: hidden;">
+                <div class="col-md-9">
+                    <div id="world-map" style="height: 400px; width: 100%;"></div>
+                </div>
+                <div class="col-md-3" style="background: var(--surface-1); border-left: 1px solid var(--border-color); padding: 1rem;">
+                    <table class="table table-sm border-0"><thead class="border-0"><tr class="small text-muted border-0"><th class="border-0">Country</th><th class="text-end border-0">Count</th></tr></thead>
+                    <tbody id="countryStatsTableBody">{% for country in country_stats %}<tr><td class="small py-2">{{ country.country_code }}</td><td class="text-end small py-2 fw-bold text-primary">{{ country.count }}</td></tr>{% endfor %}</tbody></table>
                 </div>
             </div>
-            <div class="card-body pt-0"><div id="logWindow" class="log-window"></div></div>
-        </div></div>
+        </div>
+
+        <!-- Terminal with fullscreen toggle and log-level badges -->
+        <div class="col-md-12">
+            <div class="card settings-card border-0" id="terminalCard">
+                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-terminal me-2 text-info"></i>Live Operational Logs</h6>
+                    <div class="d-flex align-items-center gap-3">
+                        <!-- Log Level Count Badges -->
+                        <div class="log-level-counts">
+                            <span class="count-badge" style="background: var(--accent-safe-dim); color: var(--accent-safe);">INFO <span id="logCountInfo">0</span></span>
+                            <span class="count-badge" style="background: var(--accent-warn-dim); color: var(--accent-warn);">WARN <span id="logCountWarn">0</span></span>
+                            <span class="count-badge" style="background: var(--accent-danger-dim); color: var(--accent-danger);">ERR <span id="logCountError">0</span></span>
+                        </div>
+                        <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="hidePolls" checked onchange="updateLogs()"><label class="form-check-label small text-muted" for="hidePolls">Hide Polls</label></div>
+                        <button class="btn btn-xs btn-outline-secondary" onclick="toggleTerminalFullscreen()" title="Toggle Fullscreen"><i class="fas fa-expand"></i></button>
+                        <button class="btn btn-xs btn-outline-secondary" onclick="clearTerminal()">Clear</button>
+                    </div>
+                </div>
+                <div class="card-body pt-0"><div id="logWindow" class="log-window"></div></div>
+            </div>
+        </div>
     </div>
 {% endblock %}
 
@@ -554,13 +598,13 @@
     <!-- jsVectorMap -->
     <script src="{{ url_for('static', filename='vendor/js/jsvectormap.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/js/world.js') }}"></script>
-    
+
     <script>
         window.AppConfig = {
             urls: {
                 addSource: "{{ url_for('system.add_source') }}",
                 addWhitelist: "{{ url_for('system.add_whitelist') }}",
-                addBlacklist: "{{ url_for('system.add_blacklist') }}" 
+                addBlacklist: "{{ url_for('system.add_blacklist') }}"
             },
             sourceUrls: {{ urls|tojson }},
             csrfToken: "{{ csrf_token() }}",

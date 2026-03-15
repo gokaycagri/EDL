@@ -1,6 +1,6 @@
 import logging
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, render_template, request
 
 from ..response_helpers import api_error, api_response
 from .auth import login_required
@@ -50,7 +50,7 @@ def lookup_internal():
         if not indicator:
             return api_error("No indicator provided", "VALIDATION_ERROR", 400)
 
-        from ..db_manager import get_sources_for_indicator, get_api_blacklist_item_by_value
+        from ..db_manager import get_api_blacklist_item_by_value, get_sources_for_indicator
 
         # 1. Fetch from main DB (indicator_sources table)
         sources = get_sources_for_indicator(indicator)
@@ -95,17 +95,17 @@ def dns_deduplication():
 def save_dedup_schedule():
     from ..config_manager import read_config, write_config
     from ..scheduler_manager import update_scheduled_jobs
-    
+
     try:
         config = read_config()
-        
+
         enabled = request.form.get('enabled') == 'on'
         auto_delete = request.form.get('auto_delete') == 'on'
         start_time = request.form.get('start_time', '00:00')
         end_time = request.form.get('end_time', '23:59')
         interval = request.form.get('interval', type=int) or 60
         batch_size = request.form.get('batch_size', type=int) or 50
-        
+
         config['dns_dedup_schedule'] = {
             'enabled': enabled,
             'auto_delete': auto_delete,
@@ -114,10 +114,10 @@ def save_dedup_schedule():
             'interval_minutes': interval,
             'batch_size': batch_size
         }
-        
+
         write_config(config)
         update_scheduled_jobs()
-        
+
         return api_response(message="Schedule updated successfully.")
     except Exception as e:
         logger.error(f"Error saving schedule: {e}")
@@ -128,19 +128,20 @@ def save_dedup_schedule():
 def analyze_dns_duplicates():
     try:
         import asyncio
+
         from ..services.dns_deduplication import process_background_dns_batch, run_deduplication_sweep
 
         logger.info("DNS Deduplication Analyze: Manual run requested.")
-        
+
         # Trigger single batch processing
         processed_count = asyncio.run(process_background_dns_batch(batch_size=50))
-        
+
         # Trigger sweep immediately
         deleted_count = run_deduplication_sweep()
         logger.info(
             f"DNS Deduplication Analyze: Completed manual run (resolved={processed_count}, deleted={deleted_count})."
         )
-        
+
         return api_response(
             {"resolved": processed_count, "deleted": deleted_count, "duplicates": []},
             message=f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}."

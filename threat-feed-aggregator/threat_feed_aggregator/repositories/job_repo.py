@@ -20,7 +20,8 @@ def log_job_start(source_name, conn=None):
             return None
 
 def log_job_end(job_id, status, items_processed=0, message=None, conn=None):
-    if not job_id: return
+    if not job_id:
+        return
     with db_transaction(conn) as db:
         try:
             end_time = datetime.now(UTC).isoformat()

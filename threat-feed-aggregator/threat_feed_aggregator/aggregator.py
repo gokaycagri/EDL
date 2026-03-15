@@ -12,18 +12,16 @@ from datetime import UTC, datetime
 from .config_manager import read_config, read_stats, write_stats
 from .db_manager import (
     delete_whitelisted_indicators as db_delete_whitelisted_indicators,
+)
+from .db_manager import (
     get_all_indicators_iter,
+    get_source_counts,
     get_whitelist,
     recalculate_scores,
+    remove_expired_blacklist_items,
     remove_old_indicators,
     save_historical_stats,
-    get_source_counts,
-    remove_expired_blacklist_items,
 )
-from .services.job_service import job_service
-from .services.feed_health import is_source_disabled, record_failure, record_success
-from .services.webhook_service import notify as webhook_notify
-from .utils import is_whitelisted
 
 # Re-exports for backward compatibility
 from .edl_generator import regenerate_edl_files  # noqa: F401
@@ -33,6 +31,10 @@ from .feed_processor import (  # noqa: F401
     aggregate_sources_async,
     test_feed_source,
 )
+from .services.feed_health import is_source_disabled, record_failure, record_success
+from .services.job_service import job_service
+from .services.webhook_service import notify as webhook_notify
+from .utils import is_whitelisted
 
 logger = logging.getLogger(__name__)
 

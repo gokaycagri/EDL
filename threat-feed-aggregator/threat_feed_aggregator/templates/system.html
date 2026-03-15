@@ -4,14 +4,14 @@
 
 {% block extra_head %}
 <style>
-    .nav-tabs-custom { border-bottom: 2px solid #f1f5f9; }
-    .nav-tabs-custom .nav-link { border: none; color: #64748b; font-weight: 600; padding: 1rem 1.5rem; transition: all 0.2s; }
-    .nav-tabs-custom .nav-link:hover { color: #4f46e5; }
-    .nav-tabs-custom .nav-link.active { color: #4f46e5; background: none; border-bottom: 3px solid #4f46e5; }
+    .nav-tabs-custom { border-bottom: 2px solid var(--border-color, #1e293b); }
+    .nav-tabs-custom .nav-link { border: none; color: var(--text-muted, #64748b); font-weight: 600; padding: 1rem 1.5rem; transition: all 0.2s; }
+    .nav-tabs-custom .nav-link:hover { color: var(--accent-primary, #00e5ff); }
+    .nav-tabs-custom .nav-link.active { color: var(--accent-primary, #00e5ff); background: none; border-bottom: 3px solid var(--accent-primary, #00e5ff); }
     .badge-authority { font-size: 0.65rem; padding: 0.35em 0.65em; border-radius: 2rem; }
-    .bg-soft-info { background-color: #e0f2fe; color: #0369a1; }
-    .bg-soft-success { background-color: #dcfce7; color: #15803d; }
-    .bg-soft-danger { background-color: #fee2e2; color: #b91c1c; }
+    .bg-soft-info { background-color: var(--accent-info-dim, rgba(96, 165, 250, 0.12)); color: var(--accent-info, #60a5fa); }
+    .bg-soft-success { background-color: var(--accent-safe-dim, rgba(52, 211, 153, 0.12)); color: var(--accent-safe, #34d399); }
+    .bg-soft-danger { background-color: var(--accent-danger-dim, rgba(255, 45, 85, 0.12)); color: var(--accent-danger, #ff2d55); }
 </style>
 {% endblock %}
 
@@ -21,9 +21,9 @@
 
 <div class="container-fluid px-0">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="fw-bold text-dark mb-0">System Configuration</h3>
+        <h3 class="fw-bold mb-0">System Configuration</h3>
         {% if sys_perm == 'r' %}
-            <span class="badge bg-warning text-dark shadow-sm px-3"><i class="fas fa-eye me-1"></i> Read-Only Mode</span>
+            <span class="badge bg-warning px-3"><i class="fas fa-eye me-1"></i> Read-Only Mode</span>
         {% endif %}
     </div>
 
@@ -53,8 +53,8 @@
         <div class="row">
             <div class="col-md-12">
                 <!-- Source URLs Management (RESTORED) -->
-                <div class="card settings-card shadow-sm mb-4">
-                    <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card settings-card mb-4">
+                    <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                         <div><i class="fas fa-list me-2 text-primary"></i> Configured Threat Sources</div>
                         <button class="btn btn-sm btn-primary" onclick="showAddSourceModal()" {{ 'disabled' if sys_perm == 'r' }}>
                             <i class="fas fa-plus me-1"></i> Add New Source
@@ -76,7 +76,7 @@
                                     {% for source in config.source_urls %}
                                     <tr>
                                         <td class="ps-4 py-3">
-                                            <div class="fw-bold text-dark">
+                                            <div class="fw-bold">
                                                 {{ source.name }}
                                                 {% if feed_health.get(source.name, {}).get('disabled_at') %}
                                                     <span class="badge bg-danger ms-2">Disabled</span>
@@ -96,7 +96,7 @@
                                                 </div>
                                             {% endif %}
                                         </td>
-                                        <td><span class="badge bg-light text-dark border">{{ source.format|upper }}</span></td>
+                                        <td><span class="badge bg-light border">{{ source.format|upper }}</span></td>
                                         <td>{{ source.schedule_interval_minutes }}m</td>
                                         <td><span class="badge bg-soft-info">{{ source.confidence }}%</span></td>
                                         <td class="text-end pe-4">
@@ -115,14 +115,14 @@
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="card settings-card shadow-sm mb-4">
-                    <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-cog me-2 text-primary"></i> Global Settings</div>
+                <div class="card settings-card mb-4">
+                    <div class="card-header fw-bold py-3 border-0"><i class="fas fa-cog me-2 text-primary"></i> Global Settings</div>
                     <div class="card-body pt-0">
                         <form action="{{ url_for('system.update_settings') }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <div class="mb-3">
                                 <label class="form-label-custom">System Timezone</label>
-                                <select class="form-select shadow-sm" name="timezone" {{ 'disabled' if sys_perm == 'r' }}>
+                                <select class="form-select" name="timezone" {{ 'disabled' if sys_perm == 'r' }}>
                                     {% set current_tz = config.get('timezone', 'UTC') %}
                                     <option value="UTC" {{ 'selected' if current_tz == 'UTC' }}>UTC (Universal Time)</option>
                                     <option value="Europe/Istanbul" {{ 'selected' if current_tz == 'Europe/Istanbul' }}>Europe/Istanbul</option>
@@ -138,12 +138,12 @@
                             </div>
                             <div class="mb-3">
                                 <label class="form-label-custom">System Base URL (Optional)</label>
-                                <input type="text" class="form-control shadow-sm" name="base_url" value="{{ config.get('base_url', '') }}" placeholder="https://10.9.102.12/" {{ 'readonly' if sys_perm == 'r' }}>
+                                <input type="text" class="form-control" name="base_url" value="{{ config.get('base_url', '') }}" placeholder="https://10.9.102.12/" {{ 'readonly' if sys_perm == 'r' }}>
                                 <div class="form-text mt-1 small">Used for generating external links (e.g., FortiDeceptor). Leave empty to use current address.</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label-custom">Indicator Lifetime (Days)</label>
-                                <div class="input-group shadow-sm">
+                                <div class="input-group">
                                     <input type="number" class="form-control" name="indicator_lifetime_days" value="{{ config.get('indicator_lifetime_days', 30) }}" min="0" {{ 'readonly' if sys_perm == 'r' }}>
                                     {% if sys_perm == 'rw' %}
                                         <button class="btn btn-primary px-4" type="submit">Update</button>
@@ -162,8 +162,8 @@
         <div class="tab-pane fade" id="auth" role="tabpanel">
             <div class="row g-4">
                 <div class="col-md-7">
-                    <div class="card settings-card shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card mb-4">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-server me-2 text-info"></i> LDAP / Active Directory</div>
                             <span id="ldapServerStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
                         </div>
@@ -174,7 +174,7 @@
                                     <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap_enabled') %}checked{% endif %}>
                                     <label class="form-check-label fw-bold" for="ldapEnabled">Enable LDAP Authentication</label>
                                 </div>
-                                <div id="ldapConfigContainer" class="bg-light p-3 rounded-3 mb-4 border">
+                                <div id="ldapConfigContainer" class="p-3 rounded-3 mb-4 border" style="background: var(--surface-2);">
                                     <label class="form-label-custom">LDAP Server Cluster</label>
                                     <div id="serverHostnamesList">
                                         {% set servers = config.get('auth', {}).get('ldap_servers', []) %}
@@ -212,7 +212,7 @@
                                     </div>
                                 </div>
                                 {% if sys_perm == 'rw' %}
-                                <div class="d-grid mb-4"><button type="submit" class="btn btn-dark btn-sm py-2 shadow-sm"><i class="fas fa-save me-2 text-warning"></i>Save LDAP Connection</button></div>
+                                <div class="d-grid mb-4"><button type="submit" class="btn btn-dark btn-sm py-2"><i class="fas fa-save me-2 text-warning"></i>Save LDAP Connection</button></div>
                                 {% endif %}
                             </form>
                             <div class="border-top pt-4">
@@ -220,14 +220,14 @@
                                     <h6 class="form-label-custom mb-0 text-primary"><i class="fas fa-sitemap me-2"></i>Group Role Mappings</h6>
                                     <button type="button" class="btn btn-xs btn-outline-primary" onclick="showAddLdapMappingModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus me-1"></i>Add</button>
                                 </div>
-                                <div class="table-responsive border rounded-3 overflow-hidden bg-white mb-4">
+                                <div class="table-responsive border rounded-3 overflow-hidden mb-4">
                                     <table class="table table-sm table-hover mb-0 align-middle">
                                         <thead class="table-light"><tr><th class="ps-3 py-2">LDAP GROUP DN</th><th>PROFILE</th><th class="text-end pe-3">ACTION</th></tr></thead>
                                         <tbody style="font-size: 0.85rem;">
                                             {% if ldap_mappings %}
                                                 {% for map in ldap_mappings %}
                                                 <tr>
-                                                    <td class="ps-3 fw-bold text-dark text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
+                                                    <td class="ps-3 fw-bold text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
                                                     <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
                                                     <td class="text-end pe-3">
                                                         <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline">
@@ -258,8 +258,8 @@
                     </div>
                 </div>
                 <div class="col-md-5">
-                    <div class="card settings-card shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-user-shield me-2 text-success"></i> My Account Security</div>
+                    <div class="card settings-card mb-4">
+                        <div class="card-header fw-bold py-3 border-0"><i class="fas fa-user-shield me-2 text-success"></i> My Account Security</div>
                         <div class="card-body pt-0">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div>
@@ -279,8 +279,8 @@
                         </div>
                     </div>
 
-                    <div class="card settings-card shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card mb-4">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-id-card-alt me-2 text-primary"></i> Admin Profiles</div>
                             <button class="btn btn-sm btn-outline-primary" onclick="showProfileModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus"></i></button>
                         </div>
@@ -316,8 +316,8 @@
                             </div>
                         </div>
                     </div>
-                    <div class="card settings-card shadow-sm">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-user-lock me-2 text-danger"></i> Local Accounts</div>
                             <button class="btn btn-sm btn-outline-danger" onclick="showAddUserModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-user-plus"></i></button>
                         </div>
@@ -330,7 +330,7 @@
                                             {% for user in users %}
                                             <tr>
                                                 <td class="ps-3 fw-bold">{{ user.username }}</td>
-                                                <td><span class="badge bg-light text-dark border">{{ user.profile_name }}</span></td>
+                                                <td><span class="badge bg-light border">{{ user.profile_name }}</span></td>
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm text-warning p-0 me-2" onclick="showChangePasswordModal('{{ user.username }}')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-key"></i></button>
                                                     {% if user.username != 'admin' %}
@@ -353,8 +353,8 @@
         <div class="tab-pane fade" id="network" role="tabpanel">
             <div class="row g-4">
                 <div class="col-md-6">
-                    <div class="card settings-card shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card mb-4">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-globe me-2 text-primary"></i> Proxy Settings</div>
                             <span id="proxyStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
                         </div>
@@ -365,7 +365,7 @@
                                     <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
                                     <label class="form-check-label fw-bold" for="proxyEnabled">Enable System Proxy</label>
                                 </div>
-                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}" class="bg-light p-3 rounded-3 mb-3 border">
+                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}" class="p-3 rounded-3 mb-3 border" style="background: var(--surface-2);"
                                     <div class="row g-2 mb-3"><div class="col-md-8"><label class="form-label-custom">Server Address</label><input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com"></div><div class="col-md-4"><label class="form-label-custom">Port</label><input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080"></div></div>
                                     <div class="row g-2"><div class="col-md-6"><label class="form-label-custom">Auth Username</label><input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}"></div><div class="col-md-6"><label class="form-label-custom">Auth Password</label><input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}"></div></div>
                                 </div>
@@ -375,8 +375,8 @@
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <div class="card settings-card shadow-sm">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-search me-2 text-success"></i> DNS Configuration</div>
                             <span id="dnsStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
                         </div>
@@ -385,7 +385,7 @@
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="mb-3"><label class="form-label-custom">Primary DNS Server</label><input type="text" class="form-control" name="dns_primary" value="{{ config.get('dns', {}).get('primary', '') }}" placeholder="8.8.8.8"></div>
                                 <div class="mb-4"><label class="form-label-custom">Secondary DNS Server</label><input type="text" class="form-control" name="dns_secondary" value="{{ config.get('dns', {}).get('secondary', '') }}" placeholder="8.8.4.4"></div>
-                                {% if sys_perm == 'rw' %}<div class="d-grid"><button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Update DNS</button></div>{% endif %}
+                                {% if sys_perm == 'rw' %}<div class="d-grid"><button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Update DNS</button></div>{% endif %}
                             </form>
                         </div>
                     </div>
@@ -397,16 +397,19 @@
         <div class="tab-pane fade" id="security" role="tabpanel">
             <div class="row g-4">
                 <div class="col-md-6">
-                    <div class="card settings-card shadow-sm mb-4">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
-                            <div><i class="fas fa-database me-2 text-dark"></i> Backup & Disaster Recovery</div>
+                    <div class="card settings-card mb-4">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-database me-2"></i> Backup & Disaster Recovery</div>
                         </div>
                         <div class="card-body pt-0">
                             <p class="text-muted small mb-4">Download a full backup of your configuration, database, and logs. You can restore this file on a new installation.</p>
                             <div class="d-grid mb-4">
-                                <a href="{{ url_for('api.backup_system') }}" class="btn btn-outline-dark py-2">
-                                    <i class="fas fa-download me-2"></i>Download Backup (ZIP)
-                                </a>
+                                <form method="POST" action="{{ url_for('api.backup_system') }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-outline-dark py-2 w-100">
+                                        <i class="fas fa-download me-2"></i>Download Backup (ZIP)
+                                    </button>
+                                </form>
                             </div>
                             <hr class="my-4">
                             <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data">
@@ -422,8 +425,8 @@
                     </div>
                 </div>
                 <div class="col-md-6">
-                    <div class="card settings-card shadow-sm">
-                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                    <div class="card settings-card">
+                        <div class="card-header fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
                             <div><i class="fas fa-certificate me-2 text-warning"></i> HTTPS & Certificates</div>
                         </div>
                         <div class="card-body pt-0">
@@ -439,7 +442,7 @@
                                         <input type="password" class="form-control" name="password" placeholder="PFX Password">
                                     </div>
                                     <div class="col-md-4 d-grid">
-                                        <button type="submit" class="btn btn-secondary shadow-sm">Upload</button>
+                                        <button type="submit" class="btn btn-secondary">Upload</button>
                                     </div>
                                 </div>
                             </form>
@@ -474,27 +477,27 @@
                                 <span class="badge bg-soft-info text-info border border-info px-3 py-2">Standard Integration</span>
                             </div>
                         </div>
-                        <div class="card-body bg-light p-4">
+                        <div class="card-body p-4" style="background: var(--surface-2);"
                             <!-- Step-by-Step Guide -->
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-primary">
+                                    <div class="p-3 rounded-3 h-100 border-start border-4 border-primary">
                                         <div class="text-primary fw-bold small mb-1">STEP 1</div>
-                                        <h6 class="fw-bold text-dark">Trust Connection</h6>
+                                        <h6 class="fw-bold">Trust Connection</h6>
                                         <p class="text-muted small mb-0">Disable <strong>"Verify SSL"</strong> in Deceptor since we use local certificates.</p>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-info">
+                                    <div class="p-3 rounded-3 h-100 border-start border-4 border-info">
                                         <div class="text-info fw-bold small mb-1">STEP 2</div>
-                                        <h6 class="fw-bold text-dark">Set Method</h6>
+                                        <h6 class="fw-bold">Set Method</h6>
                                         <p class="text-muted small mb-0">Use the <strong>GEN-WEBHOOK</strong> integration method in Deceptor Fabric.</p>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
-                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-warning">
+                                    <div class="p-3 rounded-3 h-100 border-start border-4 border-warning">
                                         <div class="text-warning fw-bold small mb-1">STEP 3</div>
-                                        <h6 class="fw-bold text-dark">Sync Data</h6>
+                                        <h6 class="fw-bold">Sync Data</h6>
                                         <p class="text-muted small mb-0">Map the Header/Data keys below to Deceptor fields.</p>
                                     </div>
                                 </div>
@@ -517,7 +520,7 @@
                                         <!-- URL SECTION -->
                                         <div>
                                             <label class="text-white-50 small fw-bold mb-2">TARGET API ENDPOINT</label>
-                                            <div class="input-group shadow-sm">
+                                            <div class="input-group">
                                                 <span class="input-group-text bg-secondary border-0 text-white small fw-bold" style="background-color: #4a4d50 !important;">POST</span>
                                                 <input type="text" class="form-control bg-black border-0 text-info fw-bold font-monospace py-2" id="sim_url" value="{{ config.get('base_url') or request.url_root }}api/deceptor/block" readonly style="background-color: #000 !important; color: #0dcaf0 !important;">
                                                 <button class="btn btn-primary px-3" onclick="copyToClipboard('sim_url')"><i class="fas fa-copy"></i></button>
@@ -575,7 +578,7 @@
                 <!-- Side Panels -->
                 <div class="col-lg-4">
                     <!-- SOAR Card -->
-                    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                    <div class="card border-0 mb-4" style="border-radius: 16px;">
                         <div class="card-body p-4">
                             <div class="d-flex align-items-center mb-3">
                                 <div class="bg-soft-primary p-3 rounded-3 me-3"><i class="fas fa-bolt text-primary fa-lg"></i></div>
@@ -590,7 +593,7 @@
                     </div>
 
                     <!-- SIEM Card -->
-                    <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                    <div class="card border-0" style="border-radius: 16px;">
                         <div class="card-body p-4">
                             <div class="d-flex align-items-center mb-3">
                                 <div class="bg-soft-success p-3 rounded-3 me-3"><i class="fas fa-shield-alt text-success fa-lg"></i></div>
@@ -933,7 +936,7 @@
                 <div class="text-start mt-3" style="max-height: 400px; overflow-y: auto;">
                     <h6 class="fw-bold border-bottom pb-2 mb-3">1. Add Indicator (POST)</h6>
                     <p class="small text-muted mb-2">Use this to add a new IP or Domain to the aggregator from your playbooks.</p>
-                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark">
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border">
                         POST {{ request.url_root }}api/indicators
                     </div>
                     <label class="xsmall fw-bold">Headers:</label>
@@ -952,7 +955,7 @@
 
                     <h6 class="fw-bold border-bottom pb-2 mb-3">2. Remove Indicator (DELETE)</h6>
                     <p class="small text-muted mb-2">Removes an indicator from the system.</p>
-                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark">
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border">
                         DELETE {{ request.url_root }}api/indicators
                     </div>
                     <label class="xsmall fw-bold">Sample Payload (JSON):</label>
@@ -977,7 +980,7 @@
                     <p class="small text-muted">Integrate live threat intelligence into your SIEM for log enrichment and automated alerting.</p>
                     
                     <h6 class="fw-bold border-bottom pb-2 mb-3">Generic EDL API</h6>
-                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark text-break">
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-break">
                         GET {{ request.url_root }}api/edl/generic?format=json
                     </div>
 

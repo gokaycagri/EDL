@@ -1,13 +1,12 @@
 import logging
 import os
-import re
 import sqlite3
 import threading
 from contextlib import contextmanager
 
 try:
     import psycopg2
-    from psycopg2 import pool
+    from psycopg2 import pool  # noqa: F401
     from psycopg2.extras import DictCursor
 except ImportError:
     psycopg2 = None
@@ -66,24 +65,34 @@ class PostgresCursorWrapper:
     def execute(self, query, params=None):
         # 1. Convert Placeholder '?' -> '%s'
         query_pg = query.replace('?', '%s')
-        
+
         # 2. Convert 'INSERT OR IGNORE' -> 'INSERT ... ON CONFLICT DO NOTHING'
-        # Note: Postgres doesn't support "INSERT OR IGNORE", it uses "ON CONFLICT DO NOTHING"
         if 'INSERT OR IGNORE' in query_pg:
             query_pg = query_pg.replace('INSERT OR IGNORE', 'INSERT')
-            # Only append ON CONFLICT if it's not already there
             if 'ON CONFLICT' not in query_pg.upper():
                 query_pg += " ON CONFLICT DO NOTHING"
-            
-        # 3. Execute query
+
+        # 3. For INSERT statements without RETURNING, append RETURNING id to populate lastrowid
+        is_insert = query_pg.strip().upper().startswith('INSERT')
+        needs_returning = is_insert and 'RETURNING' not in query_pg.upper()
+        if needs_returning:
+            query_pg += " RETURNING id"
+
+        # 4. Execute query
         try:
             self.cursor.execute(query_pg, params)
         except Exception as e:
-            # We don't silence errors here anymore because ON CONFLICT DO NOTHING 
-            # should handle duplicates without raising an exception.
-            # If an exception occurs, it's a real issue that needs logging/raising.
             logger.error(f"SQL Error: {e} | Query: {query_pg}")
             raise
+
+        # 5. Populate lastrowid from RETURNING clause
+        if needs_returning:
+            try:
+                row = self.cursor.fetchone()
+                self.lastrowid = row[0] if row else None
+            except Exception:
+                self.lastrowid = None
+
         return self
 
     def executemany(self, query, params_seq):
@@ -96,7 +105,7 @@ class PostgresCursorWrapper:
 
     def fetchall(self):
         return self.cursor.fetchall()
-    
+
     def __iter__(self):
         """Allows iteration over the cursor (like sqlite3 cursor)."""
         return iter(self.cursor)
@@ -104,7 +113,7 @@ class PostgresCursorWrapper:
     @property
     def rowcount(self):
         return self.cursor.rowcount
-    
+
     @property
     def description(self):
         return self.cursor.description

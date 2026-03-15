@@ -6,7 +6,6 @@ Usage:
     errors = validate_config(config_dict)  # returns list of error strings, empty if valid
 """
 import logging
-from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -18,11 +17,11 @@ class SourceConfig(BaseModel):
     url: str
     format: str = "text"
     confidence: int = 50
-    key_or_column: Optional[str] = None
-    auth_user: Optional[str] = None
-    auth_pass: Optional[str] = None
-    schedule_interval_minutes: Optional[int] = None
-    retention_days: Optional[int] = None
+    key_or_column: str | None = None
+    auth_user: str | None = None
+    auth_pass: str | None = None
+    schedule_interval_minutes: int | None = None
+    retention_days: int | None = None
 
     @field_validator("confidence")
     @classmethod
@@ -44,8 +43,8 @@ class ProxyConfig(BaseModel):
     enabled: bool = False
     server: str = ""
     port: int = 0
-    auth_user: Optional[str] = None
-    auth_pass: Optional[str] = None
+    auth_user: str | None = None
+    auth_pass: str | None = None
 
 
 class DnsDedupSchedule(BaseModel):

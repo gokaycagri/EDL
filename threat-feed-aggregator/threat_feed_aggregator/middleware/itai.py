@@ -11,8 +11,8 @@ When ITAI_MODE is not set or false, this middleware does nothing and
 the application behaves as a standalone deployment.
 """
 
-import hmac
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -20,7 +20,7 @@ import time
 from base64 import urlsafe_b64decode
 from contextvars import ContextVar
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, request, session
 
 from ..response_helpers import api_error, api_response
 

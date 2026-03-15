@@ -1,10 +1,10 @@
+import base64
+import io
 import logging
 import ssl
+
 import pyotp
 import qrcode
-import io
-import base64
-
 from ldap3 import ALL, Connection, Server, Tls
 
 from .db_manager import get_profile_by_ldap_groups, get_user_permissions, local_user_exists, verify_local_user
@@ -20,13 +20,13 @@ def generate_totp_secret():
 def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
     """Generates a QR code for the TOTP secret."""
     totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name=issuer_name)
-    
+
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(totp_uri)
     qr.make(fit=True)
-    
+
     img = qr.make_image(fill_color="black", back_color="white")
-    
+
     # Save to BytesIO
     buffered = io.BytesIO()
     img.save(buffered)
@@ -34,11 +34,12 @@ def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
 
 def verify_totp(secret, code):
     """Verifies a TOTP code against the secret."""
-    if not secret or not code: return False
-    
+    if not secret or not code:
+        return False
+
     # Sanitize input: Remove spaces and other whitespace
     code = code.replace(" ", "").strip()
-    
+
     try:
         totp = pyotp.TOTP(secret)
         # valid_window=2 allows for 60s before/after the current time (accommodating drift)
@@ -159,7 +160,9 @@ def _check_ldap_credentials(username, password):
                         logger.info(f"LDAP bind SUCCESS for user: {username} (DN: {test_dn})")
                         # Success! Now fetch groups for RBAC
                         from ldap3.utils.conv import escape_filter_chars
-                        short_username = escape_filter_chars(username.split('\\')[-1])
+                        # Extract short username, then escape for LDAP filter safety
+                        raw_short_username = username.split('\\')[-1] if '\\' in username else username
+                        short_username = escape_filter_chars(raw_short_username)
                         safe_dn = escape_filter_chars(test_dn)
                         search_filter = f"(|(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={safe_dn}))"
                         conn.search(base_dn, search_filter, attributes=['memberOf', 'distinguishedName'])
@@ -193,7 +196,7 @@ def _check_ldap_credentials(username, password):
 
                         # Sync LDAP user to local users table for MFA support
                         try:
-                            from .database.connection import db_transaction, DB_TYPE
+                            from .database.connection import DB_TYPE, db_transaction
                             with db_transaction() as db:
                                 if DB_TYPE == 'postgres':
                                     db.execute('''

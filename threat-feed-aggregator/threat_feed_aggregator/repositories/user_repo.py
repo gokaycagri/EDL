@@ -9,7 +9,7 @@ except ImportError:
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from ..database.connection import db_transaction, DB_TYPE
+from ..database.connection import DB_TYPE, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -253,11 +253,11 @@ def get_profile_by_ldap_groups(user_groups, conn=None):
             mappings = cursor.fetchall()
 
             normalized_user_groups = [g.lower() for g in user_groups]
-            matched_profile_ids = []
-
-            for mapping in mappings:
-                if mapping['group_dn'].lower() in normalized_user_groups:
-                    matched_profile_ids.append(mapping['profile_id'])
+            matched_profile_ids = [
+                mapping['profile_id']
+                for mapping in mappings
+                if mapping['group_dn'].lower() in normalized_user_groups
+            ]
 
             if not matched_profile_ids:
                 return None

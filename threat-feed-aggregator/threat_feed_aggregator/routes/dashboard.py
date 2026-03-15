@@ -6,12 +6,12 @@ from flask import render_template
 
 from ..config_manager import read_config, read_stats
 from ..db_manager import (
+    get_all_custom_lists,
     get_api_blacklist_items,
     get_country_stats,
     get_indicator_counts_by_type,
     get_unique_indicator_count,
     get_whitelist,
-    get_all_custom_lists
 )
 from ..utils import SAFE_ITEMS, format_timestamp
 from . import bp_dashboard
@@ -33,7 +33,7 @@ def index():
     custom_lists = get_all_custom_lists()
 
     # Sort safe list for display
-    safe_list_sorted = sorted(list(SAFE_ITEMS))
+    safe_list_sorted = sorted(SAFE_ITEMS)
 
     # Format timestamps
     formatted_stats = {}
@@ -47,6 +47,7 @@ def index():
 
     # Scheduler access
     import pytz
+
     from ..scheduler_manager import scheduler
 
     target_tz = pytz.timezone(config.get('timezone', 'UTC'))
@@ -86,7 +87,7 @@ def index():
 @bp_dashboard.route('/data/<path:filename>')
 @login_required
 def download_file(filename):
-    from flask import send_from_directory, request, abort
+    from flask import abort, request, send_from_directory
 
     from ..config_manager import DATA_DIR
     # Prevent path traversal — only serve basename

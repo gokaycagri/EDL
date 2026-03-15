@@ -1,8 +1,9 @@
+import json
 import logging
 import os
 import sys
+
 import redis
-import json
 
 try:
     import werkzeug
@@ -12,11 +13,11 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, request, jsonify
+from flask import Flask
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect
 from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 
 from .config_manager import DATA_DIR
 from .db_manager import init_db
@@ -58,17 +59,17 @@ else:
 session_timeout = int(os.environ.get('SESSION_TIMEOUT_MINUTES', 60))
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = session_timeout * 60
-app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_USE_SIGNER'] = False
 
 Session(app)
 csrf.init_app(app)
 
-from .routes.dashboard import bp_dashboard
+from .routes.analysis import bp_analysis
 from .routes.api import bp_api
 from .routes.auth import bp_auth
+from .routes.dashboard import bp_dashboard
 from .routes.system import bp_system
 from .routes.tools import bp_tools
-from .routes.analysis import bp_analysis
 
 app.register_blueprint(bp_dashboard)
 app.register_blueprint(bp_api, url_prefix='/api')
@@ -78,7 +79,8 @@ app.register_blueprint(bp_tools, url_prefix='/tools')
 app.register_blueprint(bp_analysis, url_prefix='/analysis')
 
 # ITAI Hub integration middleware (active only when ITAI_MODE=true)
-from .middleware.itai import register_itai_middleware, bp_itai
+from .middleware.itai import bp_itai, register_itai_middleware
+
 register_itai_middleware(app)
 
 # Rate limiting on login endpoint (10 attempts per minute per IP)
@@ -129,8 +131,9 @@ def health_check():
 def prometheus_metrics():
     """Prometheus-compatible metrics endpoint."""
     try:
-        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, CollectorRegistry, Gauge
-        from .db_manager import get_unique_indicator_count, get_indicator_counts_by_type
+        from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Gauge, generate_latest
+
+        from .db_manager import get_indicator_counts_by_type, get_unique_indicator_count
         from .services.feed_health import get_all_health_statuses
 
         registry = CollectorRegistry()
@@ -167,7 +170,7 @@ def init_scheduler_safe():
         logger.info('MASTER LOCK ACQUIRED. Starting scheduler master process...')
         init_scheduler()
         return True
-    except (IOError, ImportError):
+    except (OSError, ImportError):
         if sys.platform == 'win32':
             from .scheduler_manager import init_scheduler
             init_scheduler()

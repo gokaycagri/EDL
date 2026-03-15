@@ -1,7 +1,8 @@
 import json
 import logging
 import secrets
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+
 from ..database.connection import db_transaction
 
 logger = logging.getLogger(__name__)
@@ -31,19 +32,16 @@ def create_custom_list(name, sources, types, data_format, conn=None):
 def get_all_custom_lists(conn=None):
     with db_transaction(conn) as db:
         cursor = db.execute('SELECT * FROM custom_lists ORDER BY created_at DESC')
-        results = []
-        for row in cursor:
-            results.append({
-                'id': row['id'],
-                'name': row['name'],
-                'token': row['token'],
-                'sources': json.loads(row['sources']),
-                'types': json.loads(row['types']),
-                'format': row['format'],
-                'created_at': row['created_at'],
-                'indicator_count': None
-            })
-        return results
+        return [{
+            'id': row['id'],
+            'name': row['name'],
+            'token': row['token'],
+            'sources': json.loads(row['sources']),
+            'types': json.loads(row['types']),
+            'format': row['format'],
+            'created_at': row['created_at'],
+            'indicator_count': None
+        } for row in cursor]
 
 def get_custom_list_by_token(token, conn=None):
     with db_transaction(conn) as db:
@@ -77,10 +75,12 @@ def get_custom_list_count(list_id, conn=None):
     with db_transaction(conn) as db:
         cursor = db.execute('SELECT sources FROM custom_lists WHERE id = ?', (list_id,))
         row = cursor.fetchone()
-        if not row: return 0
+        if not row:
+            return 0
 
         sources = json.loads(row['sources'])
-        if not sources: return 0
+        if not sources:
+            return 0
 
         if len(sources) == 1:
             count_cursor = db.execute(

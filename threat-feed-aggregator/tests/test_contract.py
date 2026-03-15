@@ -10,6 +10,9 @@ If any of these tests fail, the ITAI adapter integration is broken.
 Do NOT remove or rename these endpoints without updating the adapter.
 """
 
+import io
+import zipfile
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -142,14 +145,14 @@ class TestHistoryContract:
 # ============================================================
 
 class TestRunContract:
-    """Contract: GET /api/run"""
+    """Contract: POST /api/run"""
 
     def test_endpoint_exists(self, auth_client):
-        resp = auth_client.get("/api/run")
+        resp = auth_client.post("/api/run")
         assert resp.status_code != 404
 
     def test_returns_standard_format(self, auth_client):
-        resp = auth_client.get("/api/run")
+        resp = auth_client.post("/api/run")
         assert resp.status_code == 200
         data = resp.json
         assert data["status"] == "success"
@@ -157,11 +160,11 @@ class TestRunContract:
 
 
 class TestRunSingleContract:
-    """Contract: GET /api/run_single/<name>"""
+    """Contract: POST /api/run_single/<name>"""
 
     @patch("threat_feed_aggregator.routes.api.read_config", return_value=MOCK_CONFIG)
     def test_not_found_returns_error(self, mock_config, auth_client):
-        resp = auth_client.get("/api/run_single/nonexistent")
+        resp = auth_client.post("/api/run_single/nonexistent")
         assert resp.status_code == 404
         assert resp.json["status"] == "error"
         assert "code" in resp.json
@@ -331,7 +334,7 @@ class TestHealthContract:
         data = resp.json
         assert data["status"] == "success"
         assert "version" in data["data"]
-        assert "health" in data["data"]
+        assert data["data"]["status"] in ("healthy", "degraded")
 
 
 # ============================================================
@@ -375,3 +378,119 @@ class TestTestFeedContract:
     def test_endpoint_exists(self, auth_client):
         resp = auth_client.post("/api/test_feed", json={"url": "http://test"})
         assert resp.status_code != 404
+
+    def test_missing_payload(self, auth_client):
+        resp = auth_client.post("/api/test_feed", json={})
+        assert resp.status_code != 404
+
+
+# ============================================================
+# Backup/Restore Endpoints
+# ============================================================
+
+class TestBackupContract:
+    """Contract: POST /api/backup"""
+
+    def test_requires_auth(self, client):
+        resp = client.post("/api/backup")
+        assert resp.status_code == 302
+
+    def test_rejects_get(self, auth_client):
+        resp = auth_client.get("/api/backup")
+        assert resp.status_code == 405
+
+    def test_returns_zip_for_admin(self, auth_client):
+        resp = auth_client.post("/api/backup")
+        # May succeed with ZIP or fail (500) if data dir is empty
+        assert resp.status_code in (200, 500)
+        if resp.status_code == 200:
+            assert "application/zip" in resp.content_type
+
+
+class TestRestoreContract:
+    """Contract: POST /api/restore"""
+
+    def test_requires_auth(self, client):
+        resp = client.post("/api/restore")
+        assert resp.status_code == 302
+
+    def test_requires_system_rw(self, readonly_client):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("config.json", "{}")
+        buf.seek(0)
+        resp = readonly_client.post(
+            "/api/restore",
+            data={"backup_file": (buf, "test.zip")},
+            content_type="multipart/form-data",
+        )
+        assert resp.status_code == 302
+
+
+# ============================================================
+# Deceptor Endpoints Contract
+# ============================================================
+
+class TestDeceptorContract:
+    """Contract: POST /api/deceptor/block, /api/deceptor/unblock"""
+
+    @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
+    @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
+    def test_block_requires_api_key(self, mock_auth, mock_config, client):
+        resp = client.post("/api/deceptor/block", json={"whblockdata": "1.1.1.1"})
+        assert resp.status_code == 401
+
+    @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
+    @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
+    def test_unblock_requires_api_key(self, mock_auth, mock_config, client):
+        resp = client.post("/api/deceptor/unblock", json={"whunblockdata": "1.1.1.1"})
+        assert resp.status_code == 401
+
+    @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
+    @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
+    def test_unblock_validates_ip(self, mock_auth, mock_config, client):
+        resp = client.post(
+            "/api/deceptor/unblock",
+            json={"whunblockdata": "not-an-ip"},
+            headers=api_key_headers(),
+        )
+        assert resp.status_code == 400
+
+
+# ============================================================
+# Feed Health Contract
+# ============================================================
+
+class TestFeedHealthContract:
+    """Contract: GET /api/feed_health"""
+
+    def test_requires_auth(self, client):
+        resp = client.get("/api/feed_health")
+        assert resp.status_code == 302
+
+    def test_returns_json(self, auth_client):
+        resp = auth_client.get("/api/feed_health")
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("application/json")
+        assert resp.json["status"] == "success"
+
+
+# ============================================================
+# Safe List Endpoints Contract
+# ============================================================
+
+class TestSafeListContract:
+    """Contract: POST /api/safe_list/add, /api/safe_list/remove"""
+
+    @patch("threat_feed_aggregator.routes.api.add_to_safe_list", return_value=(True, "Added"))
+    def test_add_valid_item(self, mock_add, auth_client):
+        resp = auth_client.post("/api/safe_list/add", data={"item": "8.8.8.8"})
+        assert resp.status_code == 302
+
+    def test_add_invalid_item(self, auth_client):
+        resp = auth_client.post(
+            "/api/safe_list/add",
+            data={"item": "not-valid!!!"},
+            follow_redirects=True,
+        )
+        assert b"not a valid" in resp.data

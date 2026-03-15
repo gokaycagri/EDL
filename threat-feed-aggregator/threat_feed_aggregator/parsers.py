@@ -72,7 +72,8 @@ def parse_json(raw_data, key=None):
                 keys = key.split('.')
                 results = []
                 for item in data:
-                    if not isinstance(item, dict): continue
+                    if not isinstance(item, dict):
+                        continue
                     val = item
                     try:
                         for k in keys:
@@ -109,18 +110,20 @@ def normalize_indicator(indicator, itype=None):
     """
     if not itype:
         itype = identify_indicator_type(indicator)
-    
+
     if itype == 'domain':
         return indicator.lower(), itype
     elif itype == 'cidr':
         try:
             return str(ipaddress.ip_network(indicator, strict=False)), itype
-        except (ValueError, TypeError): pass
+        except (ValueError, TypeError):
+            pass
     elif itype == 'ip':
         try:
             return str(ipaddress.ip_address(indicator)), itype
-        except (ValueError, TypeError): pass
-    
+        except (ValueError, TypeError):
+            pass
+
     return indicator, itype
 
 def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
@@ -150,8 +153,10 @@ def parse_json_with_type(raw_data, key=None, **kwargs):
     return [normalize_indicator(item) for item in items]
 
 def parse_csv_with_type(raw_data, column=0, **kwargs):
-    try: column = int(column)
-    except (ValueError, TypeError): column = 0
+    try:
+        column = int(column)
+    except (ValueError, TypeError):
+        column = 0
     items = parse_csv(raw_data, column)
     return [normalize_indicator(item) for item in items]
 
