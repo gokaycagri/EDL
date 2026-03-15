@@ -60,9 +60,9 @@ class TestMissingCoverage(unittest.TestCase):
         
         self.assertEqual(response.status_code, 200)
         data = response.json
-        self.assertTrue(data['success'])
-        self.assertEqual(data['whois_data'], "Mock WHOIS Data")
-        self.assertEqual(data['data']['domains'][0], "example.com")
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(data['data']['whois_data'], "Mock WHOIS Data")
+        self.assertEqual(data['data']['data']['domains'][0], "example.com")
 
     @patch('threat_feed_aggregator.services.investigation_service.whois.whois')
     @patch('threat_feed_aggregator.services.investigation_service.requests.get')
@@ -85,9 +85,9 @@ class TestMissingCoverage(unittest.TestCase):
         
         # New logic returns 200 even if external API fails (graceful degradation)
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json['success'])
-        # The 'data' field might be empty, but request succeeds
-        self.assertEqual(response.json['data'], {})
+        self.assertEqual(response.json['status'], 'success')
+        # The result data field might be empty, but request succeeds
+        self.assertEqual(response.json['data']['data'], {})
 
     def test_lookup_ip_no_input(self):
         """Test IP lookup with missing input."""
@@ -201,7 +201,8 @@ class TestMissingCoverage(unittest.TestCase):
         
         response = self.client.get('/api/run_single/TestFeed')
         self.assertEqual(response.status_code, 200)
-        self.assertIn('running', response.json['status'])
+        self.assertEqual(response.json['status'], 'success')
+        self.assertEqual(response.json['data']['aggregation_status'], 'running')
         mock_thread.assert_called_once()
 
     @patch('threat_feed_aggregator.app.scheduler.get_jobs')

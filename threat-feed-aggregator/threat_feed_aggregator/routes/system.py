@@ -28,6 +28,7 @@ from ..db_manager import (
     create_custom_list,
     delete_custom_list
 )
+from ..response_helpers import api_error, api_response
 from . import bp_system
 from .auth import login_required
 
@@ -650,10 +651,10 @@ def check_ldap_server_status():
         servers_list = auth_config.get('ldap_servers', [])
 
     if not ldap_enabled:
-        return jsonify({'status': 'disabled', 'message': 'LDAP is disabled'})
+        return api_response({"ldap_status": "disabled"}, message="LDAP is disabled")
 
     if not servers_list:
-        return jsonify({'status': 'error', 'message': 'No servers configured'})
+        return api_error("No servers configured", "LDAP_NOT_CONFIGURED", 400)
 
     # Try to connect to at least one server
     connected = False
@@ -667,7 +668,7 @@ def check_ldap_server_status():
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2) # 2 seconds timeout
+            sock.settimeout(2)
             result = sock.connect_ex((host, int(port)))
             sock.close()
 
@@ -680,9 +681,9 @@ def check_ldap_server_status():
             details.append(f"{host}: Error ({str(e)})")
 
     if connected:
-        return jsonify({'status': 'online', 'message': 'Servers Reachable', 'details': details})
+        return api_response({"ldap_status": "online", "details": details}, message="Servers Reachable")
     else:
-        return jsonify({'status': 'offline', 'message': 'Servers Unreachable', 'details': details})
+        return api_response({"ldap_status": "offline", "details": details}, message="Servers Unreachable")
 
 @bp_system.route('/ldap/test', methods=['POST'])
 @login_required
@@ -702,17 +703,11 @@ def test_ldap_connection():
     servers_override = data.get('servers')
 
     if not username or not password:
-        return jsonify({'status': 'error', 'message': 'Username and password required.'})
+        return api_error("Username and password required.", "VALIDATION_ERROR", 400)
 
     logger.info(f"LDAP Test initiated for user: {username}")
 
     if servers_override:
-        # For testing purposes, we use a temporary function or adapt auth_manager
-        # For now, let's just use the logic in auth_manager
-        # But auth_manager expects saved config for some parts.
-        # Since this is a test, we skip RBAC check usually.
-        # I'll add a helper in auth_manager or just use the logic here.
-        # Actually, let's keep it simple:
         from ..auth_manager import check_credentials
         success, message, _ = check_credentials(username, password)
     else:
@@ -720,10 +715,10 @@ def test_ldap_connection():
 
     if success:
         logger.info(f"LDAP Test SUCCESS for user: {username}")
-        return jsonify({'status': 'success', 'message': f'Success: {message}'})
+        return api_response(message=f"Success: {message}")
     else:
         logger.warning(f"LDAP Test FAILED for user {username}: {message}")
-        return jsonify({'status': 'error', 'message': f'Failed: {message}'})
+        return api_error(f"Failed: {message}", "LDAP_AUTH_FAILED", 401)
 
 @bp_system.route('/proxy/status', methods=['GET'])
 @login_required
@@ -737,20 +732,19 @@ def check_proxy_status():
     proxies, _, _ = get_proxy_settings()
 
     if not proxies:
-        return jsonify({'status': 'disabled', 'message': 'Proxy Disabled or Incomplete'})
+        return api_response({"proxy_status": "disabled"}, message="Proxy Disabled or Incomplete")
 
     try:
-        # Test connection to a reliable external site
         test_url = "https://www.google.com"
         response = requests.get(test_url, proxies=proxies, timeout=5)
 
         if response.status_code == 200:
-            return jsonify({'status': 'online', 'message': 'Proxy Working'})
+            return api_response({"proxy_status": "online"}, message="Proxy Working")
         else:
-            return jsonify({'status': 'offline', 'message': f'HTTP {response.status_code}'})
+            return api_response({"proxy_status": "offline"}, message=f"HTTP {response.status_code}")
 
     except Exception as e:
-        return jsonify({'status': 'offline', 'message': f'Connection Failed: {str(e)}'})
+        return api_response({"proxy_status": "offline"}, message=f"Connection Failed: {str(e)}")
 
 @bp_system.route('/update_proxy', methods=['POST'])
 @login_required
@@ -820,7 +814,7 @@ def check_dns_status():
     secondary = dns_config.get('secondary')
 
     if not primary and not secondary:
-        return jsonify({'status': 'disabled', 'message': 'No Custom DNS Configured'})
+        return api_response({"dns_status": "disabled"}, message="No Custom DNS Configured")
 
     servers_to_test = []
     if primary: servers_to_test.append(primary)
@@ -843,12 +837,15 @@ def check_dns_status():
             failed_servers.append(f"{server} ({str(e)})")
 
     if working_servers:
-        details = f"Working: {', '.join(working_servers)}"
+        detail_msg = f"Working: {', '.join(working_servers)}"
         if failed_servers:
-            details += f"\nFailed: {', '.join(failed_servers)}"
-        return jsonify({'status': 'online', 'message': 'DNS Resolution OK', 'details': details})
+            detail_msg += f"\nFailed: {', '.join(failed_servers)}"
+        return api_response({"dns_status": "online", "details": detail_msg}, message="DNS Resolution OK")
     else:
-        return jsonify({'status': 'offline', 'message': 'DNS Resolution Failed', 'details': f"All failed: {', '.join(failed_servers)}"})
+        return api_response(
+            {"dns_status": "offline", "details": f"All failed: {', '.join(failed_servers)}"},
+            message="DNS Resolution Failed"
+        )
 
 @bp_system.route('/proxy/test', methods=['POST'])
 @login_required
@@ -865,10 +862,10 @@ def test_proxy_connection():
     password = data.get('password')
 
     if not enabled:
-        return jsonify({'status': 'error', 'message': 'Proxy is disabled. Please enable it to test.'})
+        return api_error("Proxy is disabled. Please enable it to test.", "PROXY_DISABLED", 400)
 
     if not server or not port:
-        return jsonify({'status': 'error', 'message': 'Server and Port are required.'})
+        return api_error("Server and Port are required.", "VALIDATION_ERROR", 400)
 
     # Clean server address
     server = server.replace('http://', '').replace('https://', '').strip('/')
@@ -900,7 +897,7 @@ def test_proxy_connection():
         try:
             resp_http = session.get(test_url_http, timeout=10)
             if resp_http.status_code < 400:
-                return jsonify({'status': 'success', 'message': f'Success! Connected via Proxy (HTTP).'})
+                return api_response({"proxy_status": "online"}, message="Success! Connected via Proxy (HTTP).")
         except Exception as e_http:
             # If HTTP fails, we continue to try HTTPS or report the error
             logger.warning(f"Proxy HTTP Test failed: {e_http}")
@@ -910,16 +907,15 @@ def test_proxy_connection():
         response = session.get(test_url_https, timeout=10, verify=False)
 
         if response.status_code == 200:
-            return jsonify({'status': 'success', 'message': f'Successfully connected to {test_url_https} via proxy.'})
+            return api_response({"proxy_status": "online"}, message=f"Successfully connected to {test_url_https} via proxy.")
         else:
-            return jsonify({'status': 'error', 'message': f'Proxy connected but returned status code: {response.status_code}'})
+            return api_error(f"Proxy connected but returned status code: {response.status_code}", "PROXY_HTTP_ERROR", 502)
 
     except Exception as e:
-        # If it still says 407, provide a more helpful hint
         err_msg = str(e)
         if "407" in err_msg:
             err_msg += " | Hint: Check if username needs DOMAIN\\ prefix or if password has unsupported characters."
-        return jsonify({'status': 'error', 'message': f'Connection failed: {err_msg}'})
+        return api_error(f"Connection failed: {err_msg}", "PROXY_CONNECTION_FAILED", 502)
 
 @bp_system.route('/upload_cert', methods=['POST'])
 @login_required

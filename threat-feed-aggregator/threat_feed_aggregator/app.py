@@ -19,6 +19,7 @@ from flask_session import Session
 from .config_manager import DATA_DIR
 from .db_manager import init_db
 from .log_manager import setup_memory_logging
+from .response_helpers import api_response
 from .version import __version__
 
 setup_memory_logging()
@@ -66,9 +67,13 @@ app.register_blueprint(bp_system, url_prefix='/system')
 app.register_blueprint(bp_tools, url_prefix='/tools')
 app.register_blueprint(bp_analysis, url_prefix='/analysis')
 
+# ITAI Hub integration middleware (active only when ITAI_MODE=true)
+from .middleware.itai import register_itai_middleware
+register_itai_middleware(app)
+
 @app.route('/health')
 def health_check():
-    return jsonify({"status": "healthy", "version": __version__}), 200
+    return api_response({"health": "healthy", "version": __version__})
 
 @app.context_processor
 def inject_version():

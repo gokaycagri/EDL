@@ -4,6 +4,7 @@ from flask import flash, jsonify, redirect, render_template, request, session, u
 from ..auth_manager import check_credentials, generate_totp_secret, generate_qr_code, verify_totp
 from ..db_manager import is_mfa_enabled, update_user_mfa_secret, get_user_mfa_secret
 from ..config_manager import read_config
+from ..response_helpers import api_error
 from . import bp_auth
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def api_key_required(f):
             logger.info(f"API Access Attempt | Final Key: {request_key[:10]}... | IP: {client_ip}")
         else:
             logger.warning(f"API Key Missing! Headers: {dict(request.headers)}")
-            return jsonify({'status': 'error', 'message': 'Unauthorized: Missing API Key'}), 401
+            return api_error("Unauthorized: Missing API Key", "AUTH_MISSING_KEY", 401)
 
         api_clients = config.get('api_clients', [])
         valid_client = next((c for c in api_clients if c.get('api_key') == request_key), None)
@@ -57,12 +58,12 @@ def api_key_required(f):
 
         if not valid_client:
             logger.warning(f"Unauthorized Key from {client_ip}: {request_key[:10]}...")
-            return jsonify({'status': 'error', 'message': 'Unauthorized: Invalid API Key'}), 401
+            return api_error("Unauthorized: Invalid API Key", "AUTH_INVALID_KEY", 401)
 
         allowed_ips = valid_client.get('allowed_ips', [])
         if allowed_ips and client_ip not in allowed_ips:
              logger.warning(f"IP Forbidden: {client_ip} not in {allowed_ips}")
-             return jsonify({'status': 'error', 'message': f'Forbidden Host: {client_ip}'}), 403
+             return api_error(f"Forbidden Host: {client_ip}", "AUTH_IP_FORBIDDEN", 403)
 
         return f(*args, **kwargs)
     return decorated_function

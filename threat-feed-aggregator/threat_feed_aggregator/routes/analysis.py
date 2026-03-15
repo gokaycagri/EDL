@@ -1,5 +1,6 @@
 import json
 from flask import Blueprint, render_template, request, jsonify
+from ..response_helpers import api_response
 from .auth import login_required
 from ..services.analysis_service import get_analysis_data
 from ..db_manager import get_filter_options
@@ -19,25 +20,24 @@ def filter_options():
     search = request.args.get('q', '')
     
     if not column:
-        return jsonify([])
+        return api_response({"items": []})
 
     # Static lists for some columns
     if column == 'level':
         options = ['Critical', 'High', 'Medium', 'Low']
         if search:
             options = [o for o in options if search.lower() in o.lower()]
-        return jsonify(options)
-    
+        return api_response({"items": options})
+
     if column == 'tag':
-        # Hardcoded common tags since they are logic-based
         common_tags = ['Botnet', 'C2', 'Malware', 'Phishing', 'Fraud', 'Abuse', 'Reputation', 'Tor', 'Proxy']
         if search:
             common_tags = [t for t in common_tags if search.lower() in t.lower()]
-        return jsonify(common_tags)
+        return api_response({"items": common_tags})
 
     # Dynamic DB columns
     results = get_filter_options(column, search)
-    return jsonify(results)
+    return api_response({"items": results})
 
 @bp_analysis.route('/data', methods=['GET'])
 @login_required

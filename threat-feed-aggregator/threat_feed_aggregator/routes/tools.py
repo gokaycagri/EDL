@@ -2,6 +2,7 @@ import logging
 
 from flask import Blueprint, jsonify, render_template, request
 
+from ..response_helpers import api_error, api_response
 from .auth import login_required
 
 bp_tools = Blueprint('tools', __name__, url_prefix='/tools')
@@ -20,16 +21,16 @@ def lookup_ip():
         ip_address = data.get('ip')
 
         if not ip_address:
-            return jsonify({'success': False, 'error': 'No IP address provided'}), 400
+            return api_error("No IP address provided", "VALIDATION_ERROR", 400)
 
         from ..services.investigation_service import InvestigationService
         result = InvestigationService.lookup_ip(ip_address)
 
-        return jsonify(result)
+        return api_response(result)
 
     except Exception as e:
         logger.error(f"Error in lookup_ip: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return api_error(str(e), "LOOKUP_ERROR", 500)
 
 @bp_tools.route('/api/lookup_internal', methods=['POST'])
 @login_required
@@ -39,44 +40,39 @@ def lookup_internal():
         indicator = data.get('indicator')
 
         if not indicator:
-            return jsonify({'success': False, 'error': 'No indicator provided'}), 400
+            return api_error("No indicator provided", "VALIDATION_ERROR", 400)
 
         from ..db_manager import get_sources_for_indicator, get_api_blacklist_item_by_value
-        
+
         # 1. Fetch from main DB (indicator_sources table)
         sources = get_sources_for_indicator(indicator)
 
         # 2. Check API Blacklist (Manual/Deceptor Blocks) for metadata like comments
         blacklist_item = get_api_blacklist_item_by_value(indicator)
-        
+
         if blacklist_item:
             comment = blacklist_item.get('comment') or ""
-            # Determine source name based on comment content
             blacklist_source_name = "Manual Blacklist"
             if "FortiDeceptor" in comment:
                 blacklist_source_name = "FortiDeceptor"
-            
-            # Check if this source already exists in 'sources'
+
             existing_idx = next((i for i, s in enumerate(sources) if s['source_name'] == blacklist_source_name), None)
-            
+
             if existing_idx is not None:
-                # Enrich existing source with the comment from blacklist
                 sources[existing_idx]['comment'] = comment
-                # Move to top for visibility
                 sources.insert(0, sources.pop(existing_idx))
             else:
-                # Add as a new source entry at the top
                 sources.insert(0, {
                     'source_name': blacklist_source_name,
                     'last_seen': blacklist_item['added_at'],
                     'comment': comment
                 })
 
-        return jsonify({'success': True, 'sources': sources})
+        return api_response({"indicator": indicator, "sources": sources})
 
     except Exception as e:
         logger.error(f"Error in lookup_internal: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return api_error(str(e), "LOOKUP_ERROR", 500)
 
 @bp_tools.route('/dns_deduplication')
 @login_required
@@ -114,10 +110,10 @@ def save_dedup_schedule():
         write_config(config)
         update_scheduled_jobs()
         
-        return jsonify({'success': True, 'message': 'Schedule updated successfully.'})
+        return api_response(message="Schedule updated successfully.")
     except Exception as e:
         logger.error(f"Error saving schedule: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return api_error(str(e), "SCHEDULE_ERROR", 500)
 
 @bp_tools.route('/api/dns_deduplication/analyze', methods=['POST'])
 @login_required
@@ -137,14 +133,13 @@ def analyze_dns_duplicates():
             f"DNS Deduplication Analyze: Completed manual run (resolved={processed_count}, deleted={deleted_count})."
         )
         
-        return jsonify({
-            'success': True, 
-            'duplicates': [], # Legacy UI support (empty table)
-            'message': f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}."
-        })
+        return api_response(
+            {"resolved": processed_count, "deleted": deleted_count, "duplicates": []},
+            message=f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}."
+        )
     except Exception as e:
         logger.error(f"Error in analyze_dns_duplicates: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return api_error(str(e), "DNS_DEDUP_ERROR", 500)
 
 @bp_tools.route('/api/dns_deduplication/delete', methods=['POST'])
 @login_required
@@ -152,14 +147,14 @@ def delete_dns_duplicates():
     try:
         data = request.get_json()
         indicators = data.get('indicators', [])
-        
+
         if not indicators:
-            return jsonify({'success': False, 'error': 'No indicators provided'}), 400
-            
+            return api_error("No indicators provided", "VALIDATION_ERROR", 400)
+
         from ..db_manager import delete_indicators
         count = delete_indicators(indicators)
-        
-        return jsonify({'success': True, 'deleted_count': count})
+
+        return api_response({"deleted_count": count})
     except Exception as e:
         logger.error(f"Error in delete_dns_duplicates: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return api_error(str(e), "DNS_DELETE_ERROR", 500)

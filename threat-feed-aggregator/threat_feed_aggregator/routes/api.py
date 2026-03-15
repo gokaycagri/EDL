@@ -35,6 +35,7 @@ from ..db_manager import (
 )
 from ..github_services import process_github_feeds
 from ..log_manager import clear_logs, get_live_logs
+from ..response_helpers import api_error, api_response
 from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
 from ..services.job_service import job_service
 from . import bp_api
@@ -124,7 +125,7 @@ def get_firewall_edl(filename):
 def custom_list_count_api(list_id):
     """Returns the item count for a custom list."""
     count = get_custom_list_count(list_id)
-    return jsonify({'count': count})
+    return api_response({"count": count})
 
 @bp_api.route('/edl/custom/<token>')
 def get_saved_custom_edl(token):
@@ -310,13 +311,13 @@ def run_script():
     logging.debug("Received request to /api/run endpoint.")
     if job_service.aggregation_status == "running":
         logging.info("Aggregation already running, returning status.")
-        return jsonify({"status": job_service.aggregation_status})
+        return api_response({"aggregation_status": "running"}, message="Aggregation already running")
 
     job_service.aggregation_status = "running"
     thread = threading.Thread(target=aggregation_task)
     thread.start()
     logging.info("Aggregation task started in a new thread.")
-    return jsonify({"status": "running"})
+    return api_response({"aggregation_status": "running"}, message="Aggregation started")
 
 
 @bp_api.route('/run_single/<path:name>')
@@ -327,26 +328,26 @@ def run_single_feed(name):
     source = next((s for s in config.get('source_urls', []) if s['name'] == name), None)
 
     if not source:
-        return jsonify({"status": "error", "message": "Source not found"}), 404
+        return api_error("Source not found", "SOURCE_NOT_FOUND", 404)
 
     thread = threading.Thread(target=fetch_and_process_single_feed, args=(source,))
     thread.start()
 
-    return jsonify({"status": "running", "message": f"Fetch started for {name}"})
+    return api_response({"source": name, "aggregation_status": "running"}, message=f"Fetch started for {name}")
 
 
 @bp_api.route('/status')
 @login_required
 def status():
     logging.debug("Received request to /api/status endpoint.")
-    return jsonify({"status": job_service.aggregation_status})
+    return api_response({"aggregation_status": job_service.aggregation_status})
 
 
 @bp_api.route('/status_detailed')
 @login_required
 def status_detailed():
     """Returns detailed status of currently running jobs."""
-    return jsonify(job_service.get_all_job_statuses())
+    return api_response(job_service.get_all_job_statuses())
 
 
 @bp_api.route('/scheduled_jobs')
@@ -389,7 +390,7 @@ def get_scheduled_jobs():
     # Sort by nearest run time
     formatted_jobs.sort(key=lambda x: x['next_run_timestamp'] if x['next_run_timestamp'] > 0 else float('inf'))
 
-    return jsonify(formatted_jobs)
+    return api_response({"items": formatted_jobs, "total": len(formatted_jobs)})
 
 
 @bp_api.route('/trend_data')
@@ -408,7 +409,7 @@ def trend_data():
         except Exception:
             pass
 
-    return jsonify(formatted_data)
+    return api_response({"items": formatted_data, "total": len(formatted_data)})
 
 
 @bp_api.route('/history')
@@ -434,7 +435,7 @@ def job_history():
             item['start_time'] = format_timestamp(item['start_time'], fmt='%Y-%m-%d %H:%M:%S')
         except Exception:
             pass
-    return jsonify(history)
+    return api_response({"items": history, "total": len(history)})
 
 
 @bp_api.route('/history/clear', methods=['POST'])
@@ -443,17 +444,18 @@ def clear_history_route():
     """Clears the job history."""
     logger.info("RECEIVED request to clear job history")
     if clear_job_history():
-        return jsonify({'status': 'success', 'message': 'Job history cleared.'})
+        return api_response(message="Job history cleared.")
     else:
         logger.error("Failed to clear job history in DB")
-        return jsonify({'status': 'error', 'message': 'Failed to clear job history.'}), 500
+        return api_error("Failed to clear job history.", "DB_ERROR", 500)
 
 
 @bp_api.route('/live_logs')
 @login_required
 def live_logs():
     """Returns the latest logs from memory."""
-    return jsonify(get_live_logs())
+    logs = get_live_logs()
+    return api_response({"items": logs, "total": len(logs)})
 
 
 @bp_api.route('/live_logs/clear', methods=['POST'])
@@ -461,7 +463,7 @@ def live_logs():
 def clear_live_logs_route():
     """Clears the live logs from memory."""
     clear_logs()
-    return jsonify({'status': 'success', 'message': 'Live logs cleared.'})
+    return api_response(message="Live logs cleared.")
 
 
 @bp_api.route('/source_stats')
@@ -522,7 +524,7 @@ def source_stats_api():
                  "last_updated": format_timestamp(real_db_times.get(name))
              }
 
-    return jsonify({
+    return api_response({
         "sources": formatted_stats,
         "totals": {
             "total": total_count,
@@ -539,9 +541,9 @@ def source_stats_api():
 def api_regenerate_lists():
     success, msg = regenerate_edl_files()
     if success:
-        return jsonify({'status': 'success', 'message': msg})
+        return api_response(message=msg)
     else:
-        return jsonify({'status': 'error', 'message': msg})
+        return api_error(msg, "REGENERATION_FAILED", 500)
 
 
 @bp_api.route('/update_ms365', methods=['POST'])
@@ -550,11 +552,11 @@ def api_update_ms365():
     try:
         success, msg = process_microsoft_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "MS365_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "MS365_UPDATE_ERROR", 500)
 
 
 @bp_api.route('/update_github', methods=['POST'])
@@ -563,11 +565,11 @@ def api_update_github():
     try:
         success, msg = process_github_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "GITHUB_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "GITHUB_UPDATE_ERROR", 500)
 
 
 @bp_api.route('/update_azure', methods=['POST'])
@@ -576,11 +578,11 @@ def api_update_azure():
     try:
         success, msg = process_azure_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "AZURE_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "AZURE_UPDATE_ERROR", 500)
 
 
 @bp_api.route('/backup', methods=['GET'])
@@ -607,7 +609,7 @@ def backup_system():
             download_name=f'threat_feed_backup_{timestamp}.zip'
         )
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "BACKUP_ERROR", 500)
 
 
 @bp_api.route('/restore', methods=['POST'])
@@ -686,7 +688,7 @@ def api_test_feed():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'status': 'error', 'message': 'No data provided'})
+            return api_error("No data provided", "VALIDATION_ERROR", 400)
 
         name = data.get('name', 'Test')
         url = data.get('url')
@@ -702,13 +704,12 @@ def api_test_feed():
 
         success, message, sample = test_feed_source(source_config)
 
-        return jsonify({
-            'status': 'success' if success else 'error',
-            'message': message,
-            'sample': sample
-        })
+        if success:
+            return api_response({"sample": sample}, message=message)
+        else:
+            return api_error(message, "FEED_TEST_FAILED", 400)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "FEED_TEST_ERROR", 500)
 
 
 # --- SOAR Integration Endpoints ---
@@ -730,7 +731,7 @@ def add_indicator():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+            return api_error("No data provided", "VALIDATION_ERROR", 400)
 
         action_type = data.get('type')  # whitelist or blacklist
         value = data.get('value')
@@ -738,37 +739,31 @@ def add_indicator():
         item_type = data.get('item_type', 'ip')
 
         if not value or not action_type:
-            return jsonify({'status': 'error', 'message': 'Missing value or type'}), 400
+            return api_error("Missing value or type", "VALIDATION_ERROR", 400)
 
         # Validation
         is_valid, _ = validate_indicator(value)
         if not is_valid:
-            return jsonify({'status': 'error', 'message': f'"{value}" is not a valid IP, CIDR, or Domain/URL'}), 400
+            return api_error(f'"{value}" is not a valid IP, CIDR, or Domain/URL', "VALIDATION_ERROR", 400)
 
         if action_type.lower() == 'whitelist':
-            # Whitelist Logic
             success, msg = add_whitelist_item(value, item_type=item_type, description=comment)
 
         elif action_type.lower() == 'blacklist':
-            # Blacklist Logic
             success, msg = add_api_blacklist_item(value, item_type=item_type, comment=comment)
-            # Trigger immediate background regeneration if needed?
-            # Ideally we should, but for performance maybe just let it be picked up on next run
-            # or we can force a quick update of the files.
             if success:
-                # Regenerate files to reflect changes immediately in background
                 trigger_background_regeneration()
         else:
-            return jsonify({'status': 'error', 'message': 'Invalid type. Use whitelist or blacklist'}), 400
+            return api_error("Invalid type. Use whitelist or blacklist", "VALIDATION_ERROR", 400)
 
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response({"value": value, "type": action_type}, message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg}), 400
+            return api_error(msg, "INDICATOR_ADD_FAILED", 400)
 
     except Exception as e:
         logger.error(f"API Error adding indicator: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "INDICATOR_ADD_ERROR", 500)
 
 
 def _handle_api_indicator_removal(value, type_hint):
@@ -803,7 +798,7 @@ def remove_indicator():
     try:
         data = request.get_json()
         if not data or not data.get('value'):
-            return jsonify({'status': 'error', 'message': 'Missing value'}), 400
+            return api_error("Missing value", "VALIDATION_ERROR", 400)
 
         value = data.get('value')
         type_hint = data.get('type')
@@ -812,13 +807,13 @@ def remove_indicator():
 
         if deleted:
             trigger_background_regeneration()
-            return jsonify({'status': 'success', 'message': ", ".join(msgs)})
+            return api_response({"value": value}, message=", ".join(msgs))
 
-        return jsonify({'status': 'error', 'message': 'Item not found'}), 404
+        return api_error("Item not found", "NOT_FOUND", 404)
 
     except Exception as e:
         logger.error(f"API Error removing indicator: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "INDICATOR_REMOVE_ERROR", 500)
 
 
 from .auth import api_key_required
