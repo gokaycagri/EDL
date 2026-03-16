@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}DNS Deduplication{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Header / Info Section -->
+    <div class="col-12">
+        <div class="card shadow-sm border-0 bg-primary text-white">
+            <div class="card-body p-4 d-flex align-items-center justify-content-between">
+                <div>
+                    <h3 class="fw-bold mb-1"><i class="fas fa-project-diagram me-3"></i>DNS Deduplication Manager</h3>
+                    <p class="mb-0 opacity-75">Optimizes your threat feed by resolving domains to IPs and removing duplicates found in your existing blocklists.</p>
+                </div>
+                <div class="d-none d-md-block text-center px-4">
+                    <h2 class="fw-bold mb-0" id="dupCountHeader">0</h2>
+                    <small class="opacity-75">Duplicates Found (Session)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Left Column: Settings & Manual Trigger -->
+    <div class="col-lg-4">
+        <!-- Schedule Settings Card -->
+        <div class="card shadow-sm border-0 mb-4 h-100">
+            <div class="card-header bg-transparent border-0 py-3">
+                <h5 class="fw-bold text-dark mb-0"><i class="fas fa-clock me-2 text-info"></i>Configuration</h5>
+            </div>
+            <div class="card-body">
+                <form id="scheduleForm" onsubmit="saveSchedule(event)">
+                    <div class="p-3 bg-light rounded-3 mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="schedEnabled" name="enabled" {% if schedule.enabled %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="schedEnabled">Enable Scheduled Deduplication</label>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            Automatically resolves domains in background batches.
+                        </small>
+                    </div>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-uppercase text-muted">Active Time Window</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="far fa-clock"></i></span>
+                                <input type="time" class="form-control" name="start_time" value="{{ schedule.start_time or '00:00' }}">
+                                <span class="input-group-text bg-white">-</span>
+                                <input type="time" class="form-control" name="end_time" value="{{ schedule.end_time or '23:59' }}">
+                            </div>
+                        </div>
+
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-uppercase text-muted">Interval</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="interval" value="{{ schedule.interval_minutes or 60 }}" min="5">
+                                <span class="input-group-text bg-white">min</span>
+                            </div>
+                        </div>
+                         <div class="col-6">
+                            <label class="form-label small fw-bold text-uppercase text-muted">Batch Size</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="batch_size" value="{{ schedule.batch_size or 50 }}" min="10">
+                                <span class="input-group-text bg-white">items</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                         <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="autoDelete" name="auto_delete" {% if schedule.auto_delete %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="autoDelete">Auto-Delete Duplicates</label>
+                        </div>
+                        <small class="text-muted">If unchecked, duplicates are only logged.</small>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Configuration</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Live Logs & Manual Analysis -->
+    <div class="col-lg-8">
+        
+         <!-- Live Logs Card -->
+        <div class="card shadow-sm border-0 mb-4" style="min-height: 450px;">
+             <div class="card-header bg-transparent border-0 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold text-dark mb-0"><i class="fas fa-terminal me-2 text-warning"></i>Live Activity Log</h5>
+                <div>
+                     <!-- Manual Trigger (Small) -->
+                     <button id="analyzeBtn" class="btn btn-sm btn-outline-primary me-2" onclick="runAnalysis()">
+                        <i class="fas fa-play me-1"></i> Run Once
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="clearLogs()">Clear</button>
+                </div>
+            </div>
+            <div class="card-body p-0 position-relative">
+                <div id="loading" class="position-absolute top-50 start-50 translate-middle text-center" style="display: none; z-index: 10;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <div class="mt-2 fw-bold text-white bg-dark px-2 rounded">Processing...</div>
+                </div>
+
+                <div id="scheduleLogWindow" class="log-window bg-dark text-success p-3" 
+                     style="height: 400px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 0.85rem; border-radius: 0 0 0.5rem 0.5rem;">
+                    <div class="text-muted opacity-50">System ready. Waiting for logs...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden Results Container for Manual Run (Optional, usually background task is preferred now) -->
+        <div id="resultsContainer" class="card shadow-sm border-0 mb-4" style="display: none;">
+            <div class="card-header bg-white py-3 border-0">
+                 <h5 class="fw-bold text-dark mb-0">Manual Analysis Results</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="dupTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Indicator</th>
+                                <th>Type</th>
+                                <th>Resolved IP</th>
+                                <th>Matched IP (DB)</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dupTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let logInterval = null;
+
+    // Start polling immediately when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        startLogPolling();
+    });
+
+    function runAnalysis() {
+        // Show loading state
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('analyzeBtn').disabled = true;
+        appendLog('<div class="text-info border-bottom border-secondary mb-1 pb-1">--- Manual Analysis Triggered ---</div>');
+
+        fetch('/tools/api/dns_deduplication/analyze', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': "{{ csrf_token() }}"
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = false;
+
+            if (data.success) {
+                // If duplicates are returned and auto-delete is OFF, we might show them. 
+                // But typically now we rely on logs.
+                if (data.duplicates && data.duplicates.length > 0) {
+                     renderTable(data.duplicates);
+                     document.getElementById('dupCountHeader').innerText = data.duplicates.length;
+                } else {
+                     appendLog('<div class="text-success">Analysis complete. No new duplicates found.</div>');
+                }
+            } else {
+                Swal.fire('Error', data.error || 'Analysis failed', 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = false;
+            Swal.fire('Error', 'Network error occurred.', 'error');
+        });
+    }
+
+    function startLogPolling() {
+        if (logInterval) clearInterval(logInterval);
+        updateDedupLogs(); 
+        logInterval = setInterval(updateDedupLogs, 3000); 
+    }
+
+    function updateDedupLogs() {
+        fetch('/api/live_logs')
+            .then(r => r.json())
+            .then(data => {
+                const logWindow = document.getElementById('scheduleLogWindow');
+                if (!logWindow) return;
+
+                // Filter logs related to DNS Deduplication
+                const relevantLogs = data.filter(line => 
+                    line.includes('DNS') || 
+                    line.includes('Deduplication') || 
+                    line.includes('Analyze') ||
+                    line.includes('dns_deduplication')
+                );
+
+                if (relevantLogs.length > 0) {
+                    // Smart append: only add new lines if possible, or just replace innerHTML for simplicity (polling)
+                    // Since it's polling last 100 lines, full replace is safer to ensure sync
+                    logWindow.innerHTML = relevantLogs.map(line => {
+                        let color = '#4ade80'; // Green
+                        let icon = '<i class="fas fa-check-circle me-2 text-success opacity-50"></i>';
+                        
+                        if (line.includes('DUPLICATE') || line.includes('Removing')) {
+                            color = '#fbbf24'; // Warning Yellow
+                            icon = '<i class="fas fa-exclamation-triangle me-2 text-warning"></i>';
+                        }
+                        if (line.includes('failed') || line.includes('Error')) {
+                            color = '#f87171'; // Red
+                            icon = '<i class="fas fa-times-circle me-2 text-danger"></i>';
+                        }
+                        if (line.includes('Batch')) {
+                             color = '#60a5fa'; // Blue
+                             icon = '<i class="fas fa-cogs me-2 text-primary opacity-50"></i>';
+                        }
+
+                        // Strip timestamp for cleaner look inside small window if needed, 
+                        // but timestamp is useful. Let's make it smaller.
+                        const parts = line.split(' - ');
+                        let time = parts[0] || '';
+                        let msg = parts.slice(3).join(' - ') || line; // skip level/logger name
+
+                        return `
+                            <div class="d-flex align-items-start mb-1 border-bottom border-secondary border-opacity-10 pb-1" style="color: ${color};">
+                                <span class="me-2 opacity-50" style="font-size: 0.75rem; min-width: 130px;">${time}</span>
+                                <span>${msg}</span>
+                            </div>`;
+                    }).join('');
+                    logWindow.scrollTop = logWindow.scrollHeight;
+                }
+            });
+    }
+    
+    function appendLog(html) {
+        const logWindow = document.getElementById('scheduleLogWindow');
+        if (logWindow) {
+             logWindow.innerHTML += html;
+             logWindow.scrollTop = logWindow.scrollHeight;
+        }
+    }
+
+    function clearLogs() {
+        document.getElementById('scheduleLogWindow').innerHTML = '<div class="text-muted opacity-50">Logs cleared.</div>';
+    }
+
+    function renderTable(duplicates) {
+        const tbody = document.getElementById('dupTableBody');
+        const container = document.getElementById('resultsContainer');
+        
+        tbody.innerHTML = '';
+        container.style.display = 'block';
+
+        duplicates.forEach((item) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="ps-4"><code class="text-dark fw-bold">${item.indicator}</code></td>
+                <td><span class="badge bg-light text-dark border">${item.type}</span></td>
+                <td><span class="text-muted small">${item.resolved_ips.slice(0, 3).join(', ')}${item.resolved_ips.length>3?'...':''}</span></td>
+                <td><code class="text-danger">${item.matched_ip}</code></td>
+                <td>
+                    <button class="btn btn-sm btn-link text-danger p-0" onclick="deleteOne('${item.indicator}')">Delete</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function deleteOne(indicator) {
+        fetch('/tools/api/dns_deduplication/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': "{{ csrf_token() }}"},
+            body: JSON.stringify({ indicators: [indicator] })
+        }).then(() => {
+             // remove row logic
+        });
+    }
+
+    function saveSchedule(e) {
+        e.preventDefault();
+        const form = document.getElementById('scheduleForm');
+        const formData = new FormData(form);
+
+        fetch('/tools/api/dns_deduplication/schedule', {
+            method: 'POST',
+            body: formData,
+            headers: {'X-CSRFToken': "{{ csrf_token() }}"}
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Configuration Saved',
+                    text: 'Scheduler updated successfully.',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            } else {
+                Swal.fire('Error', data.error, 'error');
+            }
+        });
+    }
+</script>
+{% endblock %}

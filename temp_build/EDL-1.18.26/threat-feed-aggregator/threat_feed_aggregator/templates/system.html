@@ -1,0 +1,1005 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+
+{% block extra_head %}
+<style>
+    .nav-tabs-custom { border-bottom: 2px solid #f1f5f9; }
+    .nav-tabs-custom .nav-link { border: none; color: #64748b; font-weight: 600; padding: 1rem 1.5rem; transition: all 0.2s; }
+    .nav-tabs-custom .nav-link:hover { color: #4f46e5; }
+    .nav-tabs-custom .nav-link.active { color: #4f46e5; background: none; border-bottom: 3px solid #4f46e5; }
+    .badge-authority { font-size: 0.65rem; padding: 0.35em 0.65em; border-radius: 2rem; }
+    .bg-soft-info { background-color: #e0f2fe; color: #0369a1; }
+    .bg-soft-success { background-color: #dcfce7; color: #15803d; }
+    .bg-soft-danger { background-color: #fee2e2; color: #b91c1c; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set perms = session.get('permissions', {}) %}
+{% set sys_perm = perms.get('system', 'rw') %}
+
+<div class="container-fluid px-0">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-dark mb-0">System Configuration</h3>
+        {% if sys_perm == 'r' %}
+            <span class="badge bg-warning text-dark shadow-sm px-3"><i class="fas fa-eye me-1"></i> Read-Only Mode</span>
+        {% endif %}
+    </div>
+
+    <!-- Navigation Tabs -->
+    <ul class="nav nav-tabs nav-tabs-custom mb-4" id="settingsTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab"><i class="fas fa-sliders-h me-2"></i>General</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="auth-tab" data-bs-toggle="tab" href="#auth" role="tab"><i class="fas fa-users-shield me-2"></i>Authentication</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="network-tab" data-bs-toggle="tab" href="#network" role="tab"><i class="fas fa-network-wired me-2"></i>Network</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="security-tab" data-bs-toggle="tab" href="#security" role="tab"><i class="fas fa-lock me-2"></i>Security</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="integrations-tab" data-bs-toggle="tab" href="#integrations" role="tab"><i class="fas fa-plug me-2"></i>Integrations</a>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="settingsTabsContent">
+        
+    <!-- Tab: General -->
+    <div class="tab-pane fade show active" id="general" role="tabpanel">
+        <div class="row">
+            <div class="col-md-12">
+                <!-- Source URLs Management (RESTORED) -->
+                <div class="card settings-card shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                        <div><i class="fas fa-list me-2 text-primary"></i> Configured Threat Sources</div>
+                        <button class="btn btn-sm btn-primary" onclick="showAddSourceModal()" {{ 'disabled' if sys_perm == 'r' }}>
+                            <i class="fas fa-plus me-1"></i> Add New Source
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle">
+                                <thead class="table-light">
+                                    <tr style="font-size: 0.75rem;">
+                                        <th class="ps-4">Source Name & URL</th>
+                                        <th>Format</th>
+                                        <th>Interval</th>
+                                        <th>Conf.</th>
+                                        <th class="text-end pe-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody style="font-size: 0.85rem;">
+                                    {% for source in config.source_urls %}
+                                    <tr>
+                                        <td class="ps-4 py-3">
+                                            <div class="fw-bold text-dark">{{ source.name }}</div>
+                                            <small class="text-muted">{{ source.url }}</small>
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ source.format|upper }}</span></td>
+                                        <td>{{ source.schedule_interval_minutes }}m</td>
+                                        <td><span class="badge bg-soft-info">{{ source.confidence }}%</span></td>
+                                        <td class="text-end pe-4">
+                                            <button class="btn btn-link btn-sm text-primary p-0 me-2" onclick='showEditSourceModal({{ loop.index0 }}, {{ source|tojson }})' {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-edit"></i></button>
+                                            <a href="{{ url_for('system.remove_source', index=loop.index0) }}" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Remove source?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card settings-card shadow-sm mb-4">
+                    <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-cog me-2 text-primary"></i> Global Settings</div>
+                    <div class="card-body pt-0">
+                        <form action="{{ url_for('system.update_settings') }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-3">
+                                <label class="form-label-custom">System Timezone</label>
+                                <select class="form-select shadow-sm" name="timezone" {{ 'disabled' if sys_perm == 'r' }}>
+                                    {% set current_tz = config.get('timezone', 'UTC') %}
+                                    <option value="UTC" {{ 'selected' if current_tz == 'UTC' }}>UTC (Universal Time)</option>
+                                    <option value="Europe/Istanbul" {{ 'selected' if current_tz == 'Europe/Istanbul' }}>Europe/Istanbul</option>
+                                    <option value="Europe/London" {{ 'selected' if current_tz == 'Europe/London' }}>Europe/London</option>
+                                    <option value="Europe/Berlin" {{ 'selected' if current_tz == 'Europe/Berlin' }}>Europe/Berlin</option>
+                                    <option value="America/New_York" {{ 'selected' if current_tz == 'America/New_York' }}>America/New_York (EST)</option>
+                                    <option value="America/Los_Angeles" {{ 'selected' if current_tz == 'America/Los_Angeles' }}>America/Los_Angeles (PST)</option>
+                                    <option value="Asia/Tokyo" {{ 'selected' if current_tz == 'Asia/Tokyo' }}>Asia/Tokyo</option>
+                                    <option value="Asia/Dubai" {{ 'selected' if current_tz == 'Asia/Dubai' }}>Asia/Dubai</option>
+                                    <option value="Australia/Sydney" {{ 'selected' if current_tz == 'Australia/Sydney' }}>Australia/Sydney</option>
+                                </select>
+                                <div class="form-text mt-1 small">Used for displaying all timestamps in the UI.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">System Base URL (Optional)</label>
+                                <input type="text" class="form-control shadow-sm" name="base_url" value="{{ config.get('base_url', '') }}" placeholder="https://10.9.102.12/" {{ 'readonly' if sys_perm == 'r' }}>
+                                <div class="form-text mt-1 small">Used for generating external links (e.g., FortiDeceptor). Leave empty to use current address.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">Indicator Lifetime (Days)</label>
+                                <div class="input-group shadow-sm">
+                                    <input type="number" class="form-control" name="indicator_lifetime_days" value="{{ config.get('indicator_lifetime_days', 30) }}" min="0" {{ 'readonly' if sys_perm == 'r' }}>
+                                    {% if sys_perm == 'rw' %}
+                                        <button class="btn btn-primary px-4" type="submit">Update</button>
+                                    {% endif %}
+                                </div>
+                                <div class="form-text mt-2 small">Indicators older than this will be removed.</div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+        <!-- Tab: Authentication -->
+        <div class="tab-pane fade" id="auth" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-7">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-server me-2 text-info"></i> LDAP / Active Directory</div>
+                            <span id="ldapServerStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form action="{{ url_for('system.update_ldap') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="form-check form-switch mb-4">
+                                    <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldap_enabled" {% if config.get('auth', {}).get('ldap_enabled') %}checked{% endif %}>
+                                    <label class="form-check-label fw-bold" for="ldapEnabled">Enable LDAP Authentication</label>
+                                </div>
+                                <div id="ldapConfigContainer" class="bg-light p-3 rounded-3 mb-4 border">
+                                    <label class="form-label-custom">LDAP Server Cluster</label>
+                                    <div id="serverHostnamesList">
+                                        {% set servers = config.get('auth', {}).get('ldap_servers', []) %}
+                                        {% if not servers and config.get('auth', {}).get('ldap', {}).get('server') %}
+                                            {% set servers = [{'server': config.get('auth', {}).get('ldap', {}).get('server')}] %}
+                                        {% endif %}
+                                        {% for srv in servers %}
+                                        <div class="input-group input-group-sm mb-2 hostname-row">
+                                            <input type="text" class="form-control" name="ldap_server[]" value="{{ srv.server }}" placeholder="dc01.example.com" required>
+                                            <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                        </div>
+                                        {% else %}
+                                        <div class="input-group input-group-sm mb-2 hostname-row">
+                                            <input type="text" class="form-control" name="ldap_server[]" placeholder="dc01.example.com" required>
+                                            <button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <button type="button" class="btn btn-link btn-sm p-0 mb-3 text-decoration-none" onclick="addHostnameRow()"><i class="fas fa-plus-circle me-1"></i>Add Another Server</button>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label-custom">Port</label>
+                                            <input type="number" class="form-control form-control-sm" name="ldap_port" value="{{ (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).port or 389 }}" required>
+                                        </div>
+                                        <div class="col-md-8 d-flex align-items-end">
+                                            <div class="form-check form-switch mb-2">
+                                                <input class="form-check-input" type="checkbox" id="ldapsEnabled" name="ldaps_enabled" {% if (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).ldaps_enabled %}checked{% endif %} onchange="autoUpdatePort(this)">
+                                                <label class="form-check-label small fw-bold" for="ldapsEnabled">Use LDAPS (SSL)</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label-custom">Base DN</label>
+                                            <input type="text" class="form-control form-control-sm" name="ldap_domain" value="{{ (config.get('auth', {}).get('ldap_servers', [{}])[0] if config.get('auth', {}).get('ldap_servers') else config.get('auth', {}).get('ldap', {})).domain }}" placeholder="dc=example,dc=com" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% if sys_perm == 'rw' %}
+                                <div class="d-grid mb-4"><button type="submit" class="btn btn-dark btn-sm py-2 shadow-sm"><i class="fas fa-save me-2 text-warning"></i>Save LDAP Connection</button></div>
+                                {% endif %}
+                            </form>
+                            <div class="border-top pt-4">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="form-label-custom mb-0 text-primary"><i class="fas fa-sitemap me-2"></i>Group Role Mappings</h6>
+                                    <button type="button" class="btn btn-xs btn-outline-primary" onclick="showAddLdapMappingModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus me-1"></i>Add</button>
+                                </div>
+                                <div class="table-responsive border rounded-3 overflow-hidden bg-white mb-4">
+                                    <table class="table table-sm table-hover mb-0 align-middle">
+                                        <thead class="table-light"><tr><th class="ps-3 py-2">LDAP GROUP DN</th><th>PROFILE</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                        <tbody style="font-size: 0.85rem;">
+                                            {% if ldap_mappings %}
+                                                {% for map in ldap_mappings %}
+                                                <tr>
+                                                    <td class="ps-3 fw-bold text-dark text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
+                                                    <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
+                                                    <td class="text-end pe-3">
+                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline">
+                                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                            <input type="hidden" name="mapping_id" value="{{ map.id }}">
+                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            {% else %}
+                                                <tr><td colspan="3" class="text-center py-3 text-muted small">No mappings configured.</td></tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="bg-soft-warning p-3 rounded-3 mt-4">
+                                <h6 class="form-label-custom mb-3"><i class="fas fa-vial me-2"></i>Test LDAP Connectivity</h6>
+                                <div class="row g-2">
+                                    <div class="col-md-5"><input type="text" class="form-control form-control-sm" id="ldapTestUser" placeholder="Username"></div>
+                                    <div class="col-md-5"><input type="password" class="form-control form-control-sm" id="ldapTestPass" placeholder="Password"></div>
+                                    <div class="col-md-2 d-grid"><button type="button" class="btn btn-info btn-sm text-white" onclick="testLdapLogin()"><i class="fas fa-check"></i></button></div>
+                                </div>
+                                <div id="ldapTestResult" class="form-text mt-2 d-none"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0"><i class="fas fa-user-shield me-2 text-success"></i> My Account Security</div>
+                        <div class="card-body pt-0">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div>
+                                    <h6 class="fw-bold mb-1">Two-Factor Authentication</h6>
+                                    <p class="text-muted small mb-0">Secure your account with TOTP (Google Auth).</p>
+                                </div>
+                                <div id="mfaStatusContainer">
+                                    {% if mfa_enabled %}
+                                        <span class="badge bg-success me-2"><i class="fas fa-check-circle"></i> Active</span>
+                                        <button class="btn btn-outline-danger btn-sm" onclick="disableMfa()">Disable</button>
+                                    {% else %}
+                                        <span class="badge bg-secondary me-2">Inactive</span>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="startMfaSetup()">Enable</button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-id-card-alt me-2 text-primary"></i> Admin Profiles</div>
+                            <button class="btn btn-sm btn-outline-primary" onclick="showProfileModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-plus"></i></button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light"><tr><th class="ps-3">NAME</th><th>RIGHTS</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                    <tbody style="font-size: 0.85rem;">
+                                        {% if profiles %}
+                                            {% for profile in profiles %}
+                                            {% set p_perms = profile.permissions|from_json if profile.permissions is string else profile.permissions %}
+                                            <tr>
+                                                <td class="ps-3 fw-bold">{{ profile.name }}</td>
+                                                <td>
+                                                    <span class="badge {{ 'bg-success' if p_perms.dashboard == 'rw' else ('bg-info' if p_perms.dashboard == 'r' else 'bg-secondary') }}" title="Dashboard">D</span>
+                                                    <span class="badge {{ 'bg-success' if p_perms.system == 'rw' else ('bg-info' if p_perms.system == 'r' else 'bg-secondary') }}" title="System">S</span>
+                                                    <span class="badge {{ 'bg-success' if p_perms.tools == 'rw' else ('bg-info' if p_perms.tools == 'r' else 'bg-secondary') }}" title="Tools">T</span>
+                                                </td>
+                                                <td class="text-end pe-3">
+                                                    <button class="btn btn-link btn-sm p-0 me-2" onclick='showProfileModal({{ profile|tojson }})' {{ 'disabled' if sys_perm == 'r' or profile.id == 1 }}><i class="fas fa-edit"></i></button>
+                                                    {% if profile.id > 3 %}
+                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                    </form>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-user-lock me-2 text-danger"></i> Local Accounts</div>
+                            <button class="btn btn-sm btn-outline-danger" onclick="showAddUserModal()" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-user-plus"></i></button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0 align-middle">
+                                    <thead class="table-light"><tr><th class="ps-3">USER</th><th>PROFILE</th><th class="text-end pe-3">ACTION</th></tr></thead>
+                                    <tbody style="font-size: 0.85rem;">
+                                        {% if users %}
+                                            {% for user in users %}
+                                            <tr>
+                                                <td class="ps-3 fw-bold">{{ user.username }}</td>
+                                                <td><span class="badge bg-light text-dark border">{{ user.profile_name }}</span></td>
+                                                <td class="text-end pe-3">
+                                                    <button class="btn btn-link btn-sm text-warning p-0 me-2" onclick="showChangePasswordModal('{{ user.username }}')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-key"></i></button>
+                                                    {% if user.username != 'admin' %}
+                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Network -->
+        <div class="tab-pane fade" id="network" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-globe me-2 text-primary"></i> Proxy Settings</div>
+                            <span id="proxyStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form id="proxyForm" action="{{ url_for('system.update_proxy') }}" method="POST" onsubmit="showSavingAlert()">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
+                                    <label class="form-check-label fw-bold" for="proxyEnabled">Enable System Proxy</label>
+                                </div>
+                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}" class="bg-light p-3 rounded-3 mb-3 border">
+                                    <div class="row g-2 mb-3"><div class="col-md-8"><label class="form-label-custom">Server Address</label><input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com"></div><div class="col-md-4"><label class="form-label-custom">Port</label><input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080"></div></div>
+                                    <div class="row g-2"><div class="col-md-6"><label class="form-label-custom">Auth Username</label><input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}"></div><div class="col-md-6"><label class="form-label-custom">Auth Password</label><input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}"></div></div>
+                                </div>
+                                {% if sys_perm == 'rw' %}<div class="d-grid gap-2"><button type="button" class="btn btn-outline-info btn-sm py-2" onclick="testProxySettings()"><i class="fas fa-vial me-2"></i>Test Connection</button><button type="submit" class="btn btn-primary btn-sm py-2"><i class="fas fa-save me-2"></i>Save Proxy</button></div>{% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-search me-2 text-success"></i> DNS Configuration</div>
+                            <span id="dnsStatus" class="badge bg-secondary rounded-pill badge-authority">Checking...</span>
+                        </div>
+                        <div class="card-body pt-0">
+                            <form action="{{ url_for('system.update_dns') }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-3"><label class="form-label-custom">Primary DNS Server</label><input type="text" class="form-control" name="dns_primary" value="{{ config.get('dns', {}).get('primary', '') }}" placeholder="8.8.8.8"></div>
+                                <div class="mb-4"><label class="form-label-custom">Secondary DNS Server</label><input type="text" class="form-control" name="dns_secondary" value="{{ config.get('dns', {}).get('secondary', '') }}" placeholder="8.8.4.4"></div>
+                                {% if sys_perm == 'rw' %}<div class="d-grid"><button type="submit" class="btn btn-primary shadow-sm"><i class="fas fa-save me-2"></i>Update DNS</button></div>{% endif %}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Security -->
+        <div class="tab-pane fade" id="security" role="tabpanel">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm mb-4">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-database me-2 text-dark"></i> Backup & Disaster Recovery</div>
+                        </div>
+                        <div class="card-body pt-0">
+                            <p class="text-muted small mb-4">Download a full backup of your configuration, database, and logs. You can restore this file on a new installation.</p>
+                            <div class="d-grid mb-4">
+                                <a href="{{ url_for('api.backup_system') }}" class="btn btn-outline-dark py-2">
+                                    <i class="fas fa-download me-2"></i>Download Backup (ZIP)
+                                </a>
+                            </div>
+                            <hr class="my-4">
+                            <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label-custom text-danger fw-bold">Restore System State</label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" name="backup_file" accept=".zip" required>
+                                    <button class="btn btn-danger px-4" type="submit" onclick="return confirm('WARNING: This will overwrite ALL current data and configuration. Continue?')">Restore</button>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">Upload a previously downloaded .zip backup file.</div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card settings-card shadow-sm">
+                        <div class="card-header bg-white fw-bold py-3 border-0 d-flex justify-content-between align-items-center">
+                            <div><i class="fas fa-certificate me-2 text-warning"></i> HTTPS & Certificates</div>
+                        </div>
+                        <div class="card-body pt-0">
+                            <p class="text-muted small mb-4">Manage your SSL certificates for secure HTTPS access. Restart the container after uploading a new PFX.</p>
+                            <form action="{{ url_for('system.upload_cert') }}" method="POST" enctype="multipart/form-data" class="mb-4">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label-custom">Web Certificate (.PFX)</label>
+                                <div class="row g-2">
+                                    <div class="col-md-12 mb-2">
+                                        <input type="file" class="form-control" name="pfx_file">
+                                    </div>
+                                    <div class="col-md-8">
+                                        <input type="password" class="form-control" name="password" placeholder="PFX Password">
+                                    </div>
+                                    <div class="col-md-4 d-grid">
+                                        <button type="submit" class="btn btn-secondary shadow-sm">Upload</button>
+                                    </div>
+                                </div>
+                            </form>
+                            <hr class="my-4">
+                            <form action="{{ url_for('system.upload_root_ca') }}" method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label class="form-label-custom">Trust Root CA (PEM/CRT)</label>
+                                <div class="input-group">
+                                    <input type="file" class="form-control" name="ca_file" accept=".crt,.pem,.cer" required>
+                                    <button class="btn btn-outline-primary" type="submit">Import</button>
+                                </div>
+                                <div class="form-text mt-2 small text-muted">Add a root certificate to the system's trusted store for outgoing connections.</div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Integrations -->
+        <div class="tab-pane fade" id="integrations" role="tabpanel">
+            <div class="row g-4 mb-5">
+                <!-- FortiDeceptor Integration Card -->
+                <div class="col-lg-8">
+                    <div class="card border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+                        <div class="card-header bg-dark text-white p-4 border-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h4 class="fw-bold mb-1"><i class="fas fa-robot me-2 text-danger"></i> FortiDeceptor</h4>
+                                    <p class="text-muted small mb-0">Active Protection via Webhook Integration</p>
+                                </div>
+                                <span class="badge bg-soft-info text-info border border-info px-3 py-2">Standard Integration</span>
+                            </div>
+                        </div>
+                        <div class="card-body bg-light p-4">
+                            <!-- Step-by-Step Guide -->
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-primary">
+                                        <div class="text-primary fw-bold small mb-1">STEP 1</div>
+                                        <h6 class="fw-bold text-dark">Trust Connection</h6>
+                                        <p class="text-muted small mb-0">Disable <strong>"Verify SSL"</strong> in Deceptor since we use local certificates.</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-info">
+                                        <div class="text-info fw-bold small mb-1">STEP 2</div>
+                                        <h6 class="fw-bold text-dark">Set Method</h6>
+                                        <p class="text-muted small mb-0">Use the <strong>GEN-WEBHOOK</strong> integration method in Deceptor Fabric.</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-3 bg-white rounded-3 shadow-sm h-100 border-start border-4 border-warning">
+                                        <div class="text-warning fw-bold small mb-1">STEP 3</div>
+                                        <h6 class="fw-bold text-dark">Sync Data</h6>
+                                        <p class="text-muted small mb-0">Map the Header/Data keys below to Deceptor fields.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Deceptor UI Simulation -->
+                            <div class="position-relative">
+                                <div class="bg-dark rounded-4 shadow-lg p-4 text-light" style="font-family: 'Inter', system-ui, sans-serif; background-color: #1a1c1e !important;">
+                                    <div class="d-flex justify-content-between align-items-center border-bottom border-secondary pb-3 mb-4">
+                                        <h6 class="fw-bold text-uppercase tracking-wider m-0 text-white-50 small"><i class="fas fa-terminal me-2"></i>Fabric Integration Console</h6>
+                                        <div class="d-flex gap-1">
+                                            <div style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f56;"></div>
+                                            <div style="width: 10px; height: 10px; border-radius: 50%; background: #ffbd2e;"></div>
+                                            <div style="width: 10px; height: 10px; border-radius: 50%; background: #27c93f;"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- SIMULATION ROWS -->
+                                    <div class="vstack gap-4">
+                                        <!-- URL SECTION -->
+                                        <div>
+                                            <label class="text-white-50 small fw-bold mb-2">TARGET API ENDPOINT</label>
+                                            <div class="input-group shadow-sm">
+                                                <span class="input-group-text bg-secondary border-0 text-white small fw-bold" style="background-color: #4a4d50 !important;">POST</span>
+                                                <input type="text" class="form-control bg-black border-0 text-info fw-bold font-monospace py-2" id="sim_url" value="{{ config.get('base_url') or request.url_root }}api/deceptor/block" readonly style="background-color: #000 !important; color: #0dcaf0 !important;">
+                                                <button class="btn btn-primary px-3" onclick="copyToClipboard('sim_url')"><i class="fas fa-copy"></i></button>
+                                            </div>
+                                        </div>
+
+                                        <!-- AUTH SECTION -->
+                                        <div class="row g-3">
+                                            <div class="col-md-12">
+                                                <label class="text-white-50 small fw-bold mb-2">AUTHENTICATION HEADER</label>
+                                                <div class="d-flex gap-2 mb-2">
+                                                    <select class="form-select form-select-sm bg-black border-secondary text-white fw-bold" id="auth_client_selector" onchange="updateAuthField(this)" style="max-width: 300px; background-color: #000 !important; border-color: #444 !important;">
+                                                        {% if config.api_clients %}
+                                                            {% for client in config.api_clients %}
+                                                                <option value="Bearer {{ client.api_key }}">Client: {{ client.name }}</option>
+                                                            {% endfor %}
+                                                        {% else %}
+                                                            <option value="">-- No Clients --</option>
+                                                        {% endif %}
+                                                    </select>
+                                                    <button class="btn btn-sm btn-outline-info" onclick="showAddApiClientModalFromIntegrations()" title="Add New Client"><i class="fas fa-plus"></i></button>
+                                                    <button class="btn btn-sm btn-secondary flex-grow-1 fw-bold" onclick="copyToClipboard('sim_auth')" style="background-color: #4a4d50 !important; border: none;"><i class="fas fa-key me-2"></i>Copy Bearer Token</button>
+                                                </div>
+                                                <input type="hidden" id="sim_auth" value="{% if config.api_clients %}Bearer {{ config.api_clients[0].api_key }}{% endif %}">
+                                                <div class="text-white-50 xsmall mt-1"><i class="fas fa-info-circle me-1"></i> Select a client to generate the required Authorization header.</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- MAPPING TABLE -->
+                                        <div class="rounded-3 p-3 border border-secondary" style="background-color: #000 !important; border-color: #333 !important;">
+                                            <div class="row g-3">
+                                                <div class="col-md-6 border-end border-secondary" style="border-color: #333 !important;">
+                                                    <div class="text-warning small fw-bold mb-2"><i class="fas fa-ban me-1"></i> BLOCK CONFIG</div>
+                                                    <div class="small text-white-50 mb-1 font-monospace">Header: <span class="text-success fw-bold">whblockheader</span> : Hacker-IP</div>
+                                                    <div class="small text-white-50 font-monospace">Body Data: <span class="text-success fw-bold">whblockdata</span> : Hacker-IP</div>
+                                                </div>
+                                                <div class="col-md-6 ps-md-4">
+                                                    <div class="text-success small fw-bold mb-2"><i class="fas fa-unlock me-1"></i> UNBLOCK CONFIG</div>
+                                                    <div class="small text-white-50 mb-1 font-monospace">Header: <span class="text-success fw-bold">whunblockheader</span> : Hacker-IP</div>
+                                                    <div class="small text-white-50 font-monospace">Body Data: <span class="text-success fw-bold">whunblockdata</span> : Hacker-IP</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 text-center">
+                                        <div class="badge bg-soft-warning text-warning p-2 small" style="background-color: rgba(255, 193, 7, 0.1) !important;"><i class="fas fa-clock me-1"></i> Default Block Time: 1 Hour (Configurable in Deceptor)</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Side Panels -->
+                <div class="col-lg-4">
+                    <!-- SOAR Card -->
+                    <div class="card border-0 shadow-sm mb-4" style="border-radius: 16px;">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="bg-soft-primary p-3 rounded-3 me-3"><i class="fas fa-bolt text-primary fa-lg"></i></div>
+                                <div>
+                                    <h6 class="fw-bold mb-0">SOAR Integration</h6>
+                                    <small class="text-muted">FortiSOAR / Phantom / XSOAR</small>
+                                </div>
+                            </div>
+                            <p class="small text-muted">Use the <strong>/api/indicators</strong> endpoint to programmatically add indicators from your playbooks.</p>
+                            <button onclick="showSoarDocs()" class="btn btn-sm btn-outline-primary w-100 rounded-pill">View API Documentation</button>
+                        </div>
+                    </div>
+
+                    <!-- SIEM Card -->
+                    <div class="card border-0 shadow-sm" style="border-radius: 16px;">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="bg-soft-success p-3 rounded-3 me-3"><i class="fas fa-shield-alt text-success fa-lg"></i></div>
+                                <div>
+                                    <h6 class="fw-bold mb-0">SIEM Enrichment</h6>
+                                    <small class="text-muted">FortiSIEM / Splunk / Sentinel</small>
+                                </div>
+                            </div>
+                            <p class="small text-muted">Pull categorized threat data in <strong>JSON/CSV</strong> format for log enrichment and threat hunting.</p>
+                            <button onclick="showSiemDocs()" class="btn btn-sm btn-outline-success w-100 rounded-pill">View SIEM Guide</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </div>
+</div>
+
+<footer class="mt-5 text-center text-muted small pb-4"><p>Threat Feed Aggregator v{{ version }} &bull; Enterprise RBAC Edition</p></footer>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        checkLdapServerStatus(); checkDnsStatus(); checkProxyStatus();
+        
+        // Auto-open edit modal if parameter exists
+        const urlParams = new URLSearchParams(window.location.search);
+        const editIndex = urlParams.get('edit');
+        if (editIndex !== null) {
+            const sources = {{ config.source_urls|tojson }};
+            if (sources[editIndex]) {
+                showEditSourceModal(editIndex, sources[editIndex]);
+            }
+        }
+
+        var activeTab = localStorage.getItem('activeTab');
+        if (activeTab) { var tabEl = document.querySelector('#settingsTabs a[href="' + activeTab + '"]'); if (tabEl) { var tab = new bootstrap.Tab(tabEl); tab.show(); } }
+        document.querySelectorAll('#settingsTabs a').forEach(link => { link.addEventListener('shown.bs.tab', e => localStorage.setItem('activeTab', e.target.getAttribute('href'))); });
+    });
+
+    // --- MFA Functions ---
+    function startMfaSetup() {
+        Swal.fire({ title: 'Generating Setup...', didOpen: () => { Swal.showLoading(); } });
+        fetch('/mfa/setup').then(r => r.json()).then(data => {
+            Swal.fire({
+                title: 'Setup Authenticator',
+                html: `
+                    <div class="text-center mb-3">
+                        <img src="data:image/png;base64,${data.qr_code}" style="width: 200px; height: 200px; border: 1px solid #ddd; padding: 5px;">
+                    </div>
+                    <p class="small text-muted">1. Scan this QR code with your Authenticator App.<br>2. Enter the 6-digit code below.</p>
+                    <input type="text" id="mfaCode" class="form-control text-center fw-bold letter-spacing-2" placeholder="000 000" maxlength="6" style="font-size: 1.2rem;">
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Verify & Enable',
+                preConfirm: () => {
+                    const code = document.getElementById('mfaCode').value;
+                    if (!code) Swal.showValidationMessage('Please enter the code');
+                    return { secret: data.secret, code: code };
+                }
+            }).then(result => {
+                if (result.isConfirmed) verifyAndEnableMfa(result.value);
+            });
+        });
+    }
+
+    function verifyAndEnableMfa(data) {
+        fetch('/mfa/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: JSON.stringify(data)
+        }).then(r => r.json()).then(d => {
+            if (d.status === 'success') {
+                Swal.fire('Success', 'Two-Factor Authentication is now enabled.', 'success').then(() => location.reload());
+            } else {
+                Swal.fire('Error', d.message, 'error');
+            }
+        });
+    }
+
+    function disableMfa() {
+        Swal.fire({
+            title: 'Disable MFA?',
+            text: 'Your account will be less secure.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Disable',
+            confirmButtonColor: '#d33'
+        }).then(result => {
+            if (result.isConfirmed) {
+                fetch('/mfa/disable', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+                }).then(r => r.json()).then(d => {
+                    Swal.fire('Disabled', d.message, 'success').then(() => location.reload());
+                });
+            }
+        });
+    }
+    // --- End MFA Functions ---
+
+    // showAddSourceModal & showEditSourceModal are now provided by static/js/source_manager.js
+
+    function showAddLdapMappingModal() {
+        const profiles = {{ profiles|tojson }};
+        let pCards = '<div class="row g-2">';
+        profiles.forEach(p => pCards += `<div class="col-6"><input type="radio" class="btn-check" name="mapProfile" id="p_${p.id}" value="${p.id}"><label class="btn btn-outline-secondary btn-sm w-100 p-3 text-start" for="p_${p.id}"><div class="fw-bold">${p.name}</div></label></div>`);
+        pCards += '</div>';
+        Swal.fire({
+            title: 'Add LDAP Group Mapping',
+            html: `
+                <div class="text-start mb-3">
+                    <label class="form-label small fw-bold">LDAP Group DN (Full Path)</label>
+                    <input type="text" id="groupDn" class="form-control" placeholder="CN=Threat_Admins,OU=Groups,DC=mfa,DC=gov,DC=tr">
+                    <small class="text-muted">Enter the full Distinguished Name of the LDAP group.</small>
+                </div>
+                <div class="text-start">
+                    <label class="form-label small fw-bold">Assign Application Profile</label>
+                    ${pCards}
+                    <small class="text-muted d-block mt-2">Users in this LDAP group will inherit the selected permissions.</small>
+                </div>
+            `,
+            width: '600px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-plus me-1"></i> Add Mapping',
+            confirmButtonColor: '#4f46e5',
+            preConfirm: () => {
+                const dn = document.getElementById('groupDn').value;
+                const pid = document.querySelector('input[name="mapProfile"]:checked')?.value;
+                if (!dn || !pid) {
+                    Swal.showValidationMessage(`Please enter Group DN and select a profile`);
+                    return false;
+                }
+                return { group_dn: dn, profile_id: pid };
+            }
+        }).then(res => {
+            if (res.isConfirmed) {
+                submitForm('{{ url_for("system.add_ldap_mapping") }}', res.value);
+            }
+        });
+    }
+
+    function showProfileModal(profile = null) {
+        const isEdit = profile !== null;
+        let perms = { dashboard: 'r', system: 'none', tools: 'none' };
+        if (isEdit && profile.permissions) perms = typeof profile.permissions === 'string' ? JSON.parse(profile.permissions) : profile.permissions;
+        const modules = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'system', label: 'System' }, { id: 'tools', label: 'Tools' }];
+        let gridHtml = '<div class="list-group rounded-3 mb-3 text-start">';
+        modules.forEach(mod => {
+            const val = perms[mod.id] || 'none';
+            gridHtml += `<div class="list-group-item bg-light p-2"><div class="fw-bold small mb-1">${mod.label}</div><div class="btn-group btn-group-sm w-100"><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_none" value="none" ${val==='none'?'checked':''}><label class="btn btn-outline-secondary" for="${mod.id}_none">None</label><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_r" value="r" ${val==='r'?'checked':''}><label class="btn btn-outline-info" for="${mod.id}_r">Read</label><input type="radio" class="btn-check" name="perm_${mod.id}" id="${mod.id}_rw" value="rw" ${val==='rw'?'checked':''}><label class="btn btn-outline-success" for="${mod.id}_rw">Write</label></div></div>`;
+        });
+        gridHtml += '</div>';
+        Swal.fire({
+            title: isEdit ? 'Edit Profile' : 'New Profile',
+            html: `<input type="text" id="profName" class="form-control mb-2" placeholder="Name" value="${isEdit?profile.name:''}" ${isEdit?'disabled':''}><input type="text" id="profDesc" class="form-control mb-3" placeholder="Desc" value="${isEdit?profile.description||'':''}">${gridHtml}`,
+            confirmButtonText: 'Save', showCancelButton: true,
+            preConfirm: () => { const name = document.getElementById('profName').value; const desc = document.getElementById('profDesc').value; const newPerms = {}; ['dashboard','system','tools'].forEach(id => newPerms[id] = document.querySelector(`input[name="perm_${id}"]:checked`).value); return { name, description: desc, permissions: JSON.stringify(newPerms) }; }
+        }).then(res => { if (res.isConfirmed) { const data = { description: res.value.description, permissions: res.value.permissions }; if(isEdit) data.profile_id = profile.id; else data.name = res.value.name; submitForm(isEdit?'{{ url_for("system.update_profile") }}':'{{ url_for("system.add_profile") }}', data); } });
+    }
+
+    function showAddUserModal() {
+        const profiles = {{ profiles|tojson }};
+        let pOptions = ''; profiles.forEach(p => pOptions += `<option value="${p.id}">${p.name}</option>`);
+        Swal.fire({
+            title: 'Add Account',
+            html: `
+                <div class="text-start mb-2">
+                    <label class="small fw-bold">User</label>
+                    <input type="text" id="newU" class="form-control">
+                </div>
+                <div class="text-start mb-2">
+                    <label class="small fw-bold">Password</label>
+                    <input type="password" id="newP" class="form-control">
+                </div>
+                <div class="text-start mb-2">
+                    <label class="small fw-bold">Confirm Password</label>
+                    <input type="password" id="confirmP" class="form-control">
+                </div>
+                <div class="text-start">
+                    <label class="small fw-bold">Profile</label>
+                    <select id="newPr" class="form-select">${pOptions}</select>
+                </div>
+            `,
+            confirmButtonText: 'Add', 
+            showCancelButton: true,
+            preConfirm: () => { 
+                const u = document.getElementById('newU').value; 
+                const p = document.getElementById('newP').value; 
+                const cp = document.getElementById('confirmP').value;
+                const pid = document.getElementById('newPr').value; 
+                
+                if(!u || !p || !cp) {
+                    Swal.showValidationMessage(`All fields are required`);
+                    return false;
+                }
+                if(p !== cp) {
+                    Swal.showValidationMessage(`Passwords do not match`);
+                    return false;
+                }
+                return { username:u, password:p, profile_id:pid }; 
+            }
+        }).then(res => { 
+            if (res.isConfirmed) submitForm('{{ url_for("system.add_user") }}', res.value); 
+        });
+    }
+
+    function showChangePasswordModal(u) {
+        Swal.fire({
+            title: `Reset Password for ${u}`,
+            html: `
+                <div class="text-start mb-2">
+                    <label class="form-label small fw-bold">New Password</label>
+                    <input type="password" id="newPass" class="form-control" placeholder="Enter new password">
+                </div>
+                <div class="text-start">
+                    <label class="form-label small fw-bold">Confirm New Password</label>
+                    <input type="password" id="confirmPass" class="form-control" placeholder="Re-enter new password">
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Change Password',
+            preConfirm: () => {
+                const p1 = document.getElementById('newPass').value;
+                const p2 = document.getElementById('confirmPass').value;
+                
+                if (!p1 || !p2) {
+                    Swal.showValidationMessage('Please fill out both fields');
+                    return false;
+                }
+                if (p1 !== p2) {
+                    Swal.showValidationMessage('Passwords do not match!');
+                    return false;
+                }
+                return { password: p1 };
+            }
+        }).then(res => {
+            if (res.isConfirmed) {
+                submitForm('{{ url_for("system.change_user_password") }}', { username: u, password: res.value.password });
+            }
+        });
+    }
+
+    function checkLdapServerStatus() { fetch('/system/ldap/status').then(r => r.json()).then(d => { const b = document.getElementById('ldapServerStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : (d.status === 'offline' ? 'bg-danger' : 'bg-secondary')); b.innerHTML = d.status.toUpperCase(); }); }
+    function checkDnsStatus() { fetch('/system/dns/status').then(r => r.json()).then(d => { const b = document.getElementById('dnsStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
+    function checkProxyStatus() { fetch('/system/proxy/status').then(r => r.json()).then(d => { const b = document.getElementById('proxyStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
+    function testLdapLogin() { const u = document.getElementById('ldapTestUser').value; const p = document.getElementById('ldapTestPass').value; const r = document.getElementById('ldapTestResult'); r.className = 'form-text mt-2 text-muted'; r.innerHTML = 'Testing...'; r.classList.remove('d-none'); fetch('/system/ldap/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify({ username: u, password: p }) }).then(res => res.json()).then(d => { r.className = 'form-text mt-2 ' + (d.status === 'success' ? 'text-success' : 'text-danger'); r.innerHTML = d.message; }); }
+    function testProxySettings() { const f = document.getElementById('proxyForm'); const data = { enabled: f.querySelector('[name="proxy_enabled"]').checked, server: f.querySelector('[name="proxy_server"]').value, port: f.querySelector('[name="proxy_port"]').value, username: f.querySelector('[name="proxy_username"]').value, password: f.querySelector('[name="proxy_password"]').value }; Swal.fire({ title: 'Testing...', didOpen: () => { Swal.showLoading(); } }); fetch('/system/proxy/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify(data) }).then(r => r.json()).then(d => { Swal.fire(d.status === 'success' ? 'Success' : 'Failed', d.message, d.status); }); }
+    function addHostnameRow() { const c = document.getElementById('serverHostnamesList'); const n = document.createElement('div'); n.className = 'input-group input-group-sm mb-2 hostname-row'; n.innerHTML = `<input type="text" class="form-control" name="ldap_server[]" required><button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>`; c.appendChild(n); }
+    function removeHostnameRow(btn) { if (document.querySelectorAll('.hostname-row').length > 1) btn.closest('.hostname-row').remove(); }
+    function autoUpdatePort(cb) { const p = document.querySelector('input[name="ldap_port"]'); if (p) p.value = cb.checked ? '636' : '389'; }
+    function toggleProxyFields() { document.getElementById('proxyFields').style.display = document.getElementById('proxyEnabled').checked ? 'block' : 'none'; }
+
+    function copyToClipboard(elementId) {
+        const el = document.getElementById(elementId);
+        if(!el) return;
+        
+        let textToCopy = "";
+        if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+            textToCopy = el.value;
+        } else {
+            textToCopy = el.innerText || el.textContent;
+        }
+
+        if(!textToCopy) {
+            Swal.fire('Hata', 'Kopyalanacak bir içerik bulunamadı.', 'error');
+            return;
+        }
+        
+        const tempInput = document.createElement("textarea");
+        tempInput.value = textToCopy;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        try {
+            document.execCommand("copy");
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: 'Kopyalandı!',
+                showConfirmButton: false,
+                timer: 1500
+            });
+        } catch (err) {
+            console.error('Kopyalama başarısız:', err);
+        }
+        document.body.removeChild(tempInput);
+    }
+
+    function updateAuthField(select) {
+        document.getElementById('copy_auth').value = select.value;
+    }
+
+    function showAddApiClientModalFromIntegrations() {
+        Swal.fire({
+            title: 'Yeni API Client Oluştur',
+            html: `
+                <div class="text-start mb-3">
+                    <label class="form-label small fw-bold">Client Adı (Örn: FortiDeceptor)</label>
+                    <input type="text" id="apiClientName" class="form-control" placeholder="FortiDeceptor">
+                </div>
+                <div class="text-start">
+                    <label class="form-label small fw-bold">İzin Verilen IP'ler (Virgülle ayırın, boş bırakırsanız her yerden erişilir)</label>
+                    <input type="text" id="apiAllowedIps" class="form-control" placeholder="10.9.102.12">
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Oluştur',
+            preConfirm: () => {
+                const name = document.getElementById('apiClientName').value;
+                const ips = document.getElementById('apiAllowedIps').value;
+                if (!name) { Swal.showValidationMessage('Lütfen bir isim girin'); return false; }
+                return { name: name, allowed_ips: ips };
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                const formData = new FormData();
+                formData.append('name', result.value.name);
+                formData.append('allowed_ips', result.value.allowed_ips);
+                formData.append('csrf_token', '{{ csrf_token() }}');
+
+                fetch('{{ url_for("system.add_api_client") }}', {
+                    method: 'POST',
+                    body: formData
+                }).then(() => {
+                    Swal.fire('Başarılı', 'API Anahtarı oluşturuldu. Sayfa yenileniyor...', 'success').then(() => location.reload());
+                });
+            }
+        });
+    }
+
+    function showSoarDocs() {
+        Swal.fire({
+            title: '<i class="fas fa-bolt text-primary me-2"></i>SOAR API Reference',
+            html: `
+                <div class="text-start mt-3" style="max-height: 400px; overflow-y: auto;">
+                    <h6 class="fw-bold border-bottom pb-2 mb-3">1. Add Indicator (POST)</h6>
+                    <p class="small text-muted mb-2">Use this to add a new IP or Domain to the aggregator from your playbooks.</p>
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark">
+                        POST {{ request.url_root }}api/indicators
+                    </div>
+                    <label class="xsmall fw-bold">Headers:</label>
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-primary">
+                        Authorization: Bearer YOUR_API_KEY<br>
+                        Content-Type: application/json
+                    </div>
+                    <label class="xsmall fw-bold">Sample Payload (JSON):</label>
+                    <pre class="bg-dark text-info p-2 rounded mb-4 xsmall" style="font-size: 0.7rem;">
+{
+  "type": "blacklist",
+  "value": "1.2.3.4",
+  "item_type": "ip",
+  "comment": "Added by FortiSOAR Playbook"
+}</pre>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-3">2. Remove Indicator (DELETE)</h6>
+                    <p class="small text-muted mb-2">Removes an indicator from the system.</p>
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark">
+                        DELETE {{ request.url_root }}api/indicators
+                    </div>
+                    <label class="xsmall fw-bold">Sample Payload (JSON):</label>
+                    <pre class="bg-dark text-info p-2 rounded mb-3 xsmall" style="font-size: 0.7rem;">
+{
+  "value": "1.2.3.4",
+  "type": "blacklist"
+}</pre>
+                </div>
+            `,
+            width: '600px',
+            confirmButtonText: 'Got it!',
+            confirmButtonColor: '#4f46e5'
+        });
+    }
+
+    function showSiemDocs() {
+        Swal.fire({
+            title: '<i class="fas fa-shield-alt text-success me-2"></i>SIEM Enrichment Guide',
+            html: `
+                <div class="text-start mt-3" style="max-height: 450px; overflow-y: auto;">
+                    <p class="small text-muted">Integrate live threat intelligence into your SIEM for log enrichment and automated alerting.</p>
+                    
+                    <h6 class="fw-bold border-bottom pb-2 mb-3">Generic EDL API</h6>
+                    <div class="bg-light p-2 rounded mb-3 font-monospace xsmall border text-dark text-break">
+                        GET {{ request.url_root }}api/edl/generic?format=json
+                    </div>
+
+                    <label class="xsmall fw-bold mb-2">Available Query Parameters:</label>
+                    <table class="table table-sm table-bordered xsmall mb-4">
+                        <thead class="table-light"><tr><th>Param</th><th>Description</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>format</code></td><td>json, csv, text (default: text)</td></tr>
+                            <tr><td><code>types</code></td><td>ip, domain, url, cidr (comma separated)</td></tr>
+                            <tr><td><code>sources</code></td><td>Filter by source names (comma separated)</td></tr>
+                        </tbody>
+                    </table>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-3">Common Examples</h6>
+                    <div class="mb-3">
+                        <label class="xsmall fw-bold text-primary">Splunk Lookup (CSV Feed):</label>
+                        <div class="p-2 bg-dark text-light rounded font-monospace" style="font-size: 0.65rem;">
+                            {{ request.url_root }}api/edl/generic?format=csv&types=ip,domain
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="xsmall fw-bold text-success">FortiSIEM / Sentinel (JSON Feed):</label>
+                        <div class="p-2 bg-dark text-light rounded font-monospace" style="font-size: 0.65rem;">
+                            {{ request.url_root }}api/edl/generic?format=json&types=ip
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-2 small border-0">
+                        <i class="fas fa-key me-2"></i> Requires a valid <strong>API Key</strong> in the Authorization header.
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <a href="/api/edl/generic?format=json" target="_blank" class="btn btn-sm btn-success">
+                            <i class="fas fa-external-link-alt me-2"></i>Test Live JSON Feed
+                        </a>
+                    </div>
+                </div>
+            `,
+            width: '650px',
+            confirmButtonText: 'Close',
+            confirmButtonColor: '#6c757d'
+        });
+    }
+</script>
+{% endblock %}

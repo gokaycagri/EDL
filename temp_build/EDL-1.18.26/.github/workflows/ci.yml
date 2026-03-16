@@ -1,0 +1,36 @@
+name: Threat Feed Aggregator CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.13"
+
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev whois
+
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov
+        if [ -f threat-feed-aggregator/requirements.txt ]; then pip install -r threat-feed-aggregator/requirements.txt; fi
+
+    - name: Run Unit Tests
+      working-directory: ./threat-feed-aggregator
+      run: |
+        # Using pytest to run all tests in the tests/ directory
+        python -m pytest tests/ --doctest-modules --junitxml=junit/test-results.xml

@@ -1,0 +1,228 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: threat-feed-aggregator-template
+objects:
+
+# --- Storage (PVCs) ---
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: postgres-data
+  spec:
+    accessModes: [ "ReadWriteOnce" ]
+    resources:
+      requests:
+        storage: 5Gi
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: redis-data
+  spec:
+    accessModes: [ "ReadWriteOnce" ]
+    resources:
+      requests:
+        storage: 1Gi
+
+- apiVersion: v1
+  kind: PersistentVolumeClaim
+  metadata:
+    name: app-data
+  spec:
+    accessModes: [ "ReadWriteOnce" ]
+    resources:
+      requests:
+        storage: 2Gi
+
+# --- Databases (Postgres & Redis) ---
+
+# Postgres Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: postgres
+  spec:
+    ports:
+    - port: 5432
+      targetPort: 5432
+    selector:
+      name: postgres
+
+# Postgres Deployment
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: postgres
+  spec:
+    selector:
+      matchLabels:
+        name: postgres
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: postgres
+      spec:
+        containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: "threat_feed"
+            - name: POSTGRES_USER
+              value: "threat_user"
+            - name: POSTGRES_PASSWORD
+              value: "secure_password" # Change this in production secrets
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "threat_user", "-d", "threat_feed"]
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+        volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
+
+# Redis Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: redis
+  spec:
+    ports:
+    - port: 6379
+      targetPort: 6379
+    selector:
+      name: redis
+
+# Redis Deployment
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: redis
+  spec:
+    selector:
+      matchLabels:
+        name: redis
+    template:
+      metadata:
+        labels:
+          name: redis
+      spec:
+        containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data
+
+# --- Application (Aggregator) ---
+
+# App Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: threat-feed-aggregator
+  spec:
+    ports:
+    - port: 8080
+      targetPort: 8080
+      name: https
+    selector:
+      name: threat-feed-aggregator
+
+# App Deployment
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: threat-feed-aggregator
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        name: threat-feed-aggregator
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: threat-feed-aggregator
+      spec:
+        containers:
+        - name: threat-feed-aggregator
+          # IMPORTANT: Update this image path to your internal registry
+          image: image-registry.openshift-image-registry.svc:5000/myproject/threat-feed-aggregator:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SECRET_KEY
+              value: "change_me_in_production_random_string"
+            - name: ADMIN_PASSWORD
+              value: "123456"
+            - name: DB_TYPE
+              value: "postgres"
+            - name: DB_HOST
+              value: "postgres"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "threat_feed"
+            - name: DB_USER
+              value: "threat_user"
+            - name: DB_PASS
+              value: "secure_password"
+            - name: REDIS_HOST
+              value: "redis"
+            - name: REDIS_PORT
+              value: "6379"
+          volumeMounts:
+            - name: app-data
+              mountPath: /app/threat_feed_aggregator/data
+          # Healthcheck (Matches Dockerfile logic)
+          livenessProbe:
+            exec:
+              command: ["curl", "-f", "-k", "http://localhost:8080/health"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["curl", "-f", "-k", "http://localhost:8080/health"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          securityContext:
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
+        volumes:
+        - name: app-data
+          persistentVolumeClaim:
+            claimName: app-data
+
+# --- Route (Ingress) ---
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: threat-feed-aggregator
+  spec:
+    to:
+      kind: Service
+      name: threat-feed-aggregator
+    port:
+      targetPort: 8080
+    tls:
+      termination: passthrough # App uses self-signed certs, so we pass SSL through to container
+      insecureEdgeTerminationPolicy: Redirect

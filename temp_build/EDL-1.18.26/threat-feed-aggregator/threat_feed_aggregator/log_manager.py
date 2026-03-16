@@ -1,15 +1,10 @@
 import collections
 import logging
 import os
-from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
 import pytz
-try:
-    import structlog
-    HAS_STRUCTLOG = True
-except ImportError:
-    HAS_STRUCTLOG = False
 
 from .config_manager import DATA_DIR
 
@@ -21,13 +16,8 @@ class TimezoneFormatter(logging.Formatter):
     """
     Custom formatter that handles timezone conversion.
     """
-    _reading_config = False  # guard against read_config → log → formatTime recursion
-
     def formatTime(self, record, datefmt=None):
-        if TimezoneFormatter._reading_config:
-            return super().formatTime(record, datefmt)
         try:
-            TimezoneFormatter._reading_config = True
             from .config_manager import read_config
             config = read_config()
             tz_name = config.get('timezone', 'UTC')
@@ -41,8 +31,6 @@ class TimezoneFormatter(logging.Formatter):
             return local_dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
         except Exception:
             return super().formatTime(record, datefmt)
-        finally:
-            TimezoneFormatter._reading_config = False
 
 class MemoryLogHandler(logging.Handler):
     """
@@ -67,7 +55,7 @@ def _load_buffer_from_file():
         return
 
     try:
-        with open(LOG_FILE_PATH, encoding='utf-8', errors='ignore') as f:
+        with open(LOG_FILE_PATH, 'r', encoding='utf-8', errors='ignore') as f:
             # Efficiently read last 1000 lines
             # For simplicity in this context, reading all and taking last 1000 is okay for moderate file sizes (5MB rotation)
             lines = f.readlines()
@@ -122,41 +110,6 @@ def setup_memory_logging():
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
         root_logger.addHandler(file_handler)
-
+    
     # Add Filter to ignore noisy session warnings
     root_logger.addFilter(SessionFilter())
-
-    # Configure structlog
-    _configure_structlog()
-
-
-def _configure_structlog():
-    """Configure structlog to work with stdlib logging."""
-    if not HAS_STRUCTLOG:
-        return
-        
-    is_production = os.environ.get("FLASK_ENV") == "production"
-
-    shared_processors = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-    ]
-
-    if is_production:
-        structlog.processors.JSONRenderer()
-    else:
-        structlog.dev.ConsoleRenderer()
-
-    structlog.configure(
-        processors=[
-            *shared_processors,
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )

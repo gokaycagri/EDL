@@ -1,8 +1,8 @@
 services:
   aggregator:
-    # build:
-    #   context: ./threat-feed-aggregator
-    #   dockerfile: Dockerfile
+    build:
+      context: ./threat-feed-aggregator
+      dockerfile: Dockerfile
     image: threat-feed-aggregator:latest
     container_name: threat-feed-aggregator
     user: "0:0"

@@ -13,12 +13,6 @@ try:
 except ImportError:
     pass
 
-from flask import Flask
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_session import Session
-from flask_wtf.csrf import CSRFProtect
-
 from .config_manager import DATA_DIR
 from .database.schema import init_db
 from .log_manager import setup_memory_logging
@@ -28,6 +22,27 @@ from .version import __version__
 setup_memory_logging()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    HAS_LIMITER = True
+except ImportError:
+    HAS_LIMITER = False
+    logger.warning("flask_limiter not found. Rate limiting is disabled.")
+    
+    # Dummy Limiter class to prevent AttributeError
+    class Limiter:
+        def __init__(self, *args, **kwargs): pass
+        def init_app(self, app): pass
+        def limit(self, *args, **kwargs):
+            return lambda f: f
+    
+    def get_remote_address(): return "127.0.0.1"
+
+from flask import Flask, request, jsonify
+from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
 csrf = CSRFProtect()

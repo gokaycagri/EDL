@@ -1,0 +1,11 @@
+Bu işlemden sonra başka bir bilgisayarda:
+   1. git clone <repo-url>
+   2. cd EDL
+   3. python -m venv venv
+   4. source venv/bin/activate (veya venv\Scripts\activate)
+   5. pip install -r threat-feed-aggregator/requirements.txt
+   6. python -m threat_feed_aggregator.app
+
+  komutları ile projeyi çalıştırabilirsiniz.
+
+  Docker ile çalıştırmak isterseniz sadece docker-compose up --build yeterli olacaktır.

@@ -1,0 +1,3 @@
+dn: ou=people,dc=threataggregator,dc=local
+objectClass: organizationalUnit
+ou: people
