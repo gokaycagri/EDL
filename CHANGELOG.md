@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.27] - 2026-03-12
+
+### Fixed
+- **Database Migration:** Added automatic column detection and migration for `whitelist` and `api_blacklist` tables. This ensures that the new context/description fields work correctly even with existing databases, preventing 500 Internal Server Errors.
+
 ## [1.18.26] - 2026-03-12
 
 ### Fixed

@@ -175,7 +175,29 @@ def init_db(conn=None):
                 )
             ''')
             # Index moved to create_indexes_safely
-            logger.info("All tables checked.")
+            # Ensure columns for context/comment exist (Migration for existing DBs)
+            try:
+                # Whitelist description
+                cur.execute("SELECT description FROM whitelist LIMIT 1")
+            except Exception:
+                logger.info("Adding missing 'description' column to whitelist table.")
+                # We catch the exception and add the column (Postgres/SQLite syntax varies but this helper handles it)
+                if DB_TYPE == 'postgres':
+                    cur.execute("ALTER TABLE whitelist ADD COLUMN IF NOT EXISTS description TEXT")
+                else:
+                    cur.execute("ALTER TABLE whitelist ADD COLUMN description TEXT")
+
+            try:
+                # Blacklist comment
+                cur.execute("SELECT comment FROM api_blacklist LIMIT 1")
+            except Exception:
+                logger.info("Adding missing 'comment' column to api_blacklist table.")
+                if DB_TYPE == 'postgres':
+                    cur.execute("ALTER TABLE api_blacklist ADD COLUMN IF NOT EXISTS comment TEXT")
+                else:
+                    cur.execute("ALTER TABLE api_blacklist ADD COLUMN comment TEXT")
+
+            logger.info("All tables and columns checked.")
 
             # Seed Default Profiles
             count_query = "SELECT COUNT(*) FROM admin_profiles"
