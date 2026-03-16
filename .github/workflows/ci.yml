@@ -56,15 +56,19 @@ jobs:
         pip install pytest pytest-cov
         pip install -r threat-feed-aggregator/requirements.txt
 
+    - name: Verify Flask installation
+      run: |
+        python -c "import flask; print('Flask:', flask.__version__, flask.__file__); import flask.wrappers; print('flask.wrappers OK')"
+
     - name: Run Unit Tests with Coverage
       working-directory: ./threat-feed-aggregator
       run: |
-        python -m pytest tests/ --junitxml=junit/test-results.xml --cov=threat_feed_aggregator --cov-report=term-missing -v --tb=short
+        python -m pytest tests/ --import-mode=importlib --junitxml=junit/test-results.xml --cov=threat_feed_aggregator --cov-report=term-missing -v --tb=short
 
     - name: Run ITAI Contract Tests
       working-directory: ./threat-feed-aggregator
       run: |
-        python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v --tb=short
+        python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py --import-mode=importlib -v --tb=short
 
   publish:
     runs-on: ubuntu-latest
