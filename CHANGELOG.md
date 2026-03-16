@@ -1,5 +1,87 @@
 # Changelog
 
+## [1.20.0] - 2026-03-15
+
+### Added
+- **Login Rate Limiting:** 10 attempts/minute/IP via Flask-Limiter on `/auth/login`.
+- **Audit Logging:** `audit_log` table tracking login, user CRUD, backup downloads, config changes with timestamp, username, IP.
+- **Password Complexity:** Minimum 8 chars, uppercase, lowercase, digit required for user creation and password changes.
+- **Session Timeout:** Configurable via `SESSION_TIMEOUT_MINUTES` env var (default 60 minutes).
+- **Enhanced Health Check:** `/health` now reports DB connection status, scheduler state, job count, aggregation status.
+- **Prometheus Metrics:** `/metrics` endpoint with `tfa_indicators_total`, per-type counts, disabled feed count.
+- **OpenAPI Documentation:** `/api/docs` serves OpenAPI 3.1 JSON spec with all endpoints, auth schemes, and request/response schemas.
+- **Indicator Export:** `GET /analysis/export?format=csv|json` downloads filtered indicators with applied filters.
+- **Indicator Tags Table:** `indicator_tags` table for custom per-indicator tagging (schema ready).
+- **Read-Only DB Context:** `db_readonly()` context manager for queries that don't need write lock (SQLite WAL concurrent reads).
+- **Helm Chart:** Kubernetes deployment chart with PostgreSQL, Redis, PVC, liveness/readiness probes.
+
+### Changed
+- **Dependencies:** Added `Flask-Limiter`, `prometheus-client`, `pytest-cov`.
+- **Docker:** Expanded `.dockerignore` (tests, docs, caches, markdown files excluded from image).
+- **CI Pipeline:** Tests now report coverage via `pytest-cov`.
+- **API Spec:** `api_spec.py` with full OpenAPI 3.1 definition.
+
+## [1.19.0] - 2026-03-15
+
+### Security
+- **CSRF Protection:** Enabled globally via Flask-WTF CSRFProtect. All HTML forms include CSRF tokens. Machine-to-machine API endpoints (firewall EDL, SOAR, deceptor, SSO) are exempted.
+- **Session Fixation:** Session is regenerated (`session.clear()`) on all login paths (local, MFA, SSO) to prevent session fixation attacks.
+- **Secret Key:** Removed hardcoded `default_secret_key` fallback. Application generates a random key with a warning if `SECRET_KEY` is not set.
+- **Path Traversal:** `/data/<filename>` endpoint now restricts to basename + allowed extensions only.
+- **LDAP Injection:** User input is escaped with `escape_filter_chars()` before LDAP filter construction.
+- **IP Spoofing:** Removed direct `X-Forwarded-For` header trust in `api_key_required`. Use `request.remote_addr` only.
+- **XXE Protection:** XML file import uses `defusedxml` (with fallback to standard ET) to prevent entity expansion attacks.
+- **IP Validation:** Investigation tool validates IP format with `ipaddress.ip_address()` before external lookups.
+- **JWT Expiry Required:** SSO tokens without `exp` claim are now rejected.
+- **SSO Permissions:** SSO endpoint reads `permissions` from JWT payload if available instead of always granting Super_User.
+- **Backup Access:** `/api/backup` now requires `system:rw` permission instead of any authenticated session.
+- **Sensitive Logging:** Removed full header dumps from API key error logs. TOTP codes no longer logged on failure.
+- **Hardcoded Credentials:** Removed `secure_password` fallback from PostgreSQL connection defaults.
+
+### Fixed
+- **Destructive GET Endpoints:** `remove_source`, `remove_whitelist`, `remove_blacklist` changed from GET to POST with CSRF tokens.
+- **Missing Imports:** Added `update_whitelist_item` and `update_api_blacklist_item` to `system.py` imports (was causing NameError at runtime).
+- **SQLite INSERT OR REPLACE:** Changed to `INSERT OR IGNORE` + `UPDATE` to preserve `risk_score` and `source_count` on existing indicators.
+- **SQLite VACUUM:** Now runs outside `db_transaction` in autocommit mode (was always failing with OperationalError).
+- **SQLite Blacklist Upsert:** Fixed unreachable UPDATE fallback after INSERT failure by using `INSERT OR REPLACE`.
+- **Double-Commit:** Removed all explicit `db.commit()` calls from repositories — `db_transaction` context manager is the sole commit owner.
+- **Commit Inside Lock:** Moved `conn.commit()` inside SQLite `DB_WRITE_LOCK` scope in `db_transaction`.
+- **Deprecated asyncio:** Replaced `asyncio.get_event_loop()` with `asyncio.get_running_loop()` (Python 3.12+ compatibility).
+- **aiohttp Timeout:** Changed `timeout=30` to `aiohttp.ClientTimeout(total=30)` (aiohttp 3.x compatibility).
+- **aiohttp SSL:** Changed deprecated `verify_ssl=` parameter to `ssl=` in `TCPConnector`.
+- **EDL Truncation:** EDL files are now written to `.tmp` files first, then atomically renamed with `os.replace()`. Firewalls never receive empty lists on error.
+- **Aggregation Race:** Added `threading.Lock` to `/api/run` endpoint to prevent duplicate aggregation jobs.
+- **EDL Regen Race:** Removed redundant `_REGEN_ACTIVE` flag, using only `_REGEN_LOCK.acquire(blocking=False)`.
+- **Score Before Cleanup:** Swapped order — whitelist cleanup now runs before `recalculate_scores` to avoid wasting time scoring items that will be deleted.
+- **Config Atomicity:** `write_config` writes to temp file then `os.replace()`. `read_config` cache check is fully atomic under lock.
+- **Docker Healthcheck:** Fixed port from 5000 to 8080, endpoint from `/status` to `/health`.
+- **DNS Domain Extract:** `extract_domain()` returns `None` instead of `"http:"` for unparseable URLs.
+- **IntegrityError:** Both `sqlite3.IntegrityError` and `psycopg2.IntegrityError` are now caught in all repositories.
+- **Thread Safety:** Added `threading.Lock` to config cache and stats cache for Gunicorn gthread workers.
+
+### Changed
+- **SSL Bypass:** Moved hardcoded SSL bypass URLs to config-based `ssl_bypass_hosts` list.
+- **Debug Mode:** `app.run(debug=True)` changed to read from `FLASK_DEBUG` env var.
+- **Bare Excepts:** All `except:` replaced with `except Exception:` or specific types across the codebase.
+
+### Added
+- **Feed Health Monitoring:** Tracks consecutive failures per source. Auto-disables after 3 failures. Dashboard shows red "Disabled" badge with re-enable button. New `GET /api/feed_health` endpoint.
+- **Webhook Notifications:** Fire-and-forget HTTP POST to configured webhook URLs on `aggregation_complete`, `feed_disabled` events. Configured via `webhooks` list in `config.json`.
+- **Config Validation:** Pydantic schema validation on `read_config()` and `write_config()`. Logs warnings for invalid config, never blocks reads.
+- **Structured Logging:** `structlog` integration — JSON output in production (`FLASK_ENV=production`), colored console in development. Existing `logger.info()` calls continue working.
+- **Test Infrastructure:** Isolated temp DB per test via `conftest.py` fixtures. New route tests verifying auth, CSRF, permissions, and POST-only endpoints.
+- **CI Pipeline:** Added `lint` job with `ruff check` + `bandit` security scan before test job.
+
+### Removed
+- **Dead Imports:** Removed unused `output_formatter` imports, `get_existing_ips`, `DB_WRITE_LOCK` from repos/services/schema.
+- **Dead Code:** Removed `trigger_background_regeneration()` wrapper. Callers use `regenerate_edl_files()` directly.
+- **Redundant Locks:** Removed all outer `DB_WRITE_LOCK` wrappers from repositories, job_repo, auth_manager (handled by `db_transaction`).
+
+### Changed
+- **Aggregator Split:** `aggregator.py` split into `edl_generator.py` (EDL file generation), `feed_processor.py` (FeedAggregator class, async processing), and `aggregator.py` (orchestration + re-exports).
+- **Unified Upsert:** SQLite and PostgreSQL now use identical `INSERT ... ON CONFLICT DO UPDATE` query. Removed divergent code paths.
+- **Dependencies:** Added `defusedxml`, `structlog`, `pydantic` to requirements.txt.
+
 ## [1.18.26] - 2026-03-12
 
 ### Fixed

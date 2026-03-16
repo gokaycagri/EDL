@@ -32,12 +32,14 @@ function submitForm(action, data) {
     
     document.body.appendChild(form); 
     
-    Swal.fire({ 
-        title: 'Saving...', 
-        allowOutsideClick: false, 
-        didOpen: () => { Swal.showLoading(); } 
+    Swal.fire({
+        title: 'Saving...',
+        background: '#1a2233',
+        color: '#e2e8f0',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
     });
-    
+
     form.submit();
 }
 
@@ -47,6 +49,9 @@ function showAddSourceModal(submitUrl) {
 
     Swal.fire({
         title: 'Add Threat Source',
+        background: '#1a2233',
+        color: '#e2e8f0',
+        confirmButtonColor: '#00e5ff',
         html: `
             <div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="srcName" class="form-control"></div>
             <div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="srcUrl" class="form-control"></div>
@@ -83,6 +88,9 @@ function showEditSourceModal(index, source, submitUrlBase) {
 
     Swal.fire({
         title: `Edit Source: ${source.name}`,
+        background: '#1a2233',
+        color: '#e2e8f0',
+        confirmButtonColor: '#00e5ff',
         html: `
             <div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="eName" class="form-control" value="${source.name}"></div>
             <div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="eUrl" class="form-control" value="${source.url}"></div>
@@ -115,12 +123,14 @@ function showEditSourceModal(index, source, submitUrlBase) {
     }).then(res => { if (res.isConfirmed) submitForm(actionUrl, res.value); });
 }
 
-function showSavingAlert() { 
-    Swal.fire({ 
-        title: 'Saving...', 
-        allowOutsideClick: false, 
-        didOpen: () => { Swal.showLoading(); } 
-    }); 
+function showSavingAlert() {
+    Swal.fire({
+        title: 'Saving...',
+        background: '#1a2233',
+        color: '#e2e8f0',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
 }
 
 // Make functions globally available

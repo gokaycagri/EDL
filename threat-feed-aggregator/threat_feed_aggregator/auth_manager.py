@@ -1,10 +1,10 @@
+import base64
+import io
 import logging
 import ssl
+
 import pyotp
 import qrcode
-import io
-import base64
-
 from ldap3 import ALL, Connection, Server, Tls
 
 from .db_manager import get_profile_by_ldap_groups, get_user_permissions, local_user_exists, verify_local_user
@@ -20,13 +20,13 @@ def generate_totp_secret():
 def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
     """Generates a QR code for the TOTP secret."""
     totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(name=username, issuer_name=issuer_name)
-    
+
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(totp_uri)
     qr.make(fit=True)
-    
+
     img = qr.make_image(fill_color="black", back_color="white")
-    
+
     # Save to BytesIO
     buffered = io.BytesIO()
     img.save(buffered)
@@ -34,11 +34,12 @@ def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
 
 def verify_totp(secret, code):
     """Verifies a TOTP code against the secret."""
-    if not secret or not code: return False
-    
+    if not secret or not code:
+        return False
+
     # Sanitize input: Remove spaces and other whitespace
     code = code.replace(" ", "").strip()
-    
+
     try:
         totp = pyotp.TOTP(secret)
         # valid_window=2 allows for 60s before/after the current time (accommodating drift)
@@ -46,7 +47,7 @@ def verify_totp(secret, code):
         if result:
             logger.info("TOTP verification successful.")
         else:
-            logger.warning(f"TOTP verification failed for code: {code} (Invalid Code)")
+            logger.warning("TOTP verification failed (Invalid Code)")
         return result
     except Exception as e:
         logger.error(f"Error during TOTP verification: {e}")
@@ -158,8 +159,12 @@ def _check_ldap_credentials(username, password):
                     if conn.bound:
                         logger.info(f"LDAP bind SUCCESS for user: {username} (DN: {test_dn})")
                         # Success! Now fetch groups for RBAC
-                        short_username = username.split('\\')[-1]
-                        search_filter = f"( |(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={test_dn}))"
+                        from ldap3.utils.conv import escape_filter_chars
+                        # Extract short username, then escape for LDAP filter safety
+                        raw_short_username = username.split('\\')[-1] if '\\' in username else username
+                        short_username = escape_filter_chars(raw_short_username)
+                        safe_dn = escape_filter_chars(test_dn)
+                        search_filter = f"(|(sAMAccountName={short_username})(uid={short_username})(cn={short_username})(userPrincipalName={safe_dn}))"
                         conn.search(base_dn, search_filter, attributes=['memberOf', 'distinguishedName'])
 
                         user_groups = []
@@ -189,20 +194,19 @@ def _check_ldap_credentials(username, password):
                         import json
                         permissions = json.loads(profile_data['permissions']) if profile_data else {}
 
-                        # --- NEW: Sync LDAP user to local users table for MFA support ---
+                        # Sync LDAP user to local users table for MFA support
                         try:
-                            from .database.connection import db_transaction, DB_WRITE_LOCK, DB_TYPE
-                            with DB_WRITE_LOCK:
-                                with db_transaction() as db:
-                                    if DB_TYPE == 'postgres':
-                                        db.execute('''
-                                            INSERT INTO users (username, password_hash, profile_id)
-                                            VALUES (%s, %s, %s)
-                                            ON CONFLICT (username) DO UPDATE SET profile_id = EXCLUDED.profile_id
-                                        ''', (username, 'LDAP_USER', profile_id))
-                                    else:
-                                        db.execute('INSERT OR REPLACE INTO users (username, password_hash, profile_id) VALUES (?, ?, ?)',
-                                                    (username, 'LDAP_USER', profile_id))
+                            from .database.connection import DB_TYPE, db_transaction
+                            with db_transaction() as db:
+                                if DB_TYPE == 'postgres':
+                                    db.execute('''
+                                        INSERT INTO users (username, password_hash, profile_id)
+                                        VALUES (%s, %s, %s)
+                                        ON CONFLICT (username) DO UPDATE SET profile_id = EXCLUDED.profile_id
+                                    ''', (username, 'LDAP_USER', profile_id))
+                                else:
+                                    db.execute('INSERT OR REPLACE INTO users (username, password_hash, profile_id) VALUES (?, ?, ?)',
+                                                (username, 'LDAP_USER', profile_id))
                         except Exception as sync_e:
                             logger.error(f"Failed to sync LDAP user to local DB: {sync_e}")
                         # --- End Sync ---

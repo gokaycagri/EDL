@@ -4,10 +4,10 @@
 
 {% block extra_head %}
 <style>
-    /* Filter Bar Styles similar to FortiGate */
+    /* Filter Bar Styles — Dark Operations Theme */
     .filter-bar {
-        background-color: #fff;
-        border: 1px solid #e2e8f0;
+        background-color: var(--surface-1);
+        border: 1px solid var(--border-color);
         border-radius: 0.5rem;
         padding: 0.5rem;
         display: flex;
@@ -17,18 +17,18 @@
         min-height: 46px;
     }
     .filter-chip {
-        background-color: #f1f5f9;
-        border: 1px solid #cbd5e1;
+        background-color: var(--surface-2);
+        border: 1px solid var(--border-color);
         border-radius: 4px;
         padding: 2px 8px;
         font-size: 0.8rem;
         display: flex;
         align-items: center;
-        color: #334155;
+        color: var(--text-primary);
         font-weight: 500;
     }
     .filter-chip .key {
-        color: #64748b;
+        color: var(--text-muted);
         margin-right: 4px;
         text-transform: uppercase;
         font-size: 0.7rem;
@@ -39,15 +39,15 @@
     }
     .filter-chip .remove {
         cursor: pointer;
-        color: #94a3b8;
+        color: var(--text-muted);
         font-size: 1rem;
         line-height: 1;
     }
-    .filter-chip .remove:hover { color: #ef4444; }
-    
+    .filter-chip .remove:hover { color: var(--accent-danger); }
+
     .add-filter-btn {
-        border: 1px dashed #cbd5e1;
-        color: #64748b;
+        border: 1px dashed var(--border-color);
+        color: var(--text-muted);
         background: transparent;
         padding: 4px 10px;
         font-size: 0.8rem;
@@ -55,17 +55,19 @@
         transition: all 0.2s;
     }
     .add-filter-btn:hover {
-        background: #f8fafc;
-        border-color: #94a3b8;
-        color: #334155;
+        background: var(--surface-2);
+        border-color: var(--text-muted);
+        color: var(--text-primary);
     }
 
     /* Popover Styling for Filter Menu */
     .filter-menu {
         min-width: 250px;
         padding: 10px;
+        background: var(--surface-2) !important;
+        border: 1px solid var(--border-color) !important;
     }
-    .filter-menu label { font-size: 0.75rem; font-weight: 700; color: #64748b; margin-bottom: 4px; display: block; }
+    .filter-menu label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; display: block; }
     .filter-menu select, .filter-menu input { margin-bottom: 10px; font-size: 0.85rem; }
 
     /* Fix DataTables length menu dropdown arrow overlap */
@@ -80,18 +82,16 @@
 
 {% block content %}
 <div class="container-fluid px-0">
-    <div class="row align-items-center mb-4">
-        <div class="col-md-6">
-            <h3 class="fw-bold text-dark mb-1">Threat Analysis Center</h3>
-            <p class="text-muted small">Deep dive into aggregated threat indicators, risk scores, and attribution.</p>
-        </div>
+    <div class="mb-3">
+        <h3 class="fw-bold mb-1" style="color: var(--text-primary);">Threat Analysis Center</h3>
+        <p class="small mb-0" style="color: var(--text-secondary);">Deep dive into aggregated threat indicators, risk scores, and attribution.</p>
     </div>
 
     <!-- Filter Bar -->
     <div class="mb-3">
         <div class="filter-bar" id="filterContainer">
             <!-- Filter Chips will be inserted here -->
-            
+
             <div class="dropdown">
                 <button class="add-filter-btn dropdown-toggle" type="button" id="addFilterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fas fa-plus me-1"></i> Add Filter
@@ -106,21 +106,30 @@
                         <option value="country">Country Code</option>
                         <option value="risk_score">Risk Score (Threshold)</option>
                     </select>
-                    
+
                     <label id="valueLabel">Value</label>
                     <input type="text" id="newFilterValue" class="form-control form-control-sm" placeholder="Type or select..." list="filterOptionsList" autocomplete="off">
                     <datalist id="filterOptionsList">
                         <!-- Populated by JS -->
                     </datalist>
-                    
+
                     <div class="d-grid mt-2">
                         <button class="btn btn-sm btn-primary" onclick="addFilter()">Apply</button>
                     </div>
                 </div>
             </div>
-            
+
             <!-- Clear All -->
-            <button class="btn btn-link text-muted text-decoration-none btn-sm ms-auto" style="font-size: 0.8rem;" onclick="clearAllFilters()">Clear All</button>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-export btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown"><i class="fas fa-download me-1"></i>Export</button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item small" href="/api/export?format=csv"><i class="fas fa-file-csv me-2 text-success"></i>CSV</a></li>
+                        <li><a class="dropdown-item small" href="/api/export?format=json"><i class="fas fa-file-code me-2 text-info"></i>JSON</a></li>
+                    </ul>
+                </div>
+                <button class="btn btn-link text-decoration-none btn-sm" style="font-size: 0.8rem; color: var(--text-muted);" onclick="clearAllFilters()">Clear All</button>
+            </div>
         </div>
     </div>
 
@@ -128,8 +137,8 @@
         <div class="card-body">
             <div class="table-responsive">
                 <table id="analysisTable" class="table table-hover align-middle w-100">
-                    <thead class="bg-light">
-                        <tr class="small text-muted text-uppercase">
+                    <thead>
+                        <tr class="small text-uppercase" style="color: var(--text-muted);">
                             <th>Indicator</th>
                             <th>Type</th>
                             <th>Country</th>
@@ -163,15 +172,14 @@
                 data: function(d) {
                     // Inject active filters into the request
                     // We map them to specific column searches expected by backend logic or custom params
-                    // Current backend expects: columns[i][search][value]
                     // Column Map: 1:Type, 2:Country, 4:Level
                     // For Source/Tag/RiskScore, we need to pass them as custom params or map to dummy columns?
-                    // The backend code I wrote supports `filters` dict if passed via logic, 
+                    // The backend code I wrote supports `filters` dict if passed via logic,
                     // BUT `routes/analysis.py` extracts them from `columns[i][search][value]`.
-                    
+
                     // To support Source and Tag, I need to update routes/analysis.py to look for them.
                     // Or I can overload the 'search' parameter, but that's messy.
-                    
+
                     // Best way: Pass 'custom_filters' as a JSON string in the request
                     let filterDict = {};
                     activeFilters.forEach(f => {
@@ -181,24 +189,24 @@
                 }
             },
             columns: [
-                { data: 'indicator', render: function(data) { return `<span class="fw-bold text-dark">${data}</span>`; }},
+                { data: 'indicator', render: function(data) { return `<span class="fw-bold" style="color: var(--text-primary);">${data}</span>`; }},
                 { data: 'type', render: function(data) {
                     let color = 'secondary';
                     if(data === 'ip' || data === 'cidr') color = 'info'; else if(data === 'domain') color = 'warning'; else if(data === 'url') color = 'primary';
                     return `<span class="badge bg-soft-${color} text-${color} text-uppercase" style="font-size:0.65rem;">${data}</span>`;
                 }},
-                { data: 'country', render: function(data) { return data ? `<span class="badge bg-light text-dark border">${data}</span>` : '-'; }},
+                { data: 'country', render: function(data) { return data ? `<span class="badge" style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);">${data}</span>` : '<span class="text-muted" style="font-size:0.75rem;"><i class="fas fa-globe me-1"></i>Unknown</span>'; }},
                 { data: 'risk_score', render: function(data) {
                     let color = 'success';
                     if(data >= 90) color = 'danger'; else if(data >= 70) color = 'warning'; else if(data >= 40) color = 'primary';
-                    return `<div class="progress" style="height: 6px; width: 60px;" title="${data}"><div class="progress-bar bg-${color}" role="progressbar" style="width: ${data}%"></div></div><small class="text-muted" style="font-size:0.7em;">${data}/100</small>`;
+                    return `<div class="progress" style="height: 6px; width: 60px; background: var(--surface-2);" title="${data}"><div class="progress-bar bg-${color}" role="progressbar" style="width: ${data}%"></div></div><small style="font-size:0.7em; color: var(--text-muted);">${data}/100</small>`;
                 }},
                 { data: 'level', render: function(data) {
                     let color = 'secondary';
                     if(data === 'Critical') color = 'danger'; else if(data === 'High') color = 'warning'; else if(data === 'Medium') color = 'primary'; else if(data === 'Low') color = 'success';
                     return `<span class="badge bg-${color}">${data}</span>`;
                 }},
-                { data: 'sources', render: function(data) { return `<span class="text-muted" style="font-size:0.75rem;">${data}</span>`; }},
+                { data: 'sources', render: function(data) { return `<span style="font-size:0.75rem; color: var(--text-muted);">${data}</span>`; }},
                 { data: 'tags', render: function(data) {
                     return data.map(tag => {
                         let color = 'secondary';
@@ -209,6 +217,12 @@
                 { data: 'last_seen', render: function(data) { return data ? data.replace('T', ' ').substring(0, 16) : '-'; }}
             ],
             order: [[3, 'desc']],
+            createdRow: function(row, data) {
+                if (data.risk_score >= 90) row.classList.add('risk-critical');
+                else if (data.risk_score >= 70) row.classList.add('risk-high');
+                else if (data.risk_score >= 40) row.classList.add('risk-medium');
+                else row.classList.add('risk-low');
+            },
             language: { search: "", searchPlaceholder: "Global search..." },
             lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
             pagingType: "full_numbers",
@@ -227,9 +241,10 @@
 
             fetch(`{{ url_for('analysis.filter_options') }}?column=${col}&q=${encodeURIComponent(query)}`)
                 .then(r => r.json())
-                .then(data => {
+                .then(resp => {
+                    const items = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
                     dataList.empty();
-                    data.forEach(item => {
+                    items.forEach(item => {
                         const option = document.createElement('option');
                         option.value = item;
                         dataList.append(option);
@@ -241,7 +256,7 @@
         filterTypeSelect.change(function() {
             filterValueInput.val('');
             const type = $(this).val();
-            
+
             if (type === 'risk_score') {
                 filterValueInput.attr('placeholder', 'e.g. 80 (means >= 80)');
                 filterValueInput.attr('type', 'number'); // Force number input
@@ -262,7 +277,7 @@
                 fetchOptions(query);
             }, 300);
         });
-        
+
         // Initial Fetch
         fetchOptions('');
     });
@@ -283,7 +298,7 @@
 
         renderFilters();
         table.ajax.reload();
-        
+
         // Hide dropdown
         $('[data-bs-toggle="dropdown"]').dropdown('hide');
     }
@@ -304,12 +319,12 @@
         const container = $('#filterContainer');
         // Keep the dropdown and clear buttons, remove chips
         container.find('.filter-chip').remove();
-        
+
         activeFilters.forEach(f => {
             const chip = `
                 <div class="filter-chip" title="Click to edit">
                     <span class="key">${f.type}:</span>
-                    <span class="value" onclick="editFilter('${f.type}', '${f.value.replace(/'/g, "\\'")}')" style="cursor:pointer; border-bottom:1px dotted #ccc;">${f.value}</span>
+                    <span class="value" onclick="editFilter('${f.type}', '${f.value.replace(/'/g, "\\'")}')" style="cursor:pointer; border-bottom:1px dotted var(--border-color);">${f.value}</span>
                     <span class="remove" onclick="removeFilter('${f.type}')">&times;</span>
                 </div>
             `;
@@ -320,7 +335,7 @@
     function editFilter(type, value) {
         // Set values in dropdown
         $('#newFilterType').val(type).trigger('change');
-        
+
         // Wait for change handler to adjust inputs
         setTimeout(() => {
             if (type === 'type' || type === 'level') {

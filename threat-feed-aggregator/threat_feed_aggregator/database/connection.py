@@ -1,13 +1,12 @@
 import logging
 import os
-import re
 import sqlite3
 import threading
 from contextlib import contextmanager
 
 try:
     import psycopg2
-    from psycopg2 import pool
+    from psycopg2 import pool  # noqa: F401
     from psycopg2.extras import DictCursor
 except ImportError:
     psycopg2 = None
@@ -17,8 +16,7 @@ from ..constants import DB_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-# DEBUG PRINT
-print(f"DEBUG: LOADING CONNECTION MODULE (PID: {os.getpid()})")
+logger.debug(f"Loading connection module (PID: {os.getpid()})")
 
 DB_TYPE = os.getenv('DB_TYPE', 'sqlite')
 
@@ -28,7 +26,6 @@ DB_NAME = os.getenv('TEST_DB_NAME') or os.path.join(DATA_DIR, "threat_feed.db")
 # Global Lock for SQLite DB Writes (Postgres handles concurrency itself)
 # CRITICAL: Use RLock to allow nested transactions from the same thread
 DB_WRITE_LOCK = threading.RLock()
-print(f"DEBUG: DB_WRITE_LOCK initialized as {type(DB_WRITE_LOCK)} at {id(DB_WRITE_LOCK)}")
 
 # Postgres Connection Pool
 pg_pool = None
@@ -44,7 +41,7 @@ def init_pg_pool():
                         minconn=1,
                         maxconn=20,
                         user=os.getenv('DB_USER', 'threat_user'),
-                        password=os.getenv('DB_PASS', 'secure_password'),
+                        password=os.getenv('DB_PASS', ''),
                         host=os.getenv('DB_HOST', 'postgres'),
                         port=os.getenv('DB_PORT', '5432'),
                         database=os.getenv('DB_NAME', 'threat_feed')
@@ -68,24 +65,34 @@ class PostgresCursorWrapper:
     def execute(self, query, params=None):
         # 1. Convert Placeholder '?' -> '%s'
         query_pg = query.replace('?', '%s')
-        
+
         # 2. Convert 'INSERT OR IGNORE' -> 'INSERT ... ON CONFLICT DO NOTHING'
-        # Note: Postgres doesn't support "INSERT OR IGNORE", it uses "ON CONFLICT DO NOTHING"
         if 'INSERT OR IGNORE' in query_pg:
             query_pg = query_pg.replace('INSERT OR IGNORE', 'INSERT')
-            # Only append ON CONFLICT if it's not already there
             if 'ON CONFLICT' not in query_pg.upper():
                 query_pg += " ON CONFLICT DO NOTHING"
-            
-        # 3. Execute query
+
+        # 3. For INSERT statements without RETURNING, append RETURNING id to populate lastrowid
+        is_insert = query_pg.strip().upper().startswith('INSERT')
+        needs_returning = is_insert and 'RETURNING' not in query_pg.upper()
+        if needs_returning:
+            query_pg += " RETURNING id"
+
+        # 4. Execute query
         try:
             self.cursor.execute(query_pg, params)
         except Exception as e:
-            # We don't silence errors here anymore because ON CONFLICT DO NOTHING 
-            # should handle duplicates without raising an exception.
-            # If an exception occurs, it's a real issue that needs logging/raising.
             logger.error(f"SQL Error: {e} | Query: {query_pg}")
             raise
+
+        # 5. Populate lastrowid from RETURNING clause
+        if needs_returning:
+            try:
+                row = self.cursor.fetchone()
+                self.lastrowid = row[0] if row else None
+            except Exception:
+                self.lastrowid = None
+
         return self
 
     def executemany(self, query, params_seq):
@@ -98,7 +105,7 @@ class PostgresCursorWrapper:
 
     def fetchall(self):
         return self.cursor.fetchall()
-    
+
     def __iter__(self):
         """Allows iteration over the cursor (like sqlite3 cursor)."""
         return iter(self.cursor)
@@ -106,7 +113,7 @@ class PostgresCursorWrapper:
     @property
     def rowcount(self):
         return self.cursor.rowcount
-    
+
     @property
     def description(self):
         return self.cursor.description
@@ -164,22 +171,37 @@ def db_transaction(conn=None):
     if conn is None:
         conn = get_db_connection()
         should_close = True
-    
+
     try:
         if DB_TYPE == 'sqlite':
-            # RLock allows the same thread to acquire it multiple times
             with DB_WRITE_LOCK:
                 yield conn
+                if should_close:
+                    conn.commit()
         else:
             yield conn
-            
-        if should_close:
-            conn.commit()
+            if should_close:
+                conn.commit()
     except Exception as e:
         if should_close:
-            try: conn.rollback()
-            except: pass
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         raise e
     finally:
         if should_close:
             conn.close()
+
+
+@contextmanager
+def db_readonly():
+    """
+    Context manager for read-only database queries.
+    Does NOT acquire the write lock — allows concurrent reads in SQLite WAL mode.
+    """
+    conn = get_db_connection()
+    try:
+        yield conn
+    finally:
+        conn.close()

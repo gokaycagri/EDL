@@ -26,18 +26,21 @@ class TestWebEndpoints(unittest.TestCase):
         response = self.client.post('/api/update_ms365')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['status'], 'success')
+        self.assertEqual(response.json['message'], 'Success')
 
-        # Mock failure
+        # Mock failure — now returns 500 with standard error format
         mock_process.return_value = (False, "Failure")
         response = self.client.post('/api/update_ms365')
-        self.assertEqual(response.status_code, 200) # Returns 200 with error status JSON
+        self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json['status'], 'error')
+        self.assertIn('code', response.json)
 
     @patch('threat_feed_aggregator.routes.api.process_github_feeds')
     def test_github_endpoint(self, mock_process):
         mock_process.return_value = (True, "GitHub Updated")
         response = self.client.post('/api/update_github')
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['status'], 'success')
         self.assertEqual(response.json['message'], 'GitHub Updated')
 
     @patch('threat_feed_aggregator.routes.api.process_azure_feeds')

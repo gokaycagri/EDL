@@ -53,7 +53,7 @@ def process_azure_feeds():
         logger.info(f"Downloading Azure data from: {json_url}")
         proxies, _, _ = get_proxy_settings()
         # Disable verify due to potential corporate proxy/MITM or missing CA bundle in container
-        response = requests.get(json_url, timeout=30, proxies=proxies, verify=False)
+        response = requests.get(json_url, timeout=30, proxies=proxies, verify=False)  # nosec B501
         response.raise_for_status()
         data = response.json()
     except Exception as e:

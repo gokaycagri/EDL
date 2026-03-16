@@ -1,5 +1,5 @@
-import io
 import csv
+import io
 import json
 import logging
 import os
@@ -9,17 +9,20 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 
 import pytz
-from flask import flash, jsonify, redirect, request, send_file, stream_with_context, url_for, Response
+from flask import Response, flash, jsonify, redirect, request, send_file, session, stream_with_context, url_for
 
-from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source, trigger_background_regeneration
-from ..scheduler_manager import scheduler, update_scheduled_jobs
+from ..aggregator import fetch_and_process_single_feed, regenerate_edl_files, run_aggregator, test_feed_source
+from ..api_spec import OPENAPI_SPEC
+from ..auth_manager import permission_required
 from ..azure_services import process_azure_feeds
-from ..microsoft_services import process_microsoft_feeds
 from ..config_manager import DATA_DIR, read_config, read_stats
 from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
     clear_job_history,
+    get_custom_list_by_token,
+    get_custom_list_count,
+    get_filtered_indicators_iter,
     get_historical_stats,
     get_indicator_counts_by_type,
     get_job_history,
@@ -27,22 +30,27 @@ from ..db_manager import (
     get_whitelist,
     remove_api_blacklist_item,
     remove_whitelist_item,
-    get_all_indicators_iter,
-    get_filtered_indicators_iter,
-    get_custom_list_by_token,
-    get_custom_list_count,
     upsert_indicators_bulk,
 )
 from ..github_services import process_github_feeds
 from ..log_manager import clear_logs, get_live_logs
-from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
+from ..microsoft_services import process_microsoft_feeds
+from ..response_helpers import api_error, api_response
+from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..services.job_service import job_service
+from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
 from . import bp_api
 from .auth import api_key_required, login_required
 
 logger = logging.getLogger(__name__)
 
 _DECEPTOR_PROBE_STRINGS = {"hacker-ip", "1", "test", "ping"}
+
+
+@bp_api.route('/docs')
+def api_docs():
+    """Serve OpenAPI 3.1 specification as JSON."""
+    return jsonify(OPENAPI_SPEC)
 
 
 def _build_type_filter(include_types):
@@ -88,18 +96,18 @@ def get_firewall_edl(filename):
     Public-ish endpoint for firewalls to fetch EDL files.
     Does NOT require session login.
     """
-    from flask import send_from_directory, make_response
-    
+    from flask import make_response, send_from_directory
+
     # Security: Ensure we only serve .txt files (no path traversal)
     safe_filename = os.path.basename(filename)
     if not safe_filename.endswith('.txt'):
         return jsonify({'error': 'Invalid file type'}), 403
 
     from ..config_manager import DATA_DIR
-    
+
     file_path = os.path.join(DATA_DIR, safe_filename)
     logger.info(f"Firewall EDL request: {safe_filename} from {request.remote_addr} (Method: {request.method})")
-    
+
     if not os.path.exists(file_path):
         logger.error(f"Firewall EDL File NOT FOUND: {file_path}")
         return jsonify({'error': 'File not found'}), 404
@@ -112,6 +120,8 @@ def get_firewall_edl(filename):
         return response
 
     response = make_response(send_from_directory(DATA_DIR, safe_filename, mimetype='text/plain'))
+    # Display inline in browser (not download) — firewalls read body regardless
+    response.headers['Content-Disposition'] = 'inline'
     # Disable caching to ensure firewalls get fresh data
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -124,7 +134,7 @@ def get_firewall_edl(filename):
 def custom_list_count_api(list_id):
     """Returns the item count for a custom list."""
     count = get_custom_list_count(list_id)
-    return jsonify({'count': count})
+    return api_response({"count": count})
 
 @bp_api.route('/edl/custom/<token>')
 def get_saved_custom_edl(token):
@@ -147,19 +157,21 @@ def get_saved_custom_edl(token):
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        return send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype)
+        resp.headers['Content-Disposition'] = 'inline'
+        return resp
 
     # 2. Regenerate Cache (Streaming)
     include_sources = list_config['sources']
     include_types = list_config['types']
     include_types_filter = _build_type_filter(include_types)
-    
+
     try:
         iterator = get_filtered_indicators_iter(include_sources)
-        
+
         # Write to temporary file then rename (atomic-ish)
         temp_path = cache_path + ".tmp"
-        
+
         with open(temp_path, 'w', encoding='utf-8') as f:
             if output_format == 'text':
                 # Optimized Stream for Text
@@ -200,17 +212,25 @@ def get_saved_custom_edl(token):
         # Move temp file to cache path
         import shutil
         shutil.move(temp_path, cache_path)
-        
+
         if output_format == 'text':
             mimetype = 'text/plain'
         elif output_format == 'json':
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        return send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype)
+        resp.headers['Content-Disposition'] = 'inline'
+        return resp
 
     except Exception as e:
         logger.error(f"Error generating Custom EDL {token}: {e}")
+        # Clean up temp file on error
+        try:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+        except OSError:
+            pass
         return jsonify({'error': 'Generation failed'}), 500
 
 
@@ -226,14 +246,14 @@ def get_generic_edl():
     """
     types_str = request.args.get('types')
     include_types = types_str.split(',') if types_str else None
-    
+
     sources_str = request.args.get('sources')
     include_sources = sources_str.split(',') if sources_str and sources_str.strip() else None
 
     output_format = request.args.get('format', 'text')
     delimiter = request.args.get('delimiter', '\n')
     include_types_filter = _build_type_filter(include_types)
-    
+
     # Validation
     if output_format not in ['text', 'csv', 'json']:
         return jsonify({'error': 'Invalid format'}), 400
@@ -304,22 +324,29 @@ def aggregation_task(update_status=True):
     logging.debug("aggregation_task completed.")
 
 
-@bp_api.route('/run')
+_aggregation_lock = threading.Lock()
+
+@bp_api.route('/run', methods=['POST'])
 @login_required
 def run_script():
     logging.debug("Received request to /api/run endpoint.")
-    if job_service.aggregation_status == "running":
+    if not _aggregation_lock.acquire(blocking=False):
         logging.info("Aggregation already running, returning status.")
-        return jsonify({"status": job_service.aggregation_status})
+        return api_response({"aggregation_status": "running"}, message="Aggregation already running")
 
-    job_service.aggregation_status = "running"
-    thread = threading.Thread(target=aggregation_task)
+    def _run():
+        try:
+            aggregation_task()
+        finally:
+            _aggregation_lock.release()
+
+    thread = threading.Thread(target=_run)
     thread.start()
     logging.info("Aggregation task started in a new thread.")
-    return jsonify({"status": "running"})
+    return api_response({"aggregation_status": "running"}, message="Aggregation started")
 
 
-@bp_api.route('/run_single/<path:name>')
+@bp_api.route('/run_single/<path:name>', methods=['POST'])
 @login_required
 def run_single_feed(name):
     """Triggers a single feed update in the background."""
@@ -327,26 +354,26 @@ def run_single_feed(name):
     source = next((s for s in config.get('source_urls', []) if s['name'] == name), None)
 
     if not source:
-        return jsonify({"status": "error", "message": "Source not found"}), 404
+        return api_error("Source not found", "SOURCE_NOT_FOUND", 404)
 
     thread = threading.Thread(target=fetch_and_process_single_feed, args=(source,))
     thread.start()
 
-    return jsonify({"status": "running", "message": f"Fetch started for {name}"})
+    return api_response({"source": name, "aggregation_status": "running"}, message=f"Fetch started for {name}")
 
 
 @bp_api.route('/status')
 @login_required
 def status():
     logging.debug("Received request to /api/status endpoint.")
-    return jsonify({"status": job_service.aggregation_status})
+    return api_response({"aggregation_status": job_service.aggregation_status})
 
 
 @bp_api.route('/status_detailed')
 @login_required
 def status_detailed():
     """Returns detailed status of currently running jobs."""
-    return jsonify(job_service.get_all_job_statuses())
+    return api_response(job_service.get_all_job_statuses())
 
 
 @bp_api.route('/scheduled_jobs')
@@ -389,7 +416,7 @@ def get_scheduled_jobs():
     # Sort by nearest run time
     formatted_jobs.sort(key=lambda x: x['next_run_timestamp'] if x['next_run_timestamp'] > 0 else float('inf'))
 
-    return jsonify(formatted_jobs)
+    return api_response({"items": formatted_jobs, "total": len(formatted_jobs)})
 
 
 @bp_api.route('/trend_data')
@@ -408,7 +435,7 @@ def trend_data():
         except Exception:
             pass
 
-    return jsonify(formatted_data)
+    return api_response({"items": formatted_data, "total": len(formatted_data)})
 
 
 @bp_api.route('/history')
@@ -434,7 +461,7 @@ def job_history():
             item['start_time'] = format_timestamp(item['start_time'], fmt='%Y-%m-%d %H:%M:%S')
         except Exception:
             pass
-    return jsonify(history)
+    return api_response({"items": history, "total": len(history)})
 
 
 @bp_api.route('/history/clear', methods=['POST'])
@@ -443,17 +470,18 @@ def clear_history_route():
     """Clears the job history."""
     logger.info("RECEIVED request to clear job history")
     if clear_job_history():
-        return jsonify({'status': 'success', 'message': 'Job history cleared.'})
+        return api_response(message="Job history cleared.")
     else:
         logger.error("Failed to clear job history in DB")
-        return jsonify({'status': 'error', 'message': 'Failed to clear job history.'}), 500
+        return api_error("Failed to clear job history.", "DB_ERROR", 500)
 
 
 @bp_api.route('/live_logs')
 @login_required
 def live_logs():
     """Returns the latest logs from memory."""
-    return jsonify(get_live_logs())
+    logs = get_live_logs()
+    return api_response({"items": logs, "total": len(logs)})
 
 
 @bp_api.route('/live_logs/clear', methods=['POST'])
@@ -461,21 +489,23 @@ def live_logs():
 def clear_live_logs_route():
     """Clears the live logs from memory."""
     clear_logs()
-    return jsonify({'status': 'success', 'message': 'Live logs cleared.'})
+    return api_response(message="Live logs cleared.")
+
+
+@bp_api.route('/feed_health')
+@login_required
+def feed_health_api():
+    """Returns health status for all feeds."""
+    from ..services.feed_health import get_all_health_statuses
+    return api_response(get_all_health_statuses())
 
 
 @bp_api.route('/source_stats')
 @login_required
 def source_stats_api():
     """Returns current counts and last updated times for all sources."""
-    from ..config_manager import read_config, read_stats
-    from ..db_manager import (
-        get_country_stats,
-        get_indicator_counts_by_type,
-        get_unique_indicator_count,
-        get_source_counts,
-        get_latest_job_times
-    )
+    from ..config_manager import read_config
+    from ..db_manager import get_country_stats, get_latest_job_times, get_source_counts
 
     stats = read_stats()
     config = read_config()
@@ -483,7 +513,7 @@ def source_stats_api():
     total_count = get_unique_indicator_count()
     counts_by_type = get_indicator_counts_by_type()
     country_stats = get_country_stats()
-    
+
     # Fetch real-time data from DB to ensure accuracy
     real_db_counts = get_source_counts()
     real_db_times = get_latest_job_times()
@@ -498,23 +528,23 @@ def source_stats_api():
         if isinstance(data, dict):
             # Use DB count if available, otherwise fallback to stats file
             current_count = real_db_counts.get(name, data.get('count', 0))
-            
+
             # Use DB timestamp if available, otherwise fallback
             last_ts = real_db_times.get(name, data.get('last_updated'))
-            
+
             formatted_stats[name] = {
                 "count": current_count,
                 "last_updated": format_timestamp(last_ts)
             }
         else:
             formatted_stats[name] = data
-            
+
     # 2. Ensure sources in DB (but maybe missing in stats.json) are included if they match config
     configured_sources = [s['name'] for s in config.get('source_urls', [])]
-    
+
     # Merge keys from both DB counts and DB times to catch all active sources
     all_known_sources = set(real_db_counts.keys()) | set(real_db_times.keys())
-    
+
     for name in all_known_sources:
         if name in configured_sources and name not in formatted_stats:
              formatted_stats[name] = {
@@ -522,7 +552,7 @@ def source_stats_api():
                  "last_updated": format_timestamp(real_db_times.get(name))
              }
 
-    return jsonify({
+    return api_response({
         "sources": formatted_stats,
         "totals": {
             "total": total_count,
@@ -539,9 +569,9 @@ def source_stats_api():
 def api_regenerate_lists():
     success, msg = regenerate_edl_files()
     if success:
-        return jsonify({'status': 'success', 'message': msg})
+        return api_response(message=msg)
     else:
-        return jsonify({'status': 'error', 'message': msg})
+        return api_error(msg, "REGENERATION_FAILED", 500)
 
 
 @bp_api.route('/update_ms365', methods=['POST'])
@@ -550,11 +580,11 @@ def api_update_ms365():
     try:
         success, msg = process_microsoft_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "MS365_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "MS365_UPDATE_ERROR", 500)
 
 
 @bp_api.route('/update_github', methods=['POST'])
@@ -563,11 +593,11 @@ def api_update_github():
     try:
         success, msg = process_github_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "GITHUB_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "GITHUB_UPDATE_ERROR", 500)
 
 
 @bp_api.route('/update_azure', methods=['POST'])
@@ -576,23 +606,30 @@ def api_update_azure():
     try:
         success, msg = process_azure_feeds()
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response(message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg})
+            return api_error(msg, "AZURE_UPDATE_FAILED", 500)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "AZURE_UPDATE_ERROR", 500)
 
 
-@bp_api.route('/backup', methods=['GET'])
+@bp_api.route('/backup', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def backup_system():
     try:
-        # Create in-memory zip
+        from ..services.audit_service import log_action
+        username = session.get('username', 'unknown')
+        log_action(
+            username,
+            'backup_download',
+            ip_address=request.remote_addr,
+            details=f"User: {username}",
+        )
+
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # Files to backup
             files_to_backup = ['config.json', 'threat_feed.db', 'safe_list.txt', 'jobs.sqlite']
-
             for filename in files_to_backup:
                 file_path = os.path.join(DATA_DIR, filename)
                 if os.path.exists(file_path):
@@ -607,11 +644,12 @@ def backup_system():
             download_name=f'threat_feed_backup_{timestamp}.zip'
         )
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "BACKUP_ERROR", 500)
 
 
 @bp_api.route('/restore', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def restore_system():
     if 'backup_file' not in request.files:
         flash('No file part', 'danger')
@@ -686,7 +724,7 @@ def api_test_feed():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'status': 'error', 'message': 'No data provided'})
+            return api_error("No data provided", "VALIDATION_ERROR", 400)
 
         name = data.get('name', 'Test')
         url = data.get('url')
@@ -702,13 +740,12 @@ def api_test_feed():
 
         success, message, sample = test_feed_source(source_config)
 
-        return jsonify({
-            'status': 'success' if success else 'error',
-            'message': message,
-            'sample': sample
-        })
+        if success:
+            return api_response({"sample": sample}, message=message)
+        else:
+            return api_error(message, "FEED_TEST_FAILED", 400)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return api_error(str(e), "FEED_TEST_ERROR", 500)
 
 
 # --- SOAR Integration Endpoints ---
@@ -730,7 +767,7 @@ def add_indicator():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'status': 'error', 'message': 'No data provided'}), 400
+            return api_error("No data provided", "VALIDATION_ERROR", 400)
 
         action_type = data.get('type')  # whitelist or blacklist
         value = data.get('value')
@@ -738,37 +775,31 @@ def add_indicator():
         item_type = data.get('item_type', 'ip')
 
         if not value or not action_type:
-            return jsonify({'status': 'error', 'message': 'Missing value or type'}), 400
+            return api_error("Missing value or type", "VALIDATION_ERROR", 400)
 
         # Validation
         is_valid, _ = validate_indicator(value)
         if not is_valid:
-            return jsonify({'status': 'error', 'message': f'"{value}" is not a valid IP, CIDR, or Domain/URL'}), 400
+            return api_error(f'"{value}" is not a valid IP, CIDR, or Domain/URL', "VALIDATION_ERROR", 400)
 
         if action_type.lower() == 'whitelist':
-            # Whitelist Logic
             success, msg = add_whitelist_item(value, item_type=item_type, description=comment)
 
         elif action_type.lower() == 'blacklist':
-            # Blacklist Logic
             success, msg = add_api_blacklist_item(value, item_type=item_type, comment=comment)
-            # Trigger immediate background regeneration if needed?
-            # Ideally we should, but for performance maybe just let it be picked up on next run
-            # or we can force a quick update of the files.
             if success:
-                # Regenerate files to reflect changes immediately in background
-                trigger_background_regeneration()
+                regenerate_edl_files()
         else:
-            return jsonify({'status': 'error', 'message': 'Invalid type. Use whitelist or blacklist'}), 400
+            return api_error("Invalid type. Use whitelist or blacklist", "VALIDATION_ERROR", 400)
 
         if success:
-            return jsonify({'status': 'success', 'message': msg})
+            return api_response({"value": value, "type": action_type}, message=msg)
         else:
-            return jsonify({'status': 'error', 'message': msg}), 400
+            return api_error(msg, "INDICATOR_ADD_FAILED", 400)
 
     except Exception as e:
         logger.error(f"API Error adding indicator: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "INDICATOR_ADD_ERROR", 500)
 
 
 def _handle_api_indicator_removal(value, type_hint):
@@ -803,7 +834,7 @@ def remove_indicator():
     try:
         data = request.get_json()
         if not data or not data.get('value'):
-            return jsonify({'status': 'error', 'message': 'Missing value'}), 400
+            return api_error("Missing value", "VALIDATION_ERROR", 400)
 
         value = data.get('value')
         type_hint = data.get('type')
@@ -811,14 +842,14 @@ def remove_indicator():
         deleted, msgs = _handle_api_indicator_removal(value, type_hint)
 
         if deleted:
-            trigger_background_regeneration()
-            return jsonify({'status': 'success', 'message': ", ".join(msgs)})
+            regenerate_edl_files()
+            return api_response({"value": value}, message=", ".join(msgs))
 
-        return jsonify({'status': 'error', 'message': 'Item not found'}), 404
+        return api_error("Item not found", "NOT_FOUND", 404)
 
     except Exception as e:
         logger.error(f"API Error removing indicator: {e}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return api_error(str(e), "INDICATOR_REMOVE_ERROR", 500)
 
 
 from .auth import api_key_required
@@ -834,20 +865,19 @@ def deceptor_block():
     logger.info(f"CRITICAL: Deceptor Block Function reached! Client IP: {request.remote_addr}")
     try:
         # 1. Capture Raw Data for Debugging
-        client_ip = request.remote_addr
         raw_headers = _sanitize_headers_for_log(request.headers)
         raw_body = request.get_data(as_text=True)
         data_all = request.get_json(silent=True) or request.form
-        
-        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body: {raw_body}")
-        
+
+        logger.info(f"Deceptor Request Details | Headers: {raw_headers} | Body length: {len(raw_body)}")
+
         # 2. Extract IP(s) from various locations - Prioritize Body for actual data
         input_data = data_all.get('whblockdata') or data_all.get('whblockheader') or data_all.get('Hacker-IP')
-        
+
         # Fallback to headers if body is empty
         if not input_data:
             input_data = request.headers.get('whblockheader') or request.headers.get('Hacker-IP')
-            
+
         if not input_data:
             # Fallback regex scan in body
             import re
@@ -856,7 +886,7 @@ def deceptor_block():
                 input_data = ",".join(ip_matches)
 
         if not input_data:
-            logger.error(f"Deceptor BLOCK Failed: No IP found. Body: {raw_body}")
+            logger.error(f"Deceptor BLOCK Failed: No IP found in request (body length: {len(raw_body)})")
             return jsonify({'status': 'error', 'message': 'No IP found'}), 400
 
         # 3. Process Multiple IPs (Split by comma or space)
@@ -882,11 +912,11 @@ def deceptor_block():
             expiry_desc = f"{default_lifetime_days} days (system default)"
 
         comment = f"FortiDeceptor block (Expiry: {expiry_desc})"
-        
+
         added_count = 0
         successful_indicators = []
         from ..utils import validate_indicator
-        
+
         for ip in ip_list:
             # Handle Test Strings & Probes
             if ip.lower() in _DECEPTOR_PROBE_STRINGS:
@@ -911,7 +941,7 @@ def deceptor_block():
 
         # ALWAYS return success 200 if the request reached here with valid API Key
         # This prevents Deceptor from showing "Failed" status during probes
-        # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+        # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
         return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
 
     except Exception as e:
@@ -936,9 +966,14 @@ def deceptor_unblock():
         if not ip:
             return jsonify({'status': 'error', 'message': 'Missing IP (Hacker-IP)'}), 400
 
-        # 2. Remove from API Blacklist
+        # 2. Validate IP before removal
+        is_valid, _ = validate_indicator(ip)
+        if not is_valid:
+            return jsonify({'status': 'error', 'message': f'Invalid indicator: {ip}'}), 400
+
+        # 3. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
-            # trigger_background_regeneration() <-- DEACTIVATED to prevent GUI freezing
+            # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
 
         return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404

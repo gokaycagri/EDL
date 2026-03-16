@@ -4,37 +4,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Two-Factor Authentication - Threat Feed Aggregator</title>
+    <!-- Google Fonts: IBM Plex -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='vendor/css/bootstrap.min.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='vendor/css/fontawesome.min.css') }}" rel="stylesheet">
     <style>
+        :root {
+            --surface-0: #0a0e17;
+            --surface-1: #111827;
+            --surface-2: #1a2233;
+            --surface-3: #243044;
+            --accent-primary: #00e5ff;
+            --accent-warn: #ff6b35;
+            --accent-danger: #ff2d55;
+            --accent-safe: #34d399;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --text-inverse: #0a0e17;
+            --border-color: #1e293b;
+        }
         body {
-            background-color: #f8fafc;
+            background-color: var(--surface-0);
             display: flex;
             align-items: center;
             justify-content: center;
             height: 100vh;
+            font-family: 'IBM Plex Sans', sans-serif;
+            margin: 0;
         }
         .login-card {
-            border: none;
+            background: var(--surface-1);
+            border: 1px solid var(--border-color);
             border-radius: 1rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
             width: 100%;
             max-width: 400px;
             overflow: hidden;
         }
         .login-header {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            background: linear-gradient(135deg, #00e5ff 0%, #00b8d4 50%, #0097a7 100%);
             padding: 2rem;
             text-align: center;
-            color: white;
+            color: var(--text-inverse);
+        }
+        .login-header h4 {
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .login-header small {
+            opacity: 0.8;
         }
         .login-body {
             padding: 2rem;
-            background: white;
         }
-        .btn-primary {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        .login-body .form-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .login-body .form-control {
+            background: var(--surface-2);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        .login-body .form-control::placeholder {
+            color: var(--text-muted);
+        }
+        .login-body .form-control:focus {
+            background: var(--surface-2);
+            border-color: var(--accent-primary);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(0, 229, 255, 0.15);
+        }
+        .btn-verify {
+            background: var(--accent-primary);
+            color: var(--text-inverse);
             border: none;
+            font-weight: 700;
+            font-family: 'IBM Plex Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .btn-verify:hover {
+            background: #00c4db;
+            color: var(--text-inverse);
+        }
+        .cancel-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        .cancel-link:hover {
+            color: var(--text-secondary);
+        }
+        .alert {
+            background: var(--surface-2);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        .alert-danger {
+            border-left: 3px solid var(--accent-danger);
+        }
+        .alert-warning {
+            border-left: 3px solid var(--accent-warn);
+        }
+        .alert-success {
+            border-left: 3px solid var(--accent-safe);
         }
     </style>
 </head>
@@ -42,7 +121,7 @@
     <div class="card login-card">
         <div class="login-header">
             <h4 class="fw-bold mb-0"><i class="fas fa-shield-alt me-2"></i>Security Check</h4>
-            <small class="opacity-75">Enter your 6-digit code</small>
+            <small>Enter your 6-digit code</small>
         </div>
         <div class="login-body">
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -56,15 +135,18 @@
             <form method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="mb-4">
-                    <label for="code" class="form-label small fw-bold text-muted text-uppercase">Authenticator Code</label>
-                    <input type="text" class="form-control form-control-lg text-center letter-spacing-2" id="code" name="code" placeholder="000 000" maxlength="7" autocomplete="off" required style="letter-spacing: 0.5em; font-weight: bold;">
+                    <label for="code" class="form-label">Authenticator Code</label>
+                    <input type="text" class="form-control form-control-lg text-center" id="code" name="code" placeholder="000 000" maxlength="7" autocomplete="off" required style="letter-spacing: 0.5em; font-weight: bold; font-family: 'IBM Plex Mono', monospace;">
                 </div>
                 <div class="d-grid">
-                    <button type="submit" class="btn btn-primary py-2 fw-bold">Verify</button>
+                    <button type="submit" class="btn btn-verify py-2">Verify</button>
                 </div>
             </form>
             <div class="text-center mt-3">
-                <a href="{{ url_for('auth.logout') }}" class="text-muted small text-decoration-none">Cancel Login</a>
+                <form method="POST" action="{{ url_for('auth.logout') }}" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="cancel-link" style="background:none;border:none;cursor:pointer;">Cancel Login</button>
+                </form>
             </div>
         </div>
     </div>
@@ -74,10 +156,10 @@
             const codeInput = document.getElementById('code');
             if (codeInput) {
                 codeInput.focus();
-                
+
                 // Optional: Help user by automatically removing non-digits if they paste
                 codeInput.addEventListener('input', function(e) {
-                    // We allow one space for the placeholder-like format, 
+                    // We allow one space for the placeholder-like format,
                     // but backend will strip it anyway.
                     // This regex just keeps digits and spaces.
                     this.value = this.value.replace(/[^\d\s]/g, '');

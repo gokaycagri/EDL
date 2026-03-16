@@ -4,44 +4,121 @@
 
 {% block extra_head %}
 <style>
-    body { background: var(--secondary-gradient) !important; display: flex; align-items: center; justify-content: center; height: 100vh; }
-    .main-container { padding: 0 !important; }
-    .login-card { width: 400px; border: none; border-radius: 1.5rem; overflow: hidden; box-shadow: 0 1rem 3rem rgba(0,0,0,0.2); }
+    body { background: var(--surface-0) !important; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .main-container { padding: 0 !important; display: flex; align-items: center; justify-content: center; }
+    .main-content-inner { display: flex; align-items: center; justify-content: center; min-height: 100vh; width: 100%; padding: 1rem !important; }
+    .login-card {
+        width: 100%;
+        max-width: 420px;
+        border: 1px solid rgba(0, 229, 255, 0.12);
+        border-radius: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.4), 0 0 40px rgba(0, 229, 255, 0.03);
+        background: var(--surface-1);
+    }
+    .login-card .card-header {
+        background: var(--surface-2);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .login-card .form-label-custom {
+        color: var(--text-secondary);
+    }
+    .login-card .form-control {
+        background: var(--surface-2);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+    }
+    .login-card .form-control::placeholder {
+        color: var(--text-muted);
+    }
+    .login-card .form-control:focus {
+        background: var(--surface-2);
+        border-color: var(--accent-primary);
+        color: var(--text-primary);
+        box-shadow: 0 0 0 0.2rem rgba(0, 229, 255, 0.15);
+    }
+    .login-card .input-group-text {
+        background: var(--surface-2);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+    }
+    .login-card .btn-login {
+        background: var(--accent-primary);
+        color: var(--text-inverse);
+        border: none;
+        font-weight: 600;
+        font-family: 'IBM Plex Mono', monospace;
+        letter-spacing: 0.02em;
+        padding: 0.65rem;
+        font-size: 0.9rem;
+    }
+    .login-card .btn-login:hover {
+        background: #00c4db;
+        color: var(--text-inverse);
+    }
+    .login-error {
+        background: var(--accent-danger-dim);
+        border: 1px solid rgba(255, 59, 107, 0.2);
+        border-radius: 8px;
+        padding: 0.6rem 1rem;
+        font-size: 0.82rem;
+        color: var(--accent-danger);
+        margin-bottom: 1rem;
+    }
+    .login-footer {
+        text-align: center;
+        padding: 0.75rem;
+        font-size: 0.6rem;
+        color: var(--text-muted);
+        font-family: 'IBM Plex Mono', monospace;
+        border-top: 1px solid var(--border-color);
+        letter-spacing: 0.02em;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-center w-100 h-100">
-    <div class="card login-card">
-        <div class="card-header bg-white text-center py-4 border-0">
-            <div class="mb-2"><i class="fas fa-shield-virus fa-3x text-primary"></i></div>
-            <h4 class="fw-bold text-dark mb-0">ThreatFeed Access</h4>
-            <p class="text-muted small">Intelligence Engine v{{ version }}</p>
+<div class="card login-card">
+    <div class="card-header text-center py-4 border-0">
+        <div class="mb-2"><i class="fas fa-shield-virus fa-3x" style="color: var(--accent-primary);"></i></div>
+        <h4 class="fw-bold mb-0" style="color: var(--text-primary); font-family: 'IBM Plex Mono', monospace;">ThreatFeed Access</h4>
+        <p class="small mb-0" style="color: var(--text-muted);">Intelligence Engine v{{ version }}</p>
+    </div>
+    <div class="card-body px-4 pb-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="login-error">
+            <i class="fas fa-exclamation-circle me-1"></i> {{ message }}
         </div>
-        <div class="card-body px-4 pb-5">
-            <form action="{{ url_for('auth.login') }}" method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div class="mb-3">
-                    <label class="form-label-custom">Username</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-user"></i></span>
-                        <input type="text" name="username" class="form-control bg-light border-start-0" placeholder="Username" required autofocus>
-                    </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+        <form action="{{ url_for('auth.login') }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="mb-3">
+                <label class="form-label-custom">Username</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-user"></i></span>
+                    <input type="text" name="username" class="form-control" placeholder="Username" required autofocus autocomplete="username">
                 </div>
-                <div class="mb-4">
-                    <label class="form-label-custom">Password</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                        <input type="password" name="password" class="form-control bg-light border-start-0" placeholder="••••••••" required>
-                    </div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label-custom">Password</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                    <input type="password" name="password" class="form-control" placeholder="Password" required autocomplete="current-password">
                 </div>
-                <div class="d-grid">
-                    <button type="submit" class="btn btn-primary btn-lg shadow-sm">
-                        Sign In <i class="fas fa-arrow-right ms-2"></i>
-                    </button>
-                </div>
-            </form>
-        </div>
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-login btn-lg shadow-sm">
+                    Sign In <i class="fas fa-arrow-right ms-2"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+    <div class="login-footer">
+        Threat Feed Aggregator v{{ version }}
     </div>
 </div>
 {% endblock %}

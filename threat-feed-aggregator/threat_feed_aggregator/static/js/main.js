@@ -7,11 +7,11 @@ function confirmAction(event, message) {
         text: message,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ff0055',
-        cancelButtonColor: '#444',
+        confirmButtonColor: '#ff2d55',
+        cancelButtonColor: '#243044',
         confirmButtonText: 'Yes, do it!',
-        background: '#1e1e1e',
-        color: '#e0e0e0'
+        background: '#1a2233',
+        color: '#e2e8f0'
     }).then((result) => {
         if (result.isConfirmed) {
             if (element.tagName === 'A') {

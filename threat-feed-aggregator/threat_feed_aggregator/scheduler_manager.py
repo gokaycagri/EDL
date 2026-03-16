@@ -1,7 +1,9 @@
 import logging
 import os
+
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
+
 from .config_manager import DATA_DIR, read_config
 
 logger = logging.getLogger(__name__)
@@ -10,7 +12,7 @@ logger = logging.getLogger(__name__)
 db_type = os.getenv('DB_TYPE', 'sqlite')
 if db_type == 'postgres':
     db_user = os.getenv('DB_USER', 'threat_user')
-    db_pass = os.getenv('DB_PASS', 'secure_password')
+    db_pass = os.getenv('DB_PASS', '')
     db_host = os.getenv('DB_HOST', 'postgres')
     db_port = os.getenv('DB_PORT', '5432')
     db_name = os.getenv('DB_NAME', 'threat_feed')
@@ -31,12 +33,13 @@ scheduler = BackgroundScheduler(jobstores=jobstores, job_defaults=job_defaults)
 
 def update_scheduled_jobs():
     """Refreshes the scheduler jobs based on current config."""
-    from .aggregator import fetch_and_process_single_feed
-    from .microsoft_services import process_microsoft_feeds
-    from .github_services import process_github_feeds
-    from .azure_services import process_azure_feeds
     from apscheduler.jobstores.base import ConflictingIdError
     from sqlalchemy.exc import IntegrityError
+
+    from .aggregator import fetch_and_process_single_feed
+    from .azure_services import process_azure_feeds
+    from .github_services import process_github_feeds
+    from .microsoft_services import process_microsoft_feeds
 
     config = read_config()
     configured_sources = {source['name']: source for source in config.get('source_urls', [])}
@@ -70,7 +73,8 @@ def update_scheduled_jobs():
             scheduler.add_job(process_microsoft_feeds, 'interval', minutes=1440, id='update_ms365', name='Microsoft 365 Feeds', replace_existing=True)
             scheduler.add_job(process_github_feeds, 'interval', minutes=1440, id='update_github', name='GitHub Feeds', replace_existing=True)
             scheduler.add_job(process_azure_feeds, 'interval', minutes=1440, id='update_azure', name='Azure Feeds', replace_existing=True)
-        except (ConflictingIdError, IntegrityError): pass
+        except (ConflictingIdError, IntegrityError):
+            pass
 
         # DNS Deduplication Schedule
         dedup_config = config.get('dns_dedup_schedule', {})
@@ -78,17 +82,19 @@ def update_scheduled_jobs():
             interval = dedup_config.get('interval_minutes', 60)
             try:
                 scheduler.add_job(check_and_run_dns_dedup, 'interval', minutes=interval, id='dns_deduplication_job', name='DNS Deduplication', replace_existing=True)
-            except (ConflictingIdError, IntegrityError): pass
-            
+            except (ConflictingIdError, IntegrityError):
+                pass
+
     except Exception as e:
         logger.error(f"Failed to update scheduled jobs: {e}")
 
 def check_and_run_dns_dedup():
     """Checks if current time is within the allowed window and runs DNS Deduplication batch."""
-    from datetime import datetime
     import asyncio
+    from datetime import datetime
+
     from .services.dns_deduplication import process_background_dns_batch, run_deduplication_sweep
-    
+
     config = read_config()
     conf = config.get('dns_dedup_schedule', {})
     if not conf.get('enabled', False):
@@ -99,13 +105,18 @@ def check_and_run_dns_dedup():
     try:
         start_time = datetime.strptime(conf.get('start_time', '00:00'), '%H:%M').time()
         end_time = datetime.strptime(conf.get('end_time', '23:59'), '%H:%M').time()
-        
+
         in_window = (start_time <= now <= end_time) if start_time <= end_time else (start_time <= now or now <= end_time)
-            
+
         if in_window:
             batch_size = conf.get('batch_size', 50)
             logger.info(f"DNS Deduplication: Running batch (batch_size={batch_size}).")
-            processed_count = asyncio.run(process_background_dns_batch(batch_size=batch_size))
+            # Create a new event loop explicitly for thread safety
+            loop = asyncio.new_event_loop()
+            try:
+                processed_count = loop.run_until_complete(process_background_dns_batch(batch_size=batch_size))
+            finally:
+                loop.close()
             logger.info(f"DNS Deduplication: Batch completed (processed={processed_count}).")
             if conf.get('auto_delete', False):
                 deleted_count = run_deduplication_sweep()
@@ -116,4 +127,5 @@ def check_and_run_dns_dedup():
             logger.info(
                 f"DNS Deduplication: Scheduler trigger skipped (outside window {start_time}-{end_time})."
             )
-    except Exception as e: logger.error(f"Background DNS Dedup failed: {e}")
+    except Exception as e:
+        logger.error(f"Background DNS Dedup failed: {e}")

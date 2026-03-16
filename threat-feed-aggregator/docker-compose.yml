@@ -5,7 +5,7 @@ services:
     container_name: threat-feed-aggregator
     restart: unless-stopped
     ports:
-      - "443:443"
+      - "443:8080"
     volumes:
       # Persist the data directory (DB, config, output lists)
       - ./data:/app/data
@@ -14,7 +14,7 @@ services:
       - SECRET_KEY=change_this_to_a_secure_random_string
       - ADMIN_PASSWORD=admin  # Default password, change immediately via UI
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/status"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3

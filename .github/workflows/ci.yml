@@ -3,34 +3,117 @@ name: Threat Feed Aggregator CI
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master" ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/edl
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install linting tools
+      run: pip install ruff bandit
+
+    - name: Ruff lint check
+      working-directory: ./threat-feed-aggregator
+      run: ruff check threat_feed_aggregator/
+
+    - name: Bandit security scan
+      working-directory: ./threat-feed-aggregator
+      run: bandit -r threat_feed_aggregator/ -c pyproject.toml --severity-level medium
+
   test:
     runs-on: ubuntu-latest
+    needs: lint
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
         python-version: "3.13"
 
     - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev whois
+        sudo apt-get install -y libldap2-dev libsasl2-dev libssl-dev whois libjpeg-dev zlib1g-dev
 
     - name: Install Python Dependencies
       run: |
-        python -m pip install --upgrade pip
+        python -m pip install --upgrade pip setuptools wheel
         pip install pytest pytest-cov
-        if [ -f threat-feed-aggregator/requirements.txt ]; then pip install -r threat-feed-aggregator/requirements.txt; fi
+        pip install -r threat-feed-aggregator/requirements.txt
 
-    - name: Run Unit Tests
+    - name: Run Unit Tests with Coverage
       working-directory: ./threat-feed-aggregator
       run: |
-        # Using pytest to run all tests in the tests/ directory
-        python -m pytest tests/ --doctest-modules --junitxml=junit/test-results.xml
+        python -m pytest tests/ --junitxml=junit/test-results.xml --cov=threat_feed_aggregator --cov-report=term-missing -v --tb=short
+
+    - name: Run ITAI Contract Tests
+      working-directory: ./threat-feed-aggregator
+      run: |
+        python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v --tb=short
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read version from source
+        id: version
+        working-directory: ./threat-feed-aggregator
+        run: |
+          APP_VERSION=$(python -c "from threat_feed_aggregator.version import __version__; print(__version__)")
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine Docker tags
+        id: tags
+        run: |
+          TAGS="${REGISTRY}/${IMAGE_NAME}:latest"
+          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${{ steps.version.outputs.app_version }}"
+          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:sha-${{ steps.version.outputs.short_sha }}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./threat-feed-aggregator
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}

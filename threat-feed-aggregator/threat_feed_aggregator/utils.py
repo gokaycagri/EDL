@@ -1,6 +1,7 @@
 import ipaddress
 import logging
 import os
+import re
 from datetime import datetime
 
 import pytz
@@ -81,7 +82,8 @@ def reload_safe_list():
 
 def add_to_safe_list(item):
     """Adds an item to the safe list file."""
-    if not item: return False, "Empty item"
+    if not item:
+        return False, "Empty item"
 
     # Check if already exists (simple check)
     if item in SAFE_ITEMS:
@@ -152,7 +154,7 @@ def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None)
     # Check text items (Exact match for domains/IPs in file)
     if indicator in SAFE_ITEMS:
         return True, "Global Safe List (Exact)"
-    
+
     # Check networks
     is_safe, reason = _check_global_safelist(indicator)
     if is_safe:
@@ -208,7 +210,8 @@ def filter_whitelisted_items(items, whitelist_db_items):
     Filters a list of items against safe list and user whitelist.
     Highly optimized for bulk processing.
     """
-    if not items: return []
+    if not items:
+        return []
 
     # Precompute DB whitelist into sets and network objects
     db_items_set = set()
@@ -217,8 +220,10 @@ def filter_whitelisted_items(items, whitelist_db_items):
         for w in whitelist_db_items:
             w_str = w['item'] if isinstance(w, dict) else w
             if '/' in w_str:
-                try: db_nets.append(ipaddress.ip_network(w_str, strict=False))
-                except Exception: db_items_set.add(w_str)
+                try:
+                    db_nets.append(ipaddress.ip_network(w_str, strict=False))
+                except Exception:
+                    db_items_set.add(w_str)
             else:
                 db_items_set.add(w_str)
 
@@ -301,7 +306,7 @@ def validate_indicator(item):
         import re
         if re.match(r'^[a-zA-Z0-9\-\.]+$', item):
             return True, "domain"
-        
+
         # Check for scheme-less URLs (e.g. example.com/path)
         try:
             parsed_simulated = urlparse(f"http://{item}")
@@ -322,6 +327,7 @@ def get_proxy_settings():
         tuple: (proxies_dict_for_requests, proxy_url_for_aiohttp, None)
     """
     import urllib.parse
+
     from .config_manager import read_config
     config = read_config()
     proxy_config = config.get('proxy', {})
@@ -346,12 +352,37 @@ def get_proxy_settings():
 
     proxy_url = f"http://{auth_string}{server}:{port}"
 
-    # Proxies dict for 'requests'
-    # Adding explicit internal IPs and domains to bypass proxy
+    # Build no_proxy from config (with sensible defaults for private ranges)
+    default_no_proxy = ["localhost", "127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+    configured_bypass = config.get('proxy_bypass_hosts', [])
+    all_bypass = default_no_proxy + configured_bypass
+    no_proxy_str = ",".join(all_bypass)
+
     proxies = {
         "http": proxy_url,
         "https": proxy_url,
-        "no_proxy": "localhost,127.0.0.1,10.236.79.11,10.235.30.21,10.235.31.11,ddd.mfa.gov.tr,fortiproxy.mfa.gov.tr,fortiproxy01.mfa.gov.tr,.mfa.gov.tr,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+        "no_proxy": no_proxy_str
     }
 
     return proxies, proxy_url, None
+
+
+# --- Password Complexity ---
+
+_PASSWORD_MIN_LENGTH = 8
+
+
+def validate_password_strength(password):
+    """
+    Validate password complexity.
+    Returns (is_valid, error_message).
+    """
+    if not password or len(password) < _PASSWORD_MIN_LENGTH:
+        return False, f"Password must be at least {_PASSWORD_MIN_LENGTH} characters."
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter."
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter."
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one digit."
+    return True, ""

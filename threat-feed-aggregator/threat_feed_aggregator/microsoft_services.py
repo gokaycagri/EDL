@@ -74,7 +74,7 @@ def process_microsoft_feeds():
         # 2. URLs - Raw List
         if content["urls"]:
             # Sort and deduplicate
-            unique_urls = sorted(list(set(content["urls"])))
+            unique_urls = sorted(set(content["urls"]))
             filename = f"ms365_{service.lower()}_urls.txt"
             file_path = os.path.join(DATA_DIR, filename)
 

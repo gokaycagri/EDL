@@ -1,8 +1,9 @@
 import threading
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import flash, redirect, render_template, request, session, url_for
 
 from ..aggregator import fetch_and_process_single_feed
+from ..auth_manager import permission_required
 from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..config_manager import read_config, write_config
 from ..db_manager import (
@@ -12,22 +13,25 @@ from ..db_manager import (
     add_local_user,
     add_whitelist_item,
     check_admin_credentials,
+    create_custom_list,
     delete_admin_profile,
+    delete_custom_list,
     delete_ldap_group_mapping,
     delete_local_user,
     delete_whitelisted_indicators,
     get_admin_profiles,
     get_all_users,
     get_ldap_group_mappings,
+    is_mfa_enabled,
     remove_api_blacklist_item,
     remove_whitelist_item,
     set_admin_password,
     update_admin_profile,
+    update_api_blacklist_item,
     update_local_user_password,
-    is_mfa_enabled,
-    create_custom_list,
-    delete_custom_list
+    update_whitelist_item,
 )
+from ..response_helpers import api_error, api_response
 from . import bp_system
 from .auth import login_required
 
@@ -35,14 +39,13 @@ from .auth import login_required
 @bp_system.route('/custom_lists/add', methods=['POST'])
 @login_required
 def add_custom_list_route():
-    import json
     name = request.form.get('name')
     data_format = request.form.get('format', 'text')
-    
+
     # Types and Sources come as comma-separated or list from form
     # If using checkboxes with same name:
     sources = request.form.getlist('sources')
-    
+
     # If types are sent as comma separated string "ip,domain" or array
     types_input = request.form.get('types') # If hidden input
     if not types_input:
@@ -57,20 +60,23 @@ def add_custom_list_route():
             types.append('url')
         else:
             # Fallback for API or legacy calls
-            if request.form.get('type_ip'): types.extend(['ip', 'cidr'])
-            if request.form.get('type_domain'): types.append('domain')
-            if request.form.get('type_url'): types.append('url')
+            if request.form.get('type_ip'):
+                types.extend(['ip', 'cidr'])
+            if request.form.get('type_domain'):
+                types.append('domain')
+            if request.form.get('type_url'):
+                types.append('url')
     else:
         types = types_input.split(',')
 
     if not name:
         flash('List Name is required.', 'danger')
         return redirect(url_for('dashboard.index'))
-    
+
     if not sources:
         flash('At least one source must be selected.', 'danger')
         return redirect(url_for('dashboard.index'))
-        
+
     try:
         _, token = create_custom_list(name, sources, types, data_format)
         flash(f'Custom EDL "{name}" created successfully.', 'success')
@@ -94,22 +100,34 @@ def remove_custom_list_route():
 @bp_system.route('/')
 @login_required
 def index():
+    from ..services.feed_health import get_all_health_statuses
     config = read_config()
     users = get_all_users()
     profiles = get_admin_profiles()
     ldap_mappings = get_ldap_group_mappings()
     user_mfa_status = is_mfa_enabled(session.get('username'))
-    return render_template('system.html', config=config, users=users, profiles=profiles, ldap_mappings=ldap_mappings, mfa_enabled=user_mfa_status)
+    feed_health = get_all_health_statuses()
+    return render_template('system.html', config=config, users=users, profiles=profiles, ldap_mappings=ldap_mappings, mfa_enabled=user_mfa_status, feed_health=feed_health)
+
+@bp_system.route('/feed_health/reenable', methods=['POST'])
+@login_required
+def reenable_feed():
+    from ..services.feed_health import reenable_source
+    source_name = request.form.get('source_name')
+    if source_name:
+        reenable_source(source_name)
+        flash(f'Feed "{source_name}" re-enabled.', 'success')
+    return redirect(url_for('system.index'))
 
 @bp_system.route('/ldap/mappings/add', methods=['POST'])
 @login_required
 def add_ldap_mapping():
     import logging
     logger = logging.getLogger(__name__)
-    
+
     group_dn = request.form.get('group_dn')
     profile_id = request.form.get('profile_id', type=int)
-    
+
     logger.info(f"Attempting to add LDAP mapping - Group: {group_dn}, Profile ID: {profile_id}")
 
     if group_dn and profile_id:
@@ -143,13 +161,20 @@ def delete_ldap_mapping():
 @bp_system.route('/users/add', methods=['POST'])
 @login_required
 def add_user():
+    from ..utils import validate_password_strength
     username = request.form.get('username')
     password = request.form.get('password')
     profile_id = request.form.get('profile_id', type=int)
 
     if username and password:
+        valid, pw_msg = validate_password_strength(password)
+        if not valid:
+            flash(pw_msg, 'danger')
+            return redirect(url_for('system.index'))
         success, message = add_local_user(username, password, profile_id)
         if success:
+            from ..services.audit_service import log_action
+            log_action(session.get('username'), 'user_create', target=username)
             flash(f'User {username} added successfully.', 'success')
         else:
             flash(f'Error adding user: {message}', 'danger')
@@ -230,14 +255,18 @@ def delete_user():
 
 @bp_system.route('/users/change_password', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def change_user_password():
+    from ..utils import validate_password_strength
     username = request.form.get('username')
     password = request.form.get('password')
 
-    # Optional: Verify current admin password for security before changing others?
-    # For now, assuming logged-in admin has rights.
-
     if username and password:
+        valid, pw_msg = validate_password_strength(password)
+        if not valid:
+            flash(pw_msg, 'danger')
+            return redirect(url_for('system.index'))
+
         success, message = update_local_user_password(username, password)
         if success:
             flash(f'Password for {username} updated successfully.', 'success')
@@ -251,8 +280,9 @@ def _parse_import_file(file):
     Parses uploaded file (txt, json, xml) and returns unique items set.
     """
     import json
-    import xml.etree.ElementTree as ET
-    
+
+    import defusedxml.ElementTree as ET
+
     filename = file.filename.lower()
     content = file.read().decode('utf-8', errors='ignore')
     items = set()
@@ -272,7 +302,7 @@ def _parse_import_file(file):
                                 break
             elif isinstance(data, dict):
                  # Try to find a list in the dict
-                 for key, value in data.items():
+                 for value in data.values():
                      if isinstance(value, list):
                          for entry in value:
                              if isinstance(entry, str):
@@ -293,7 +323,7 @@ def _parse_import_file(file):
                     items.add(line.split()[0] if ' ' in line else line)
     except Exception as e:
         return None, str(e)
-    
+
     return list(items), None
 
 @bp_system.route('/whitelist/import', methods=['POST'])
@@ -314,24 +344,23 @@ def import_whitelist():
         return redirect(url_for('dashboard.index'))
 
     from ..utils import validate_indicator
-    
+
     count = 0
     errors = 0
-    
+    added_items = []
+
     for item in items:
         is_valid, _ = validate_indicator(item)
         if is_valid:
-            # We add description as "Imported from <filename>"
             success, _ = add_whitelist_item(item, f"Imported from {file.filename}")
             if success:
                 count += 1
+                added_items.append(item)
         else:
             errors += 1
 
-    if count > 0:
-        # Cleanup whitelisted items from DB immediately
-        valid_items = [i for i in items if validate_indicator(i)[0]]
-        delete_whitelisted_indicators(valid_items)
+    if added_items:
+        delete_whitelisted_indicators(added_items)
         flash(f'Successfully imported {count} items to Safe List. ({errors} skipped/invalid)', 'success')
     else:
         flash(f'No valid items imported. ({errors} skipped/invalid)', 'warning')
@@ -356,10 +385,10 @@ def import_blacklist():
         return redirect(url_for('dashboard.index'))
 
     from ..utils import validate_indicator
-    
+
     count = 0
     errors = 0
-    
+
     for item in items:
         is_valid, inferred_type = validate_indicator(item)
         if is_valid:
@@ -409,16 +438,21 @@ def add_source():
             "format": data_format,
             "confidence": confidence
         }
-        if key_or_column: new_source["key_or_column"] = key_or_column
-        if auth_user: new_source["auth_user"] = auth_user
-        if auth_pass: new_source["auth_pass"] = auth_pass
-        if schedule_interval_minutes: new_source["schedule_interval_minutes"] = schedule_interval_minutes
-        if retention_days: new_source["retention_days"] = retention_days
+        if key_or_column:
+            new_source["key_or_column"] = key_or_column
+        if auth_user:
+            new_source["auth_user"] = auth_user
+        if auth_pass:
+            new_source["auth_pass"] = auth_pass
+        if schedule_interval_minutes:
+            new_source["schedule_interval_minutes"] = schedule_interval_minutes
+        if retention_days:
+            new_source["retention_days"] = retention_days
 
         config["source_urls"].append(new_source)
         write_config(config)
 
-        from ..app import update_scheduled_jobs
+        from ..scheduler_manager import update_scheduled_jobs
         update_scheduled_jobs()
 
     return redirect(url_for('dashboard.index'))
@@ -446,16 +480,21 @@ def update_source(index):
                 "format": data_format,
                 "confidence": confidence
             }
-            if key_or_column: updated_source["key_or_column"] = key_or_column
-            if auth_user: updated_source["auth_user"] = auth_user
-            if auth_pass: updated_source["auth_pass"] = auth_pass
-            if schedule_interval_minutes: updated_source["schedule_interval_minutes"] = schedule_interval_minutes
-            if retention_days: updated_source["retention_days"] = retention_days
+            if key_or_column:
+                updated_source["key_or_column"] = key_or_column
+            if auth_user:
+                updated_source["auth_user"] = auth_user
+            if auth_pass:
+                updated_source["auth_pass"] = auth_pass
+            if schedule_interval_minutes:
+                updated_source["schedule_interval_minutes"] = schedule_interval_minutes
+            if retention_days:
+                updated_source["retention_days"] = retention_days
 
             config["source_urls"][index] = updated_source
             write_config(config)
 
-            from ..app import update_scheduled_jobs
+            from ..scheduler_manager import update_scheduled_jobs
             update_scheduled_jobs()
 
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
@@ -463,7 +502,7 @@ def update_source(index):
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/remove_source/<int:index>')
+@bp_system.route('/remove_source/<int:index>', methods=['POST'])
 @login_required
 def remove_source(index):
     # Note: In app.py this was /remove/<int:index>
@@ -472,7 +511,7 @@ def remove_source(index):
         config["source_urls"].pop(index)
         write_config(config)
 
-        from ..app import update_scheduled_jobs
+        from ..scheduler_manager import update_scheduled_jobs
         update_scheduled_jobs()
 
     return redirect(url_for('dashboard.index'))
@@ -595,7 +634,8 @@ def update_ldap():
     # Iterate and construct config objects
     for server in servers:
         server = server.strip().replace('ldap://', '').replace('ldaps://', '')
-        if not server: continue # Skip empty
+        if not server:
+            continue  # Skip empty
 
         ldap_servers_config.append({
             'server': server,
@@ -606,7 +646,8 @@ def update_ldap():
         })
 
     config = read_config()
-    if 'auth' not in config: config['auth'] = {}
+    if 'auth' not in config:
+        config['auth'] = {}
 
     config['auth']['ldap_enabled'] = enabled
     config['auth']['ldap_servers'] = ldap_servers_config
@@ -650,10 +691,10 @@ def check_ldap_server_status():
         servers_list = auth_config.get('ldap_servers', [])
 
     if not ldap_enabled:
-        return jsonify({'status': 'disabled', 'message': 'LDAP is disabled'})
+        return api_response({"ldap_status": "disabled"}, message="LDAP is disabled")
 
     if not servers_list:
-        return jsonify({'status': 'error', 'message': 'No servers configured'})
+        return api_error("No servers configured", "LDAP_NOT_CONFIGURED", 400)
 
     # Try to connect to at least one server
     connected = False
@@ -663,11 +704,12 @@ def check_ldap_server_status():
         host = srv.get('server')
         port = srv.get('port', 389)
 
-        if not host: continue
+        if not host:
+            continue
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2) # 2 seconds timeout
+            sock.settimeout(2)
             result = sock.connect_ex((host, int(port)))
             sock.close()
 
@@ -680,9 +722,9 @@ def check_ldap_server_status():
             details.append(f"{host}: Error ({str(e)})")
 
     if connected:
-        return jsonify({'status': 'online', 'message': 'Servers Reachable', 'details': details})
+        return api_response({"ldap_status": "online", "details": details}, message="Servers Reachable")
     else:
-        return jsonify({'status': 'offline', 'message': 'Servers Unreachable', 'details': details})
+        return api_response({"ldap_status": "offline", "details": details}, message="Servers Unreachable")
 
 @bp_system.route('/ldap/test', methods=['POST'])
 @login_required
@@ -702,17 +744,11 @@ def test_ldap_connection():
     servers_override = data.get('servers')
 
     if not username or not password:
-        return jsonify({'status': 'error', 'message': 'Username and password required.'})
+        return api_error("Username and password required.", "VALIDATION_ERROR", 400)
 
     logger.info(f"LDAP Test initiated for user: {username}")
 
     if servers_override:
-        # For testing purposes, we use a temporary function or adapt auth_manager
-        # For now, let's just use the logic in auth_manager
-        # But auth_manager expects saved config for some parts.
-        # Since this is a test, we skip RBAC check usually.
-        # I'll add a helper in auth_manager or just use the logic here.
-        # Actually, let's keep it simple:
         from ..auth_manager import check_credentials
         success, message, _ = check_credentials(username, password)
     else:
@@ -720,10 +756,10 @@ def test_ldap_connection():
 
     if success:
         logger.info(f"LDAP Test SUCCESS for user: {username}")
-        return jsonify({'status': 'success', 'message': f'Success: {message}'})
+        return api_response(message=f"Success: {message}")
     else:
         logger.warning(f"LDAP Test FAILED for user {username}: {message}")
-        return jsonify({'status': 'error', 'message': f'Failed: {message}'})
+        return api_error(f"Failed: {message}", "LDAP_AUTH_FAILED", 401)
 
 @bp_system.route('/proxy/status', methods=['GET'])
 @login_required
@@ -732,25 +768,25 @@ def check_proxy_status():
     Checks if the configured Proxy is working by connecting to a site.
     """
     import requests
+
     from ..utils import get_proxy_settings
 
     proxies, _, _ = get_proxy_settings()
 
     if not proxies:
-        return jsonify({'status': 'disabled', 'message': 'Proxy Disabled or Incomplete'})
+        return api_response({"proxy_status": "disabled"}, message="Proxy Disabled or Incomplete")
 
     try:
-        # Test connection to a reliable external site
         test_url = "https://www.google.com"
         response = requests.get(test_url, proxies=proxies, timeout=5)
 
         if response.status_code == 200:
-            return jsonify({'status': 'online', 'message': 'Proxy Working'})
+            return api_response({"proxy_status": "online"}, message="Proxy Working")
         else:
-            return jsonify({'status': 'offline', 'message': f'HTTP {response.status_code}'})
+            return api_response({"proxy_status": "offline"}, message=f"HTTP {response.status_code}")
 
     except Exception as e:
-        return jsonify({'status': 'offline', 'message': f'Connection Failed: {str(e)}'})
+        return api_response({"proxy_status": "offline"}, message=f"Connection Failed: {str(e)}")
 
 @bp_system.route('/update_proxy', methods=['POST'])
 @login_required
@@ -820,11 +856,13 @@ def check_dns_status():
     secondary = dns_config.get('secondary')
 
     if not primary and not secondary:
-        return jsonify({'status': 'disabled', 'message': 'No Custom DNS Configured'})
+        return api_response({"dns_status": "disabled"}, message="No Custom DNS Configured")
 
     servers_to_test = []
-    if primary: servers_to_test.append(primary)
-    if secondary: servers_to_test.append(secondary)
+    if primary:
+        servers_to_test.append(primary)
+    if secondary:
+        servers_to_test.append(secondary)
 
     working_servers = []
     failed_servers = []
@@ -843,19 +881,25 @@ def check_dns_status():
             failed_servers.append(f"{server} ({str(e)})")
 
     if working_servers:
-        details = f"Working: {', '.join(working_servers)}"
+        detail_msg = f"Working: {', '.join(working_servers)}"
         if failed_servers:
-            details += f"\nFailed: {', '.join(failed_servers)}"
-        return jsonify({'status': 'online', 'message': 'DNS Resolution OK', 'details': details})
+            detail_msg += f"\nFailed: {', '.join(failed_servers)}"
+        return api_response({"dns_status": "online", "details": detail_msg}, message="DNS Resolution OK")
     else:
-        return jsonify({'status': 'offline', 'message': 'DNS Resolution Failed', 'details': f"All failed: {', '.join(failed_servers)}"})
+        return api_response(
+            {"dns_status": "offline", "details": f"All failed: {', '.join(failed_servers)}"},
+            message="DNS Resolution Failed"
+        )
 
 @bp_system.route('/proxy/test', methods=['POST'])
 @login_required
 def test_proxy_connection():
-    import requests
+    import logging
     import urllib.parse
-    import base64
+
+    import requests
+
+    logger = logging.getLogger(__name__)
 
     data = request.get_json()
     enabled = data.get('enabled', False)
@@ -865,10 +909,10 @@ def test_proxy_connection():
     password = data.get('password')
 
     if not enabled:
-        return jsonify({'status': 'error', 'message': 'Proxy is disabled. Please enable it to test.'})
+        return api_error("Proxy is disabled. Please enable it to test.", "PROXY_DISABLED", 400)
 
     if not server or not port:
-        return jsonify({'status': 'error', 'message': 'Server and Port are required.'})
+        return api_error("Server and Port are required.", "VALIDATION_ERROR", 400)
 
     # Clean server address
     server = server.replace('http://', '').replace('https://', '').strip('/')
@@ -883,7 +927,7 @@ def test_proxy_connection():
 
     proxy_url = f"http://{auth_string}{server}:{port}"
     proxies = {"http": proxy_url, "https": proxy_url}
-    
+
     # Standard Browser User-Agent
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -894,32 +938,31 @@ def test_proxy_connection():
         session = requests.Session()
         session.proxies = proxies
         session.headers.update(headers)
-        
+
         # Test 1: Simple HTTP (Bypasses HTTPS Tunneling issues)
         test_url_http = "http://www.google.com"
         try:
             resp_http = session.get(test_url_http, timeout=10)
             if resp_http.status_code < 400:
-                return jsonify({'status': 'success', 'message': f'Success! Connected via Proxy (HTTP).'})
+                return api_response({"proxy_status": "online"}, message="Success! Connected via Proxy (HTTP).")
         except Exception as e_http:
             # If HTTP fails, we continue to try HTTPS or report the error
             logger.warning(f"Proxy HTTP Test failed: {e_http}")
 
         # Test 2: HTTPS (Standard)
         test_url_https = "https://www.google.com"
-        response = session.get(test_url_https, timeout=10, verify=False)
+        response = session.get(test_url_https, timeout=10, verify=True)
 
         if response.status_code == 200:
-            return jsonify({'status': 'success', 'message': f'Successfully connected to {test_url_https} via proxy.'})
+            return api_response({"proxy_status": "online"}, message=f"Successfully connected to {test_url_https} via proxy.")
         else:
-            return jsonify({'status': 'error', 'message': f'Proxy connected but returned status code: {response.status_code}'})
+            return api_error(f"Proxy connected but returned status code: {response.status_code}", "PROXY_HTTP_ERROR", 502)
 
     except Exception as e:
-        # If it still says 407, provide a more helpful hint
         err_msg = str(e)
         if "407" in err_msg:
             err_msg += " | Hint: Check if username needs DOMAIN\\ prefix or if password has unsupported characters."
-        return jsonify({'status': 'error', 'message': f'Connection failed: {err_msg}'})
+        return api_error(f"Connection failed: {err_msg}", "PROXY_CONNECTION_FAILED", 502)
 
 @bp_system.route('/upload_cert', methods=['POST'])
 @login_required
@@ -985,7 +1028,7 @@ def add_whitelist():
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
             return redirect(url_for('dashboard.index'))
-        
+
         if inferred_type and inferred_type != 'unknown':
             item_type = inferred_type
 
@@ -998,7 +1041,7 @@ def add_whitelist():
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/whitelist/remove/<int:item_id>', methods=['GET'])
+@bp_system.route('/whitelist/remove/<int:item_id>', methods=['POST'])
 @login_required
 def remove_whitelist(item_id):
     # Note: In app.py this was /remove_whitelist/<int:item_id>
@@ -1016,7 +1059,7 @@ def update_whitelist():
     if item_id and item:
         success, message = update_whitelist_item(item_id, item, item_type, description)
         if success:
-            flash(f'Safe List item updated successfully.', 'success')
+            flash('Safe List item updated successfully.', 'success')
             # Trigger cleanup for the new item if it was added to DB
             delete_whitelisted_indicators([item])
         else:
@@ -1040,7 +1083,7 @@ def add_blacklist():
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', 'danger')
             return redirect(url_for('dashboard.index'))
-        
+
         if inferred_type and inferred_type != 'unknown':
              item_type = inferred_type
 
@@ -1055,7 +1098,7 @@ def add_blacklist():
 
     return redirect(url_for('dashboard.index'))
 
-@bp_system.route('/blacklist/remove/<path:item_val>', methods=['GET'])
+@bp_system.route('/blacklist/remove/<path:item_val>', methods=['POST'])
 @login_required
 def remove_blacklist(item_val):
     remove_api_blacklist_item(item_val)
@@ -1075,7 +1118,7 @@ def update_blacklist():
     if item_id and item:
         success, message = update_api_blacklist_item(item_id, item, item_type, comment)
         if success:
-            flash(f'Block List item updated successfully.', 'success')
+            flash('Block List item updated successfully.', 'success')
             from ..aggregator import regenerate_edl_files
             regenerate_edl_files()
         else:

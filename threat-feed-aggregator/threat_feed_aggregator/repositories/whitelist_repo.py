@@ -2,7 +2,12 @@ import logging
 import sqlite3
 from datetime import UTC, datetime
 
-from ..database.connection import db_transaction, get_db_connection
+try:
+    from psycopg2 import IntegrityError as PgIntegrityError
+except ImportError:
+    PgIntegrityError = type(None)
+
+from ..database.connection import db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +20,7 @@ def add_whitelist_item(item, item_type='ip', description="", conn=None):
     is_valid, inferred_type = validate_indicator(item)
     if not is_valid:
         return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 
@@ -25,7 +30,7 @@ def add_whitelist_item(item, item_type='ip', description="", conn=None):
             db.execute('INSERT INTO whitelist (item, type, description, added_at) VALUES (?, ?, ?, ?)',
                          (item.strip(), item_type, description, now_iso))
             return True, "Item added to whitelist."
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, PgIntegrityError):
             return False, "Item already in whitelist."
         except Exception as e:
             logger.error(f"Error adding to whitelist: {e}")
@@ -54,7 +59,7 @@ def update_whitelist_item(item_id, new_item, item_type='ip', description="", con
     is_valid, inferred_type = validate_indicator(new_item)
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 
@@ -63,7 +68,7 @@ def update_whitelist_item(item_id, new_item, item_type='ip', description="", con
             db.execute('UPDATE whitelist SET item = ?, type = ?, description = ? WHERE id = ?',
                        (new_item.strip(), item_type, description, item_id))
             return True, "Item updated successfully."
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, PgIntegrityError):
             return False, "Item already exists in whitelist."
         except Exception as e:
             logger.error(f"Error updating whitelist item: {e}")
@@ -86,15 +91,15 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
     with db_transaction(conn) as db:
         try:
             now_iso = datetime.now(UTC).isoformat()
-            
+
             from ..database.connection import DB_TYPE
             if DB_TYPE == 'postgres':
                 # Optimized UPSERT for Postgres
                 query = """
-                    INSERT INTO api_blacklist (item, type, comment, added_at, expires_at) 
+                    INSERT INTO api_blacklist (item, type, comment, added_at, expires_at)
                     VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (item) 
-                    DO UPDATE SET 
+                    ON CONFLICT (item)
+                    DO UPDATE SET
                         comment = EXCLUDED.comment,
                         added_at = EXCLUDED.added_at,
                         expires_at = EXCLUDED.expires_at
@@ -102,18 +107,11 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
                 db.execute(query, (item.strip(), item_type, comment, now_iso, expires_at))
                 return True, "Item added or refreshed in blacklist."
             else:
-                # SQLite fallback
-                try:
-                    db.execute('INSERT INTO api_blacklist (item, type, comment, added_at, expires_at) VALUES (?, ?, ?, ?, ?)',
-                                 (item.strip(), item_type, comment, now_iso, expires_at))
-                    return True, "Item added to blacklist."
-                except Exception:
-                    # In SQLite, db_transaction handles the rollback if we re-raise,
-                    # but here we want to retry with an UPDATE.
-                    # To do this safely within the same transaction, we use a savepoint or just let it fail and handle.
-                    db.execute('UPDATE api_blacklist SET comment = ?, added_at = ?, expires_at = ? WHERE item = ?',
-                               (comment, now_iso, expires_at, item.strip()))
-                    return True, "Item block refreshed."
+                # SQLite: use INSERT OR REPLACE for atomic upsert
+                db.execute('''INSERT OR REPLACE INTO api_blacklist (item, type, comment, added_at, expires_at)
+                              VALUES (?, ?, ?, ?, ?)''',
+                             (item.strip(), item_type, comment, now_iso, expires_at))
+                return True, "Item added or refreshed in blacklist."
         except Exception as e:
             logger.error(f"Error adding to api_blacklist: {e}")
             return False, str(e)
@@ -165,7 +163,7 @@ def update_api_blacklist_item(item_id, new_item, item_type='ip', comment="", con
     is_valid, inferred_type = validate_indicator(new_item)
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
-    
+
     if inferred_type != 'unknown':
         item_type = inferred_type
 

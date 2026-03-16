@@ -1,16 +1,17 @@
 import logging
+import os
 from datetime import datetime
 
 from flask import render_template
 
 from ..config_manager import read_config, read_stats
 from ..db_manager import (
+    get_all_custom_lists,
     get_api_blacklist_items,
     get_country_stats,
     get_indicator_counts_by_type,
     get_unique_indicator_count,
     get_whitelist,
-    get_all_custom_lists
 )
 from ..utils import SAFE_ITEMS, format_timestamp
 from . import bp_dashboard
@@ -32,7 +33,7 @@ def index():
     custom_lists = get_all_custom_lists()
 
     # Sort safe list for display
-    safe_list_sorted = sorted(list(SAFE_ITEMS))
+    safe_list_sorted = sorted(SAFE_ITEMS)
 
     # Format timestamps
     formatted_stats = {}
@@ -46,6 +47,7 @@ def index():
 
     # Scheduler access
     import pytz
+
     from ..scheduler_manager import scheduler
 
     target_tz = pytz.timezone(config.get('timezone', 'UTC'))
@@ -85,8 +87,13 @@ def index():
 @bp_dashboard.route('/data/<path:filename>')
 @login_required
 def download_file(filename):
-    from flask import send_from_directory, request
+    from flask import abort, request, send_from_directory
 
     from ..config_manager import DATA_DIR
+    # Prevent path traversal — only serve basename
+    safe_filename = os.path.basename(filename)
+    ALLOWED_EXTENSIONS = ('.txt', '.json', '.csv', '.zip')
+    if not safe_filename or not safe_filename.endswith(ALLOWED_EXTENSIONS):
+        abort(403)
     as_attachment = request.args.get('view') != '1'
-    return send_from_directory(DATA_DIR, filename, as_attachment=as_attachment)
+    return send_from_directory(DATA_DIR, safe_filename, as_attachment=as_attachment)

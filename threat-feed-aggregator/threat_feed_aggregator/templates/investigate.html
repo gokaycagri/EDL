@@ -4,25 +4,23 @@
 
 {% block content %}
 <div class="container-fluid px-0">
-    <div class="row align-items-center mb-4">
-        <div class="col-md-6">
-            <h3 class="fw-bold text-dark mb-1">Threat Investigation</h3>
-            <p class="text-muted small">Real-time IP reputation and geolocation intelligence.</p>
-        </div>
+    <div class="mb-3">
+        <h3 class="fw-bold mb-1">Threat Investigation</h3>
+        <p class="text-muted small mb-0">Real-time IP reputation and geolocation intelligence.</p>
     </div>
 
-    <div class="row g-4">
+    <div class="row g-3">
         <!-- Search Card -->
-        <div class="col-md-5">
-            <div class="card settings-card shadow-sm">
-                <div class="card-header bg-white py-3 border-0">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-search me-2 text-primary"></i>IP Reputation Query</h6>
+        <div class="col-lg-5 col-md-12">
+            <div class="card settings-card">
+                <div class="card-header py-2 border-0">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-search me-2 text-primary"></i>IP Reputation Query</h6>
                 </div>
                 <div class="card-body">
                     <form id="investigateForm">
                         <div class="mb-3">
                             <label class="form-label-custom">Target IP Address</label>
-                            <div class="input-group shadow-sm">
+                            <div class="input-group">
                                 <input type="text" id="ipInput" class="form-control" placeholder="e.g. 8.8.8.8" required>
                                 <button class="btn btn-primary px-4" type="submit" id="searchBtn">
                                     <i class="fas fa-search"></i>
@@ -39,18 +37,18 @@
             </div>
 
             <!-- Internal DB Search Card (New) -->
-            <div class="card settings-card shadow-sm mt-4">
-                <div class="card-header bg-white py-3 border-0">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-database me-2 text-danger"></i>Internal Threat Database</h6>
+            <div class="card settings-card mt-4">
+                <div class="card-header py-2 border-0">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-database me-2 text-danger"></i>Internal Threat Database</h6>
                 </div>
                 <div class="card-body">
                     <p class="small text-muted mb-3">Check if an indicator (IP, Domain, URL) exists in your aggregated feeds.</p>
                     <form id="internalSearchForm">
                         <div class="mb-3">
                             <label class="form-label-custom">Indicator</label>
-                            <div class="input-group shadow-sm">
+                            <div class="input-group">
                                 <input type="text" id="internalInput" class="form-control" placeholder="IP, Domain, or URL" required>
-                                <button class="btn btn-danger px-4" type="submit" id="internalSearchBtn">
+                                <button class="btn btn-primary px-4" type="submit" id="internalSearchBtn">
                                     <i class="fas fa-search"></i>
                                 </button>
                             </div>
@@ -58,7 +56,7 @@
                     </form>
                     <div id="internalResultArea" class="mt-3 d-none">
                         <label class="form-label-custom">Search Results</label>
-                        <div class="p-3 bg-light rounded border">
+                        <div class="p-3 rounded border" style="background: var(--surface-2);">
                             <ul id="internalResultList" class="list-unstyled mb-0 small"></ul>
                         </div>
                     </div>
@@ -72,28 +70,28 @@
         </div>
 
         <!-- Result Card -->
-        <div class="col-md-7">
-            <div id="resultCard" class="card settings-card shadow-sm d-none">
-                <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center border-bottom">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-info-circle me-2 text-info"></i>Intelligence Report</h6>
+        <div class="col-lg-7 col-md-12">
+            <div id="resultCard" class="card settings-card d-none">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center border-bottom">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-info-circle me-2 text-info"></i>Intelligence Report</h6>
                     <div id="reportIpBadge" class="badge bg-primary px-3"></div>
                 </div>
                 <div class="card-body">
                     <div class="row g-4">
                         <div class="col-md-6">
                             <label class="form-label-custom">Network Intelligence</label>
-                            <div class="p-3 bg-light rounded-3 border h-100">
-                                <div class="mb-2"><span class="text-muted small">Country:</span> <span id="resCountry" class="fw-bold text-dark">N/A</span> <span id="resFlag"></span></div>
-                                <div class="mb-2"><span class="text-muted small">City/Region:</span> <span id="resCity" class="fw-bold text-dark">N/A</span></div>
-                                <div class="mb-2"><span class="text-muted small">ISP:</span> <span id="resIsp" class="fw-bold text-dark">N/A</span></div>
-                                <div class="mb-2"><span class="text-muted small">ASN:</span> <span id="resAsn" class="fw-bold text-dark">N/A</span></div>
-                                <div class="mb-2"><span class="text-muted small">Organization:</span> <span id="resOrg" class="fw-bold text-dark">N/A</span></div>
+                            <div class="p-3 rounded-3 border h-100" style="background: var(--surface-2);">
+                                <div class="mb-2"><span class="text-muted small">Country:</span> <span id="resCountry" class="fw-bold">N/A</span> <span id="resFlag"></span></div>
+                                <div class="mb-2"><span class="text-muted small">City/Region:</span> <span id="resCity" class="fw-bold">N/A</span></div>
+                                <div class="mb-2"><span class="text-muted small">ISP:</span> <span id="resIsp" class="fw-bold">N/A</span></div>
+                                <div class="mb-2"><span class="text-muted small">ASN:</span> <span id="resAsn" class="fw-bold">N/A</span></div>
+                                <div class="mb-2"><span class="text-muted small">Organization:</span> <span id="resOrg" class="fw-bold">N/A</span></div>
                                 <div id="resMapLink" class="mt-3"></div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label-custom">Reverse DNS / Hosting</label>
-                            <div class="p-3 bg-light rounded-3 border h-100">
+                            <div class="p-3 rounded-3 border h-100" style="background: var(--surface-2);">
                                 <ul id="resDomains" class="list-unstyled mb-0 small" style="max-height: 200px; overflow-y: auto;">
                                     <li class="text-muted">No domains found.</li>
                                 </ul>
@@ -101,10 +99,10 @@
                         </div>
                         <div class="col-12">
                              <label class="form-label-custom">WHOIS Data</label>
-                             <pre id="resWhois" class="p-3 bg-dark text-light rounded-3 border small mb-0" style="max-height: 200px; overflow-y: auto; white-space: pre-wrap;">-</pre>
+                             <pre id="resWhois" class="p-3 rounded-3 border small mb-0" style="max-height: 200px; overflow-y: auto; white-space: pre-wrap; background: var(--surface-0); color: var(--accent-primary); font-family: 'IBM Plex Mono', 'Consolas', monospace;">-</pre>
                         </div>
                     </div>
-                    
+
                     <div class="mt-4 pt-4 border-top">
                         <label class="form-label-custom">External Threat Intelligence</label>
                         <div class="d-flex flex-wrap gap-2">
@@ -115,12 +113,13 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Placeholder -->
-            <div id="noResultPlaceholder" class="card settings-card shadow-sm border-dashed">
+            <div id="noResultPlaceholder" class="card settings-card border-dashed" style="background: var(--surface-1); border-color: var(--border-color) !important;">
                 <div class="card-body text-center py-5 text-muted">
                     <i class="fas fa-microscope fa-3x mb-3 opacity-25"></i>
-                    <p class="mb-0">Enter a valid IP address to retrieve comprehensive intelligence data.</p>
+                    <p class="mb-2">Enter a valid IP address to retrieve comprehensive intelligence data.</p>
+                    <p class="small mb-0">Try: <a href="#" onclick="document.getElementById('ipInput').value='8.8.8.8'; investigateForm.dispatchEvent(new Event('submit')); return false;" class="text-decoration-none">8.8.8.8</a> &middot; <a href="#" onclick="document.getElementById('ipInput').value='1.1.1.1'; investigateForm.dispatchEvent(new Event('submit')); return false;" class="text-decoration-none">1.1.1.1</a></p>
                 </div>
             </div>
         </div>
@@ -148,7 +147,10 @@
         if (!ip) return;
 
         searchBtn.disabled = true;
-        searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        searchBtn.textContent = '';
+        const spinIcon = document.createElement('i');
+        spinIcon.className = 'fas fa-spinner fa-spin';
+        searchBtn.appendChild(spinIcon);
 
         fetch('/tools/api/lookup_ip', {
             method: 'POST',
@@ -159,49 +161,68 @@
             body: JSON.stringify({ ip: ip })
         })
             .then(r => r.json())
-            .then(data => {
+            .then(resp => {
+                var data = resp.data || resp;
                 searchBtn.disabled = false;
-                searchBtn.innerHTML = '<i class="fas fa-search"></i>';
-                
+                searchBtn.textContent = '';
+                const searchIcon = document.createElement('i');
+                searchIcon.className = 'fas fa-search';
+                searchBtn.appendChild(searchIcon);
+
                 if (data.success) {
                     noResultPlaceholder.classList.add('d-none');
                     resultCard.classList.remove('d-none');
-                    
+
                     document.getElementById('reportIpBadge').textContent = ip;
-                    
+
                     // Geo Data
                     const geo = data.geo || {};
                     document.getElementById('resCountry').textContent = geo.country || 'Unknown';
-                    document.getElementById('resCity').textContent = `${geo.city || '-'}, ${geo.regionName || '-'}`;
+                    document.getElementById('resCity').textContent = (geo.city || '-') + ', ' + (geo.regionName || '-');
                     document.getElementById('resIsp').textContent = geo.isp || 'Unknown';
                     document.getElementById('resAsn').textContent = geo.as || 'Unknown';
                     document.getElementById('resOrg').textContent = geo.org || 'Unknown';
-                    
+
                     // Hosting Data (from THC or others)
                     const domainsList = document.getElementById('resDomains');
-                    domainsList.innerHTML = '';
+                    domainsList.textContent = '';
                     const domains = (data.data && data.data.domains) ? data.data.domains : [];
-                    
+
                     if (domains.length > 0) {
                         domains.forEach(d => {
                             const li = document.createElement('li');
-                            li.className = 'mb-1 fw-bold text-dark';
+                            li.className = 'mb-1 fw-bold';
                             // Handle both object (THC API) and string (Legacy/Other) formats
                             li.textContent = (typeof d === 'object' && d.domain) ? d.domain : d;
                             domainsList.appendChild(li);
                         });
                     } else {
-                        domainsList.innerHTML = '<li class="text-muted">No associated domains found.</li>';
+                        const li = document.createElement('li');
+                        li.className = 'text-muted';
+                        li.textContent = 'No associated domains found.';
+                        domainsList.appendChild(li);
                     }
-                    
+
                     // WHOIS
                     document.getElementById('resWhois').textContent = data.whois_data || 'No WHOIS record.';
 
-                    document.getElementById('resMapLink').innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${geo.lat || ip},${geo.lon || ''}" target="_blank" class="btn btn-sm btn-outline-primary w-100"><i class="fas fa-map me-2"></i>View on Map</a>`;
-                    document.getElementById('vtLink').href = `https://www.virustotal.com/gui/ip-address/${ip}`;
-                    document.getElementById('abuseLink').href = `https://www.abuseipdb.com/check/${ip}`;
-                    document.getElementById('talosLink').href = `https://talosintelligence.com/reputation_center/lookup?search=${ip}`;
-                    
+                    // Map link
+                    const mapLinkContainer = document.getElementById('resMapLink');
+                    mapLinkContainer.textContent = '';
+                    const mapLink = document.createElement('a');
+                    mapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + (geo.lat || ip) + ',' + (geo.lon || '');
+                    mapLink.target = '_blank';
+                    mapLink.className = 'btn btn-sm btn-outline-primary w-100';
+                    const mapIcon = document.createElement('i');
+                    mapIcon.className = 'fas fa-map me-2';
+                    mapLink.appendChild(mapIcon);
+                    mapLink.appendChild(document.createTextNode('View on Map'));
+                    mapLinkContainer.appendChild(mapLink);
+
+                    document.getElementById('vtLink').href = 'https://www.virustotal.com/gui/ip-address/' + ip;
+                    document.getElementById('abuseLink').href = 'https://www.abuseipdb.com/check/' + ip;
+                    document.getElementById('talosLink').href = 'https://talosintelligence.com/reputation_center/lookup?search=' + ip;
+
                     saveRecentSearch(ip);
                 } else {
                     Swal.fire('Error', data.message, 'error');
@@ -209,7 +230,10 @@
             })
             .catch(err => {
                 searchBtn.disabled = false;
-                searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+                searchBtn.textContent = '';
+                const searchIcon = document.createElement('i');
+                searchIcon.className = 'fas fa-search';
+                searchBtn.appendChild(searchIcon);
                 Swal.fire('Error', 'Service unreachable.', 'error');
             });
     });
@@ -220,7 +244,10 @@
         if (!indicator) return;
 
         internalSearchBtn.disabled = true;
-        internalSearchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        internalSearchBtn.textContent = '';
+        const spinIcon = document.createElement('i');
+        spinIcon.className = 'fas fa-spinner fa-spin';
+        internalSearchBtn.appendChild(spinIcon);
         internalResultArea.classList.add('d-none');
 
         fetch('/tools/api/lookup_internal', {
@@ -232,46 +259,75 @@
             body: JSON.stringify({ indicator: indicator })
         })
         .then(r => r.json())
-        .then(data => {
+        .then(resp => {
+            var data = resp.data || resp;
+            var isSuccess = data.success || resp.status === 'success';
             internalSearchBtn.disabled = false;
-            internalSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
+            internalSearchBtn.textContent = '';
+            const searchIcon = document.createElement('i');
+            searchIcon.className = 'fas fa-search';
+            internalSearchBtn.appendChild(searchIcon);
 
-            if (data.success) {
-                internalResultList.innerHTML = '';
+            if (isSuccess) {
+                internalResultList.textContent = '';
                 const sources = data.sources || [];
-                
+
                 if (sources.length > 0) {
                     sources.forEach(src => {
                         const li = document.createElement('li');
-                        li.className = 'mb-3 text-dark pb-2 border-bottom last-child-border-0';
-                        
-                        let iconClass = "fas fa-exclamation-triangle text-danger";
-                        if (src.source_name === 'FortiDeceptor') iconClass = "fas fa-robot text-danger";
-                        
-                        let commentHtml = src.comment ? `<div class="ms-4 mt-1 p-2 bg-soft-info rounded small"><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> ${src.comment}</div>` : '';
-                        
-                        li.innerHTML = `
-                            <div class="d-flex align-items-center">
-                                <i class="${iconClass} me-2"></i>
-                                <strong>${src.source_name}</strong>
-                            </div>
-                            <small class="text-muted ms-4">Last seen: ${src.last_seen}</small>
-                            ${commentHtml}
-                        `;
+                        li.className = 'mb-3 pb-2 border-bottom last-child-border-0';
+
+                        const headerDiv = document.createElement('div');
+                        headerDiv.className = 'd-flex align-items-center';
+                        const icon = document.createElement('i');
+                        icon.className = src.source_name === 'FortiDeceptor' ? 'fas fa-robot text-danger me-2' : 'fas fa-exclamation-triangle text-danger me-2';
+                        headerDiv.appendChild(icon);
+                        const strong = document.createElement('strong');
+                        strong.textContent = src.source_name;
+                        headerDiv.appendChild(strong);
+                        li.appendChild(headerDiv);
+
+                        const lastSeen = document.createElement('small');
+                        lastSeen.className = 'text-muted ms-4';
+                        lastSeen.textContent = 'Last seen: ' + src.last_seen;
+                        li.appendChild(lastSeen);
+
+                        if (src.comment) {
+                            const commentDiv = document.createElement('div');
+                            commentDiv.className = 'ms-4 mt-1 p-2 bg-soft-info rounded small';
+                            const infoIcon = document.createElement('i');
+                            infoIcon.className = 'fas fa-info-circle me-1';
+                            commentDiv.appendChild(infoIcon);
+                            const noteStrong = document.createElement('strong');
+                            noteStrong.textContent = 'Note: ';
+                            commentDiv.appendChild(noteStrong);
+                            commentDiv.appendChild(document.createTextNode(src.comment));
+                            li.appendChild(commentDiv);
+                        }
+
                         internalResultList.appendChild(li);
                     });
                 } else {
-                    internalResultList.innerHTML = '<li class="text-success"><i class="fas fa-check-circle me-2"></i>Not found in any internal threat feed.</li>';
+                    const li = document.createElement('li');
+                    li.className = 'text-success';
+                    const checkIcon = document.createElement('i');
+                    checkIcon.className = 'fas fa-check-circle me-2';
+                    li.appendChild(checkIcon);
+                    li.appendChild(document.createTextNode('Not found in any internal threat feed.'));
+                    internalResultList.appendChild(li);
                 }
                 internalResultArea.classList.remove('d-none');
                 saveRecentInternalSearch(indicator);
             } else {
-                Swal.fire('Error', data.error, 'error');
+                Swal.fire('Error', data.error || resp.message || 'Request failed', 'error');
             }
         })
         .catch(err => {
             internalSearchBtn.disabled = false;
-            internalSearchBtn.innerHTML = '<i class="fas fa-search"></i>';
+            internalSearchBtn.textContent = '';
+            const searchIcon = document.createElement('i');
+            searchIcon.className = 'fas fa-search';
+            internalSearchBtn.appendChild(searchIcon);
             Swal.fire('Error', 'Service unreachable.', 'error');
         });
     });
@@ -288,11 +344,18 @@
     function updateRecentSearches() {
         const container = document.getElementById('recentSearches');
         const history = JSON.parse(localStorage.getItem('recentIps') || '[]');
-        container.innerHTML = history.length ? '' : '<span class="text-muted small">No recent history.</span>';
+        container.textContent = '';
+        if (!history.length) {
+            const noHistory = document.createElement('span');
+            noHistory.className = 'text-muted small';
+            noHistory.textContent = 'Search history will appear here.';
+            container.appendChild(noHistory);
+            return;
+        }
         history.forEach(ip => {
             const span = document.createElement('span');
-            span.className = 'badge bg-light text-dark border px-2 py-2 cursor-pointer';
-            span.style.cursor = 'pointer';
+            span.className = 'badge px-2 py-2';
+            span.style.cssText = 'cursor: pointer; background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);';
             span.textContent = ip;
             span.onclick = () => { document.getElementById('ipInput').value = ip; investigateForm.dispatchEvent(new Event('submit')); };
             container.appendChild(span);
@@ -303,7 +366,7 @@
         let history = JSON.parse(localStorage.getItem('recentInternal') || '[]');
         // Remove if exists to bubble to top
         history = history.filter(item => item !== term);
-        history.unshift(term); 
+        history.unshift(term);
         if (history.length > 6) history.pop();
         localStorage.setItem('recentInternal', JSON.stringify(history));
         updateRecentInternalSearches();
@@ -312,10 +375,17 @@
     function updateRecentInternalSearches() {
         const container = document.getElementById('internalRecentSearches');
         const history = JSON.parse(localStorage.getItem('recentInternal') || '[]');
-        container.innerHTML = history.length ? '' : '<span class="text-muted small">No recent history.</span>';
+        container.textContent = '';
+        if (!history.length) {
+            const noHistory = document.createElement('span');
+            noHistory.className = 'text-muted small';
+            noHistory.textContent = 'Search history will appear here.';
+            container.appendChild(noHistory);
+            return;
+        }
         history.forEach(term => {
             const span = document.createElement('span');
-            span.className = 'badge bg-soft-danger text-danger border border-danger px-2 py-2 cursor-pointer';
+            span.className = 'badge bg-soft-danger px-2 py-2';
             span.style.cursor = 'pointer';
             span.textContent = term;
             span.onclick = () => { document.getElementById('internalInput').value = term; internalSearchForm.dispatchEvent(new Event('submit')); };

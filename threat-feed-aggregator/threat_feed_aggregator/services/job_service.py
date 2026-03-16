@@ -12,7 +12,7 @@ class JobService:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
-                    cls._instance = super(JobService, cls).__new__(cls)
+                    cls._instance = super().__new__(cls)
                     cls._instance._initialized = False
         return cls._instance
 
@@ -20,13 +20,13 @@ class JobService:
         if self._initialized:
             return
         self._initialized = True
-        
+
         # Global Aggregation Status (e.g., "idle", "running")
         self._aggregation_status = "idle"
-        
+
         # Detailed Job Status Map (source_name -> {status, details, timestamp})
         self._current_job_status = {}
-        
+
         self._status_lock = threading.Lock()
 
     @property
@@ -54,7 +54,7 @@ class JobService:
         with self._status_lock:
             if source_name in self._current_job_status:
                 del self._current_job_status[source_name]
-    
+
     def clear_all_job_statuses(self):
         with self._status_lock:
             self._current_job_status.clear()

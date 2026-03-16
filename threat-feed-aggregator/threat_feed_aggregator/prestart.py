@@ -5,8 +5,8 @@ import sys
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from threat_feed_aggregator.cert_manager import get_cert_paths, generate_self_signed_cert
-from threat_feed_aggregator.db_manager import init_db
+from threat_feed_aggregator.cert_manager import generate_self_signed_cert
+from threat_feed_aggregator.database.schema import init_db
 from threat_feed_aggregator.repositories.user_repo import set_admin_password
 
 # Configure minimal logging
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def prestart():
     logger.info("Running pre-start checks...")
-    
+
     # 1. Initialize Database
     try:
         init_db()

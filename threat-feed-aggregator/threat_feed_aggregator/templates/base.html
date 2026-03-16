@@ -6,6 +6,10 @@
     <title>{% block title %}{% endblock %} - Threat Feed Aggregator</title>
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg', v=1) }}">
+    <!-- Google Fonts: IBM Plex -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Bootstrap 5 -->
     <link href="{{ url_for('static', filename='vendor/css/bootstrap.min.css') }}" rel="stylesheet">
     <!-- FontAwesome -->
@@ -14,57 +18,14 @@
     <link href="{{ url_for('static', filename='vendor/css/dataTables.bootstrap5.min.css') }}" rel="stylesheet">
     <!-- SweetAlert2 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/css/sweetalert2.min.css') }}">
-    <!-- Theme CSS -->
+    <!-- Theme CSS (Dark Operations) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
     <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            --secondary-gradient: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            --card-border-radius: 1rem;
-            --sidebar-width: 260px;
-        }
-        body { background-color: #f8fafc; min-height: 100vh; margin: 0; padding: 0; overflow: hidden; display: flex; width: 100%; }
-        
-                .sidebar { 
-                    width: var(--sidebar-width); 
-                    background: var(--secondary-gradient); 
-                    color: white; 
-                    height: 100vh;
-                    position: fixed;
-                    left: 0;
-                    top: 0;
-                    display: flex; 
-                    flex-direction: column; 
-                    z-index: 1050;
-                }
-                
-                        .main-container { 
-                            flex-grow: 1; 
-                            height: 100vh;
-                            overflow-y: auto; 
-                            margin-left: var(--sidebar-width);
-                            padding: 2.5rem;
-                            width: calc(100% - var(--sidebar-width));
-                            background-color: #f8fafc;
-                            position: relative;
-                        }
-                        
-                        .container-fluid { max-width: 1400px; margin-left: 0; }        {% if request.endpoint == 'auth.login' %}
-        .main-container { margin-left: 0; width: 100%; padding: 0; }
-        {% endif %}
+        body { min-height: 100vh; margin: 0; padding: 0; overflow: hidden; display: flex; width: 100%; }
 
-        .settings-card { border: none; box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); border-radius: var(--card-border-radius); transition: all 0.3s; background: white; margin-bottom: 1.5rem; }
-        .settings-card:hover { box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1); }
-        .form-label-custom { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 0.5rem; }
-        .btn-primary { background: var(--primary-gradient); border: none; }
-        .btn-primary:hover { opacity: 0.9; }
-        .badge-authority { font-size: 0.65rem; padding: 0.35em 0.65em; border-radius: 2rem; }
-        
-        /* Custom Scrollbar */
-        .main-container::-webkit-scrollbar { width: 6px; }
-        .main-container::-webkit-scrollbar-track { background: #f1f1f1; }
-        .main-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .main-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        {% if request.endpoint == 'auth.login' %}
+        .main-container { margin-left: 0 !important; width: 100% !important; padding: 0 !important; }
+        {% endif %}
     </style>
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {% block extra_head %}{% endblock %}
@@ -72,38 +33,114 @@
 <body>
 
     {% if request.endpoint != 'auth.login' %}
+    <!-- Mobile Hamburger -->
+    <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('mobile-open'); document.querySelector('.sidebar-overlay').classList.toggle('visible');">
+        <i class="fas fa-bars"></i>
+    </button>
+    <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('mobile-open'); this.classList.remove('visible');"></div>
+
     <!-- Sidebar -->
     <div class="sidebar">
-        <div class="px-4 py-4 mb-2">
-            <h4 class="text-white fw-bold mb-0"><i class="fas fa-shield-virus me-2 text-info"></i> ThreatFeed</h4>
-            <small class="text-info opacity-75">Intelligence Engine</small>
+        <div class="sidebar-brand">
+            <h4><i class="fas fa-shield-virus me-2"></i>ThreatFeed</h4>
+            <small>Intelligence Engine</small>
         </div>
-        <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint == 'dashboard.index' }}"><i class="fas fa-th-large"></i> Overview</a>
-        <a href="{{ url_for('analysis.index') }}" class="{{ 'active' if request.endpoint and 'analysis' in request.endpoint }}"><i class="fas fa-chart-pie"></i> Risk Analysis</a>
-        <a href="{{ url_for('tools.investigate') }}" class="{{ 'active' if request.endpoint == 'tools.investigate' }}"><i class="fas fa-search-location"></i> IP Investigation</a>
-        <a href="{{ url_for('tools.dns_deduplication') }}" class="{{ 'active' if request.endpoint == 'tools.dns_deduplication' }}"><i class="fas fa-project-diagram"></i> DNS Deduplication</a>
-        <a href="{{ url_for('system.index') }}" class="{{ 'active' if request.endpoint == 'system.index' }}"><i class="fas fa-cog"></i> System Settings</a>
-        
-        <div class="mt-auto p-4 border-top border-secondary">
+        <div class="sidebar-nav">
+            <a href="{{ url_for('dashboard.index') }}" class="nav-link {{ 'active' if request.endpoint == 'dashboard.index' }}"><i class="fas fa-th-large"></i> Overview</a>
+            <a href="{{ url_for('analysis.index') }}" class="nav-link {{ 'active' if request.endpoint and 'analysis' in request.endpoint }}"><i class="fas fa-chart-pie"></i> Risk Analysis</a>
+            <a href="{{ url_for('tools.investigate') }}" class="nav-link {{ 'active' if request.endpoint == 'tools.investigate' }}"><i class="fas fa-search-location"></i> IP Investigation</a>
+            <a href="{{ url_for('tools.dns_deduplication') }}" class="nav-link {{ 'active' if request.endpoint == 'tools.dns_deduplication' }}"><i class="fas fa-project-diagram"></i> DNS Dedup</a>
+            <a href="{{ url_for('system.index') }}" class="nav-link {{ 'active' if request.endpoint == 'system.index' }}"><i class="fas fa-cog"></i> System Settings</a>
+        </div>
+        <div class="sidebar-footer">
             <div class="d-flex align-items-center mb-3">
-                <div class="avatar-sm bg-primary rounded-circle me-2 d-flex align-items-center justify-content-center text-white font-monospace" style="width:32px; height:32px; font-size: 0.8rem;">
+                <div style="width:30px; height:30px; border-radius:6px; font-size:0.75rem;" class="bg-soft-cyan d-flex align-items-center justify-content-center font-mono fw-bold me-2">
                     {{ session.get('username', 'U')[0]|upper }}
                 </div>
                 <div class="small overflow-hidden">
-                    <div class="text-white fw-bold text-truncate" style="max-width: 150px;">{{ session.get('username') }}</div>
-                    <div class="text-muted text-truncate" style="font-size:0.7rem;">{{ session.get('profile_name', 'Analyst') }}</div>
+                    <div class="fw-bold text-truncate" style="color: var(--text-primary); max-width: 140px;">{{ session.get('username') }}</div>
+                    <div style="font-size:0.65rem; color: var(--text-muted);">{{ session.get('profile_name', 'Analyst') }}</div>
+                </div>
+                <!-- Notification Bell -->
+                <div class="notification-bell ms-auto" onclick="toggleNotifications()" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge-count" id="notifCount" style="display:none;">0</span>
                 </div>
             </div>
-            <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm w-100 py-2" style="border:none; text-align:left; padding-left:0;">
-                <i class="fas fa-sign-out-alt me-2"></i> Sign Out
-            </a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-signout btn-sm w-100 py-1">
+                    <i class="fas fa-sign-out-alt me-2"></i>Sign Out
+                </button>
+            </form>
+            <div class="text-center mt-2" style="font-size:0.6rem; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;">
+                <kbd>?</kbd> shortcuts
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Drawer -->
+    <div class="notification-drawer" id="notifDrawer">
+        <div class="notification-drawer-header">
+            <h6 class="mb-0 fw-bold" style="font-family: 'IBM Plex Mono', monospace;">Notifications</h6>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearNotifications()">Clear All</button>
+        </div>
+        <div class="notification-drawer-body" id="notifList">
+            <div class="p-4 text-center" style="color: var(--text-muted);">
+                <i class="fas fa-bell-slash fa-2x mb-2 opacity-25"></i>
+                <p class="small mb-0">No notifications yet.</p>
+            </div>
         </div>
     </div>
     {% endif %}
 
     <!-- Main Content -->
     <div class="main-container">
-        {% block content %}{% endblock %}
+        {% if request.endpoint != 'auth.login' %}
+        <!-- Severity Ribbon -->
+        <div class="severity-ribbon" id="severityRibbon">
+            <div class="ribbon-indicator">
+                <div class="ribbon-pulse" id="ribbonPulse" style="background: var(--accent-safe); color: var(--accent-safe);"></div>
+                <span id="ribbonStatus">NOMINAL</span>
+            </div>
+            <div class="ribbon-bar">
+                <div class="ribbon-bar-fill" id="ribbonBarFill" style="width: 30%; background: var(--accent-safe);"></div>
+            </div>
+            <div class="ribbon-stat"><strong id="ribbonTotal">0</strong> indicators</div>
+            <div class="ribbon-stat"><strong id="ribbonFeeds">0</strong> feeds</div>
+            <div class="ribbon-stat ms-auto" style="font-size:0.7rem;">
+                <i class="fas fa-clock me-1"></i>
+                <span id="ribbonLastUpdate">--</span>
+            </div>
+        </div>
+        <!-- Scan Line (Threat Pulse Anchor) -->
+        <div class="threat-pulse-line"></div>
+        {% endif %}
+
+        <div class="main-content-inner">
+            {% block content %}{% endblock %}
+            {% if request.endpoint != 'auth.login' %}
+            <div class="app-footer">
+                Threat Feed Aggregator v{{ config.get('VERSION', '1.20.0') }} &middot; Enterprise RBAC Edition
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcut Overlay -->
+    <div class="kbd-overlay" id="kbdOverlay" onclick="this.classList.remove('visible')">
+        <div class="kbd-overlay-content" onclick="event.stopPropagation()">
+            <h5 style="font-family: 'IBM Plex Mono', monospace; color: var(--accent-primary); margin-bottom: 1.25rem;">Keyboard Shortcuts</h5>
+            <div class="kbd-row"><span>Dashboard</span><span><kbd>G</kbd> then <kbd>D</kbd></span></div>
+            <div class="kbd-row"><span>Analysis</span><span><kbd>G</kbd> then <kbd>A</kbd></span></div>
+            <div class="kbd-row"><span>Investigation</span><span><kbd>G</kbd> then <kbd>I</kbd></span></div>
+            <div class="kbd-row"><span>DNS Dedup</span><span><kbd>G</kbd> then <kbd>N</kbd></span></div>
+            <div class="kbd-row"><span>System Settings</span><span><kbd>G</kbd> then <kbd>S</kbd></span></div>
+            <div class="kbd-row"><span>Run Aggregator</span><span><kbd>R</kbd></span></div>
+            <div class="kbd-row"><span>Focus Search</span><span><kbd>/</kbd></span></div>
+            <div class="kbd-row"><span>Show Shortcuts</span><span><kbd>?</kbd></span></div>
+            <div class="kbd-row"><span>Close</span><span><kbd>Esc</kbd></span></div>
+        </div>
     </div>
 
     <!-- Scripts -->
@@ -113,14 +150,13 @@
     <script src="{{ url_for('static', filename='vendor/js/dataTables.bootstrap5.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/js/sweetalert2.all.min.js') }}"></script>
     <script>
-        // Helper to submit forms dynamically with CSRF protection
+        // === Global: submitForm with CSRF ===
         function submitForm(action, data) {
             const form = document.createElement('form');
             form.method = 'POST';
             form.action = action;
             form.style.display = 'none';
 
-            // Add CSRF Token
             const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             if (csrfToken) {
                 const csrfInput = document.createElement('input');
@@ -128,11 +164,8 @@
                 csrfInput.name = 'csrf_token';
                 csrfInput.value = csrfToken;
                 form.appendChild(csrfInput);
-            } else {
-                console.error("CSRF Token not found in meta tag!");
             }
 
-            // Add Data Fields
             for (const key in data) {
                 if (data.hasOwnProperty(key)) {
                     const input = document.createElement('input');
@@ -147,7 +180,7 @@
             form.submit();
         }
 
-        // Common Flash Messages
+        // === Flash Messages ===
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
@@ -163,6 +196,195 @@
             {% endfor %}
           {% endif %}
         {% endwith %}
+
+        // === Notification Center ===
+        let notifications = [];
+
+        function addNotification(type, message) {
+            const notif = { id: Date.now(), type: type, message: message, time: new Date(), read: false };
+            notifications.unshift(notif);
+            if (notifications.length > 50) notifications.pop();
+            renderNotifications();
+        }
+
+        function renderNotifications() {
+            const list = document.getElementById('notifList');
+            const countEl = document.getElementById('notifCount');
+            if (!list || !countEl) return;
+
+            const unread = notifications.filter(function(n) { return !n.read; }).length;
+            countEl.textContent = unread;
+            countEl.style.display = unread > 0 ? 'flex' : 'none';
+
+            if (notifications.length === 0) {
+                list.textContent = '';
+                const empty = document.createElement('div');
+                empty.className = 'p-4 text-center';
+                empty.style.color = 'var(--text-muted)';
+                const icon = document.createElement('i');
+                icon.className = 'fas fa-bell-slash fa-2x mb-2 opacity-25';
+                const p = document.createElement('p');
+                p.className = 'small mb-0';
+                p.textContent = 'No notifications yet.';
+                empty.appendChild(icon);
+                empty.appendChild(p);
+                list.appendChild(empty);
+                return;
+            }
+
+            list.textContent = '';
+            notifications.forEach(function(n) {
+                var iconClass = n.type === 'error' ? 'fa-exclamation-circle' : n.type === 'warning' ? 'fa-exclamation-triangle' : n.type === 'success' ? 'fa-check-circle' : 'fa-info-circle';
+                var colorClass = n.type === 'error' ? 'text-danger' : n.type === 'warning' ? 'text-warning' : n.type === 'success' ? 'text-success' : 'text-info';
+                var ago = getTimeAgo(n.time);
+
+                var item = document.createElement('div');
+                item.className = 'notification-item' + (n.read ? '' : ' unread');
+                item.setAttribute('data-id', n.id);
+                item.onclick = function() { markRead(n.id); };
+
+                var row = document.createElement('div');
+                row.className = 'd-flex align-items-start gap-2';
+
+                var ic = document.createElement('i');
+                ic.className = 'fas ' + iconClass + ' ' + colorClass + ' mt-1';
+                ic.style.fontSize = '0.85rem';
+
+                var content = document.createElement('div');
+                content.className = 'flex-grow-1';
+
+                var msg = document.createElement('div');
+                msg.style.cssText = 'font-size:0.82rem; color: var(--text-primary);';
+                msg.textContent = n.message;
+
+                var time = document.createElement('div');
+                time.style.cssText = "font-size:0.65rem; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace;";
+                time.textContent = ago;
+
+                content.appendChild(msg);
+                content.appendChild(time);
+                row.appendChild(ic);
+                row.appendChild(content);
+                item.appendChild(row);
+                list.appendChild(item);
+            });
+        }
+
+        function markRead(id) {
+            var n = notifications.find(function(n) { return n.id === id; });
+            if (n) n.read = true;
+            renderNotifications();
+        }
+
+        function clearNotifications() {
+            notifications = [];
+            renderNotifications();
+        }
+
+        function toggleNotifications() {
+            var drawer = document.getElementById('notifDrawer');
+            if (drawer) drawer.classList.toggle('open');
+        }
+
+        function getTimeAgo(date) {
+            var diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        // Close notification drawer on outside click
+        document.addEventListener('click', function(e) {
+            var drawer = document.getElementById('notifDrawer');
+            var bell = document.querySelector('.notification-bell');
+            if (drawer && bell && drawer.classList.contains('open') && !drawer.contains(e.target) && !bell.contains(e.target)) {
+                drawer.classList.remove('open');
+            }
+        });
+
+        // === Keyboard Shortcuts ===
+        var gPressed = false;
+        var gTimeout = null;
+
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable) return;
+
+            var overlay = document.getElementById('kbdOverlay');
+
+            if (e.key === '?') {
+                e.preventDefault();
+                overlay.classList.toggle('visible');
+                return;
+            }
+
+            if (e.key === 'Escape') {
+                overlay.classList.remove('visible');
+                var drawer = document.getElementById('notifDrawer');
+                if (drawer) drawer.classList.remove('open');
+                return;
+            }
+
+            if (e.key === '/') {
+                var searchInput = document.querySelector('#ipInput, .dataTables_filter input, #internalInput');
+                if (searchInput) { e.preventDefault(); searchInput.focus(); }
+                return;
+            }
+
+            if ((e.key === 'r' || e.key === 'R') && !gPressed) {
+                if (typeof window.runAggregator === 'function') { e.preventDefault(); window.runAggregator(); }
+                return;
+            }
+
+            if (e.key === 'g' || e.key === 'G') {
+                gPressed = true;
+                clearTimeout(gTimeout);
+                gTimeout = setTimeout(function() { gPressed = false; }, 1000);
+                return;
+            }
+
+            if (gPressed) {
+                gPressed = false;
+                clearTimeout(gTimeout);
+                var routes = { 'd': '/', 'a': '/analysis', 'i': '/tools/investigate', 'n': '/tools/dns_deduplication', 's': '/system' };
+                var target = routes[e.key.toLowerCase()];
+                if (target) { e.preventDefault(); window.location.href = target; }
+            }
+        });
+
+        // === Severity Ribbon Global Updater ===
+        function updateSeverityRibbon(total, feeds, degradedFeeds) {
+            var ribbonTotal = document.getElementById('ribbonTotal');
+            var ribbonFeeds = document.getElementById('ribbonFeeds');
+            var ribbonStatus = document.getElementById('ribbonStatus');
+            var ribbonPulse = document.getElementById('ribbonPulse');
+            var ribbonBarFill = document.getElementById('ribbonBarFill');
+            var ribbonLastUpdate = document.getElementById('ribbonLastUpdate');
+
+            if (ribbonTotal) ribbonTotal.textContent = total || 0;
+            if (ribbonFeeds) ribbonFeeds.textContent = feeds || 0;
+
+            var now = new Date();
+            if (ribbonLastUpdate) ribbonLastUpdate.textContent = now.toLocaleTimeString();
+
+            var pct = feeds > 0 ? Math.round(((feeds - (degradedFeeds || 0)) / feeds) * 100) : 0;
+            var color, status;
+
+            if (degradedFeeds >= 3) {
+                color = 'var(--accent-danger)'; status = 'CRITICAL';
+            } else if (degradedFeeds >= 1) {
+                color = 'var(--accent-warn)'; status = 'DEGRADED';
+            } else {
+                color = 'var(--accent-safe)'; status = 'NOMINAL';
+            }
+
+            if (ribbonBarFill) { ribbonBarFill.style.width = pct + '%'; ribbonBarFill.style.background = color; }
+            if (ribbonPulse) { ribbonPulse.style.background = color; ribbonPulse.style.color = color; }
+            if (ribbonStatus) { ribbonStatus.textContent = status; ribbonStatus.style.color = color; }
+        }
+
+        window.addNotification = addNotification;
+        window.updateSeverityRibbon = updateSeverityRibbon;
     </script>
     <script src="{{ url_for('static', filename='js/source_manager.js') }}"></script>
     {% block extra_scripts %}{% endblock %}
