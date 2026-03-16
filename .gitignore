@@ -52,8 +52,7 @@ stats.json
 # Local Data & Config (Runtime artifacts)
 data/
 temp_restore/
-threat-feed-aggregator/threat_feed_aggregator/data/config.json
-threat-feed-aggregator/threat_feed_aggregator/data/*.txt
+threat-feed-aggregator/threat_feed_aggregator/data/
 threat-feed-aggregator/threat_feed_aggregator/certs/*.pem
 threat-feed-aggregator/data/config.json
 threat-feed-aggregator/data/*.txt
