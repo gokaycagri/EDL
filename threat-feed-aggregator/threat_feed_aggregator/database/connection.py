@@ -73,8 +73,10 @@ class PostgresCursorWrapper:
                 query_pg += " ON CONFLICT DO NOTHING"
 
         # 3. For INSERT statements without RETURNING, append RETURNING id to populate lastrowid
+        #    Skip for ON CONFLICT (upserts) — target table may not have an 'id' column.
         is_insert = query_pg.strip().upper().startswith('INSERT')
-        needs_returning = is_insert and 'RETURNING' not in query_pg.upper()
+        has_conflict = 'ON CONFLICT' in query_pg.upper()
+        needs_returning = is_insert and 'RETURNING' not in query_pg.upper() and not has_conflict
         if needs_returning:
             query_pg += " RETURNING id"
 
