@@ -30,17 +30,17 @@ try:
 except ImportError:
     HAS_LIMITER = False
     logger.warning("flask_limiter not found. Rate limiting is disabled.")
-    
+
     # Dummy Limiter class to prevent AttributeError
     class Limiter:
         def __init__(self, *args, **kwargs): pass
         def init_app(self, app): pass
         def limit(self, *args, **kwargs):
             return lambda f: f
-    
+
     def get_remote_address(): return "127.0.0.1"
 
-from flask import Flask, request, jsonify
+from flask import Flask
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 

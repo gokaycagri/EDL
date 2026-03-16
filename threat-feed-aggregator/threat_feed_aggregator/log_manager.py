@@ -5,6 +5,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 import pytz
+
 try:
     import structlog
     HAS_STRUCTLOG = True
@@ -134,7 +135,7 @@ def _configure_structlog():
     """Configure structlog to work with stdlib logging."""
     if not HAS_STRUCTLOG:
         return
-        
+
     is_production = os.environ.get("FLASK_ENV") == "production"
 
     shared_processors = [
