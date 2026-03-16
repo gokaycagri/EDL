@@ -100,6 +100,51 @@ Jinja2 templates in `templates/`, static assets in `static/`. Uses Bootstrap/Sof
 - Use `asyncio.get_running_loop()` (not `get_event_loop()`) inside coroutines
 - Use `aiohttp.ClientTimeout(total=N)` (not raw integer) for aiohttp timeouts
 
+## ITAI Hub Integration
+
+This application integrates with the ITAI Hub as a module. Integration is conditional — controlled by `ITAI_MODE=true` env var.
+
+### SSO Flow (middleware/itai.py)
+1. ITAI Core generates HS256 JWT with `exp`, `preferred_username`, `permissions`
+2. Hub iframe sends `POST /auth/sso` with `Authorization: Bearer <jwt>`
+3. EDL verifies signature via `hmac.compare_digest()` + checks `exp` claim
+4. Creates Flask session with user info and permissions
+5. Cookie: `SameSite=None; Secure` (required for iframe embedding)
+
+### Trace ID Propagation
+- `X-ITAI-Trace-ID` header extracted in `before_request`, stored in `trace_id_var` (contextvar)
+- Injected in `after_request` response header for end-to-end tracing
+- Always include trace_id in log metadata when available
+
+### ITAI Adapter Contract
+An adapter in the ITAI repo (`modules/external/EDL/adapter.py`) proxies 28 tools to this Flask backend. When adding/modifying API endpoints:
+- Update ITAI adapter's `manifest.json` if adding new tools
+- Run contract tests to verify compatibility:
+  ```bash
+  python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v
+  ```
+- The adapter maps ITAI tool calls to these endpoint patterns:
+  - `GET /api/*` — status, stats, history, scheduled jobs
+  - `POST /api/*` — aggregation triggers, indicator CRUD, cloud feeds
+  - `POST /tools/api/*` — investigation tools (lookup, DNS dedup)
+  - `GET /analysis/*` — filtering and analytics
+
+### Environment Variables (ITAI-specific)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ITAI_MODE` | `false` | Enable ITAI Hub SSO and trace ID middleware |
+| `ITAI_JWT_SECRET` | — | HS256 secret for SSO token validation |
+
+### Key Rules for ITAI Compatibility
+- API endpoints must return JSON (not HTML redirects) for machine-to-machine calls
+- State-changing operations must be POST (adapter uses GET/POST mapping)
+- API key auth endpoints must NOT require CSRF tokens
+- Response envelope `{status: "success", data: {...}}` is expected by the adapter's `_unwrap()` helper
+- New endpoints should follow existing URL patterns (`/api/` for data, `/tools/api/` for investigation)
+
+**Full endpoint-to-tool mapping:** See [docs/itai-adapter-contract.md](docs/itai-adapter-contract.md)
+
 ## Branching
 
 - Main branch: `master`
+- ITAI integration branch: `feature/itai-integration`

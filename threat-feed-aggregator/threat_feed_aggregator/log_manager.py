@@ -17,8 +17,13 @@ class TimezoneFormatter(logging.Formatter):
     """
     Custom formatter that handles timezone conversion.
     """
+    _reading_config = False  # guard against read_config → log → formatTime recursion
+
     def formatTime(self, record, datefmt=None):
+        if TimezoneFormatter._reading_config:
+            return super().formatTime(record, datefmt)
         try:
+            TimezoneFormatter._reading_config = True
             from .config_manager import read_config
             config = read_config()
             tz_name = config.get('timezone', 'UTC')
@@ -32,6 +37,8 @@ class TimezoneFormatter(logging.Formatter):
             return local_dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
         except Exception:
             return super().formatTime(record, datefmt)
+        finally:
+            TimezoneFormatter._reading_config = False
 
 class MemoryLogHandler(logging.Handler):
     """

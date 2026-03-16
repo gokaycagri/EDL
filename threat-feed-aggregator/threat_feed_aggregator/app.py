@@ -20,7 +20,7 @@ from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
 
 from .config_manager import DATA_DIR
-from .db_manager import init_db
+from .database.schema import init_db
 from .log_manager import setup_memory_logging
 from .response_helpers import api_response
 from .version import __version__
@@ -59,7 +59,7 @@ else:
 session_timeout = int(os.environ.get('SESSION_TIMEOUT_MINUTES', 60))
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = session_timeout * 60
-app.config['SESSION_USE_SIGNER'] = False
+app.config['SESSION_USE_SIGNER'] = True
 
 Session(app)
 csrf.init_app(app)
@@ -162,8 +162,8 @@ def inject_version():
 LOCK_FILE = os.path.join(DATA_DIR, 'scheduler.lock')
 
 def init_scheduler_safe():
-    import fcntl
     try:
+        import fcntl
         f = open(LOCK_FILE, 'w')
         fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         from .scheduler_manager import init_scheduler

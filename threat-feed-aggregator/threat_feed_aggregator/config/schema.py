@@ -40,11 +40,15 @@ class SourceConfig(BaseModel):
 
 
 class ProxyConfig(BaseModel):
+    model_config = {"extra": "allow"}
+
     enabled: bool = False
-    server: str = ""
-    port: int = 0
+    server: str | None = None
+    port: int | None = None
     auth_user: str | None = None
     auth_pass: str | None = None
+    username: str | None = None
+    password: str | None = None
 
 
 class DnsDedupSchedule(BaseModel):

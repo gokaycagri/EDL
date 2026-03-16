@@ -86,7 +86,8 @@ function flashStatValue(elementId, newValue) {
 function updateSourceStats() {
     fetch('/api/source_stats')
         .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = resp.data || resp;
             var sources = data.sources || {};
             var totals = data.totals || {};
             var countryStats = data.country_stats || [];
@@ -191,7 +192,8 @@ function updateHistory() {
             if (!r.ok) throw new Error('History fetch failed: ' + r.status);
             return r.json();
         })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
             var tbody = document.getElementById('historyTableBody');
             if (!tbody) return;
 
@@ -252,7 +254,8 @@ function updateHistory() {
 function viewAllHistory() {
     fetch('/api/history?limit=100')
         .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
             var tbody = document.getElementById('fullHistoryTableBody');
             if (!tbody) return;
 
@@ -306,7 +309,8 @@ function updateLogs() {
             if (!r.ok) throw new Error('Logs fetch failed: ' + r.status);
             return r.json();
         })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
             var logWindow = document.getElementById('logWindow');
             if (!logWindow) return;
             var wasAtBottom = logWindow.scrollHeight - logWindow.clientHeight <= logWindow.scrollTop + 50;
@@ -594,17 +598,18 @@ function testSource(name) {
         body: JSON.stringify(source)
     })
     .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.status === 'success') {
+    .then(function(resp) {
+        if (resp.status === 'success') {
+            var sample = (resp.data && resp.data.sample) ? resp.data.sample : [];
             Swal.fire({
                 title: 'Test OK!',
-                html: '<div class="text-start text-success fw-bold">' + data.message + '</div><hr><small>Sample:</small><ul class="small"><li>' + data.sample.join('</li><li>') + '</li></ul>',
+                html: '<div class="text-start text-success fw-bold">' + resp.message + '</div><hr><small>Sample:</small><ul class="small"><li>' + sample.join('</li><li>') + '</li></ul>',
                 icon: 'success'
             });
             updateHistory();
             updateSourceStats();
         } else {
-            Swal.fire('Failed', data.message, 'error');
+            Swal.fire('Failed', resp.message, 'error');
         }
     });
 }
@@ -697,7 +702,8 @@ function initMap() {
 function updateScheduledJobs() {
     fetch('/api/scheduled_jobs')
         .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
             var tbody = document.getElementById('scheduledJobsTableBody');
             if (!tbody) return;
 
@@ -743,7 +749,8 @@ function updateScheduledJobs() {
 function viewAllSchedules() {
     fetch('/api/scheduled_jobs')
         .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function(resp) {
+            var data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
             var tbody = document.getElementById('allSchedulesTableBody');
             if (!tbody) return;
 

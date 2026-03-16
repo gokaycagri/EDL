@@ -452,7 +452,7 @@ def add_source():
         config["source_urls"].append(new_source)
         write_config(config)
 
-        from ..app import update_scheduled_jobs
+        from ..scheduler_manager import update_scheduled_jobs
         update_scheduled_jobs()
 
     return redirect(url_for('dashboard.index'))
@@ -494,7 +494,7 @@ def update_source(index):
             config["source_urls"][index] = updated_source
             write_config(config)
 
-            from ..app import update_scheduled_jobs
+            from ..scheduler_manager import update_scheduled_jobs
             update_scheduled_jobs()
 
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
@@ -511,7 +511,7 @@ def remove_source(index):
         config["source_urls"].pop(index)
         write_config(config)
 
-        from ..app import update_scheduled_jobs
+        from ..scheduler_manager import update_scheduled_jobs
         update_scheduled_jobs()
 
     return redirect(url_for('dashboard.index'))

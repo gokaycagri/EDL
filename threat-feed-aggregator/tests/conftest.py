@@ -2,6 +2,24 @@ import os
 import sys
 import tempfile
 
+# Skip scheduler initialization during tests (must be set before app import)
+os.environ["GUNICORN_WORKER"] = "1"
+os.environ.setdefault("DB_TYPE", "sqlite")
+
+# Mock the scheduler module before app import to avoid SQLAlchemy jobstore blocking
+from unittest.mock import MagicMock
+
+_mock_scheduler = MagicMock()
+_mock_scheduler.running = False
+_mock_scheduler.get_jobs.return_value = []
+
+_mock_sched_module = MagicMock(
+    scheduler=_mock_scheduler,
+    update_scheduled_jobs=MagicMock(),
+    init_scheduler=MagicMock(),
+)
+sys.modules["threat_feed_aggregator.scheduler_manager"] = _mock_sched_module
+
 import pytest
 
 # Compatibility Shim
