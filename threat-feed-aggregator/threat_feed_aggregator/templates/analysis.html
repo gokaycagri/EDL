@@ -82,11 +82,9 @@
 
 {% block content %}
 <div class="container-fluid px-0">
-    <div class="row align-items-center mb-4">
-        <div class="col-md-6">
-            <h3 class="fw-bold mb-1" style="color: var(--text-primary);">Threat Analysis Center</h3>
-            <p class="small" style="color: var(--text-secondary);">Deep dive into aggregated threat indicators, risk scores, and attribution.</p>
-        </div>
+    <div class="mb-3">
+        <h3 class="fw-bold mb-1" style="color: var(--text-primary);">Threat Analysis Center</h3>
+        <p class="small mb-0" style="color: var(--text-secondary);">Deep dive into aggregated threat indicators, risk scores, and attribution.</p>
     </div>
 
     <!-- Filter Bar -->
@@ -122,7 +120,16 @@
             </div>
 
             <!-- Clear All -->
-            <button class="btn btn-link text-decoration-none btn-sm ms-auto" style="font-size: 0.8rem; color: var(--text-muted);" onclick="clearAllFilters()">Clear All</button>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-export btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown"><i class="fas fa-download me-1"></i>Export</button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item small" href="/api/export?format=csv"><i class="fas fa-file-csv me-2 text-success"></i>CSV</a></li>
+                        <li><a class="dropdown-item small" href="/api/export?format=json"><i class="fas fa-file-code me-2 text-info"></i>JSON</a></li>
+                    </ul>
+                </div>
+                <button class="btn btn-link text-decoration-none btn-sm" style="font-size: 0.8rem; color: var(--text-muted);" onclick="clearAllFilters()">Clear All</button>
+            </div>
         </div>
     </div>
 
@@ -188,7 +195,7 @@
                     if(data === 'ip' || data === 'cidr') color = 'info'; else if(data === 'domain') color = 'warning'; else if(data === 'url') color = 'primary';
                     return `<span class="badge bg-soft-${color} text-${color} text-uppercase" style="font-size:0.65rem;">${data}</span>`;
                 }},
-                { data: 'country', render: function(data) { return data ? `<span class="badge" style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);">${data}</span>` : '-'; }},
+                { data: 'country', render: function(data) { return data ? `<span class="badge" style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);">${data}</span>` : '<span class="text-muted" style="font-size:0.75rem;"><i class="fas fa-globe me-1"></i>Unknown</span>'; }},
                 { data: 'risk_score', render: function(data) {
                     let color = 'success';
                     if(data >= 90) color = 'danger'; else if(data >= 70) color = 'warning'; else if(data >= 40) color = 'primary';
@@ -210,6 +217,12 @@
                 { data: 'last_seen', render: function(data) { return data ? data.replace('T', ' ').substring(0, 16) : '-'; }}
             ],
             order: [[3, 'desc']],
+            createdRow: function(row, data) {
+                if (data.risk_score >= 90) row.classList.add('risk-critical');
+                else if (data.risk_score >= 70) row.classList.add('risk-high');
+                else if (data.risk_score >= 40) row.classList.add('risk-medium');
+                else row.classList.add('risk-low');
+            },
             language: { search: "", searchPlaceholder: "Global search..." },
             lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
             pagingType: "full_numbers",
@@ -228,9 +241,10 @@
 
             fetch(`{{ url_for('analysis.filter_options') }}?column=${col}&q=${encodeURIComponent(query)}`)
                 .then(r => r.json())
-                .then(data => {
+                .then(resp => {
+                    const items = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
                     dataList.empty();
-                    data.forEach(item => {
+                    items.forEach(item => {
                         const option = document.createElement('option');
                         option.value = item;
                         dataList.append(option);

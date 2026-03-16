@@ -120,6 +120,8 @@ def get_firewall_edl(filename):
         return response
 
     response = make_response(send_from_directory(DATA_DIR, safe_filename, mimetype='text/plain'))
+    # Display inline in browser (not download) — firewalls read body regardless
+    response.headers['Content-Disposition'] = 'inline'
     # Disable caching to ensure firewalls get fresh data
     response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     response.headers['Pragma'] = 'no-cache'
@@ -155,7 +157,9 @@ def get_saved_custom_edl(token):
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        return send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype)
+        resp.headers['Content-Disposition'] = 'inline'
+        return resp
 
     # 2. Regenerate Cache (Streaming)
     include_sources = list_config['sources']
@@ -215,7 +219,9 @@ def get_saved_custom_edl(token):
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        return send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype)
+        resp.headers['Content-Disposition'] = 'inline'
+        return resp
 
     except Exception as e:
         logger.error(f"Error generating Custom EDL {token}: {e}")

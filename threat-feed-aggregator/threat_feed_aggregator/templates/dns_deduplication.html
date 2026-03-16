@@ -3,18 +3,57 @@
 {% block title %}DNS Deduplication{% endblock %}
 
 {% block content %}
-<div class="row g-4">
-    <!-- Header / Info Section -->
+<div class="row g-3">
+    <!-- Header -->
     <div class="col-12">
-        <div class="card border-0" style="background: var(--accent-primary);">
-            <div class="card-body p-4 d-flex align-items-center justify-content-between">
-                <div>
-                    <h3 class="fw-bold mb-1" style="color: var(--text-inverse);"><i class="fas fa-project-diagram me-3"></i>DNS Deduplication Manager</h3>
-                    <p class="mb-0" style="color: var(--text-inverse); opacity: 0.75;">Optimizes your threat feed by resolving domains to IPs and removing duplicates found in your existing blocklists.</p>
+        <div class="d-flex align-items-center justify-content-between mb-0">
+            <div>
+                <h3 class="fw-bold mb-1">DNS Deduplication Manager</h3>
+                <p class="text-muted small mb-0">Optimizes your threat feed by resolving domains to IPs and removing duplicates found in your existing blocklists.</p>
+            </div>
+            <div class="d-none d-md-flex align-items-center gap-3">
+                <div class="text-center">
+                    <div class="stat-card-value" style="font-size:1.5rem; color: var(--accent-primary);" id="dupCountHeader">0</div>
+                    <div class="stat-card-title">Duplicates (Session)</div>
                 </div>
-                <div class="d-none d-md-block text-center px-4">
-                    <h2 class="fw-bold mb-0" id="dupCountHeader" style="color: var(--text-inverse);">0</h2>
-                    <small style="color: var(--text-inverse); opacity: 0.75;">Duplicates Found (Session)</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="col-12">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card stat-card p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-soft-info"><i class="fas fa-search"></i></div>
+                        <div class="ms-3">
+                            <div class="stat-card-title">Total Scanned</div>
+                            <div class="stat-card-value" style="font-size:1.5rem;" id="statScanned">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-soft-warning"><i class="fas fa-copy"></i></div>
+                        <div class="ms-3">
+                            <div class="stat-card-title">Duplicates Removed</div>
+                            <div class="stat-card-value" style="font-size:1.5rem;" id="statRemoved">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stat-card p-3">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-soft-success"><i class="fas fa-clock"></i></div>
+                        <div class="ms-3">
+                            <div class="stat-card-title">Last Run</div>
+                            <div class="stat-card-value" style="font-size:1rem;" id="statLastRun">Never</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -105,14 +144,14 @@
 
                 <div id="scheduleLogWindow" class="log-window p-3"
                      style="height: 400px; overflow-y: auto; font-size: 0.85rem; border-radius: 0 0 0.5rem 0.5rem;">
-                    <div class="text-muted opacity-50">System ready. Waiting for logs...</div>
+                    <div class="text-muted" style="opacity: 0.7;">System ready. Waiting for logs...</div>
                 </div>
             </div>
         </div>
 
         <!-- Hidden Results Container for Manual Run -->
         <div id="resultsContainer" class="card border-0 mb-4" style="display: none;">
-            <div class="card-header py-3 border-0">
+            <div class="card-header py-2 border-0">
                  <h5 class="fw-bold mb-0">Manual Analysis Results</h5>
             </div>
             <div class="card-body p-0">
@@ -160,7 +199,8 @@
             }
         })
         .then(r => r.json())
-        .then(data => {
+        .then(resp => {
+            var data = resp.data || resp;
             document.getElementById('loading').style.display = 'none';
             document.getElementById('analyzeBtn').disabled = false;
 
@@ -192,7 +232,8 @@
     function updateDedupLogs() {
         fetch('/api/live_logs')
             .then(r => r.json())
-            .then(data => {
+            .then(resp => {
+                const data = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
                 const logWindow = document.getElementById('scheduleLogWindow');
                 if (!logWindow) return;
 
@@ -337,7 +378,8 @@
             headers: {'X-CSRFToken': "{{ csrf_token() }}"}
         })
         .then(r => r.json())
-        .then(data => {
+        .then(resp => {
+            var data = resp.data || resp;
             if (data.success) {
                 Swal.fire({
                     icon: 'success',

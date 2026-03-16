@@ -20,7 +20,7 @@
 {% set sys_perm = perms.get('system', 'rw') %}
 
 <div class="container-fluid px-0">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h3 class="fw-bold mb-0">System Configuration</h3>
         {% if sys_perm == 'r' %}
             <span class="badge bg-warning px-3"><i class="fas fa-eye me-1"></i> Read-Only Mode</span>
@@ -28,7 +28,7 @@
     </div>
 
     <!-- Navigation Tabs -->
-    <ul class="nav nav-tabs nav-tabs-custom mb-4" id="settingsTabs" role="tablist">
+    <ul class="nav nav-tabs nav-tabs-custom mb-3 flex-nowrap overflow-auto" id="settingsTabs" role="tablist">
         <li class="nav-item">
             <a class="nav-link active" id="general-tab" data-bs-toggle="tab" href="#general" role="tab"><i class="fas fa-sliders-h me-2"></i>General</a>
         </li>
@@ -365,7 +365,7 @@
                                     <input class="form-check-input" type="checkbox" id="proxyEnabled" name="proxy_enabled" {% if config.get('proxy', {}).get('enabled') %}checked{% endif %} onchange="toggleProxyFields()">
                                     <label class="form-check-label fw-bold" for="proxyEnabled">Enable System Proxy</label>
                                 </div>
-                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %}" class="p-3 rounded-3 mb-3 border" style="background: var(--surface-2);"
+                                <div id="proxyFields" style="{% if not config.get('proxy', {}).get('enabled') %}display:none;{% endif %} background: var(--surface-2);" class="p-3 rounded-3 mb-3 border">
                                     <div class="row g-2 mb-3"><div class="col-md-8"><label class="form-label-custom">Server Address</label><input type="text" class="form-control form-control-sm" name="proxy_server" value="{{ config.get('proxy', {}).get('server', '') }}" placeholder="proxy.example.com"></div><div class="col-md-4"><label class="form-label-custom">Port</label><input type="number" class="form-control form-control-sm" name="proxy_port" value="{{ config.get('proxy', {}).get('port', '') }}" placeholder="8080"></div></div>
                                     <div class="row g-2"><div class="col-md-6"><label class="form-label-custom">Auth Username</label><input type="text" class="form-control form-control-sm" name="proxy_username" value="{{ config.get('proxy', {}).get('username', '') }}"></div><div class="col-md-6"><label class="form-label-custom">Auth Password</label><input type="password" class="form-control form-control-sm" name="proxy_password" value="{{ config.get('proxy', {}).get('password', '') }}"></div></div>
                                 </div>
@@ -464,11 +464,11 @@
 
         <!-- Tab: Integrations -->
         <div class="tab-pane fade" id="integrations" role="tabpanel">
-            <div class="row g-4 mb-5">
+            <div class="row gx-4 gy-3">
                 <!-- FortiDeceptor Integration Card -->
                 <div class="col-lg-8">
                     <div class="card border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
-                        <div class="card-header bg-dark text-white p-4 border-0">
+                        <div class="card-header bg-dark text-white px-4 py-3 border-0">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
                                     <h4 class="fw-bold mb-1"><i class="fas fa-robot me-2 text-danger"></i> FortiDeceptor</h4>
@@ -477,7 +477,7 @@
                                 <span class="badge bg-soft-info text-info border border-info px-3 py-2">Standard Integration</span>
                             </div>
                         </div>
-                        <div class="card-body p-4" style="background: var(--surface-2);"
+                        <div class="card-body p-4" style="background: var(--surface-2);">
                             <!-- Step-by-Step Guide -->
                             <div class="row g-3 mb-4">
                                 <div class="col-md-4">
@@ -611,16 +611,19 @@
         </div>
     </div>
 </div>
-        </div>
-    </div>
-</div>
 
-<footer class="mt-5 text-center text-muted small pb-4"><p>Threat Feed Aggregator v{{ version }} &bull; Enterprise RBAC Edition</p></footer>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Fix: ensure all tab-panes are inside tab-content (browser parser workaround)
+        var tc = document.getElementById('settingsTabsContent');
+        ['security', 'integrations'].forEach(function(id) {
+            var pane = document.getElementById(id);
+            if (pane && pane.parentElement !== tc) { tc.appendChild(pane); }
+        });
+
         checkLdapServerStatus(); checkDnsStatus(); checkProxyStatus();
         
         // Auto-open edit modal if parameter exists

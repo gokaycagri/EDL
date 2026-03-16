@@ -10,23 +10,23 @@
 
 {% block content %}
     <!-- Header -->
-    <div class="row align-items-center mb-4">
-        <div class="col-md-6">
+    <div class="row align-items-center mb-3">
+        <div class="col">
             <h3 class="fw-bold mb-1">Operational Overview</h3>
-            <p class="text-muted small">Comprehensive dashboard for threat feed management.</p>
+            <p class="text-muted small mb-0">Comprehensive dashboard for threat feed management.</p>
         </div>
-        <div class="col-md-6 text-md-end">
-            <button class="btn btn-primary px-4 py-2" onclick="runAggregator()">
-                <i class="fas fa-sync-alt me-2"></i> Run Aggregator Now
+        <div class="col-auto">
+            <button class="btn btn-primary px-3 py-2" onclick="runAggregator()">
+                <i class="fas fa-sync-alt me-2"></i><span class="d-none d-sm-inline">Run Aggregator Now</span><span class="d-sm-none">Run</span>
             </button>
         </div>
     </div>
 
     <!-- Quick Stats — Asymmetric Layout -->
-    <div class="row g-4 mb-4">
+    <div class="row g-3 mb-3">
         <!-- Hero Card: Total Indicators -->
-        <div class="col-md-5 stat-card-animate">
-            <div class="card stat-card stat-card-hero p-4 h-100">
+        <div class="col-lg-5 col-md-12 stat-card-animate">
+            <div class="card stat-card stat-card-hero p-3 h-100">
                 <div class="d-flex align-items-center">
                     <div class="stat-icon bg-soft-cyan">
                         <i class="fas fa-list-ul"></i>
@@ -39,9 +39,9 @@
             </div>
         </div>
         <!-- Secondary Stats -->
-        <div class="col-md-7">
-            <div class="row g-4">
-                <div class="col-md-4 stat-card-animate">
+        <div class="col-lg-7 col-md-12">
+            <div class="row g-3">
+                <div class="col-md-4 col-sm-4 col-4 stat-card-animate">
                     <div class="card stat-card p-3 h-100">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon bg-soft-info"><i class="fas fa-network-wired"></i></div>
@@ -52,7 +52,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 stat-card-animate">
+                <div class="col-md-4 col-sm-4 col-4 stat-card-animate">
                     <div class="card stat-card p-3 h-100">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon bg-soft-warning"><i class="fas fa-globe"></i></div>
@@ -63,7 +63,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-4 stat-card-animate">
+                <div class="col-md-4 col-sm-4 col-4 stat-card-animate">
                     <div class="card stat-card p-3 h-100">
                         <div class="d-flex align-items-center">
                             <div class="stat-icon bg-soft-success"><i class="fas fa-rss"></i></div>
@@ -78,11 +78,11 @@
         </div>
     </div>
 
-    <div class="row g-4 mb-4">
+    <div class="row g-3 mb-3">
         <!-- Active Sources Management -->
-        <div class="col-md-8">
+        <div class="col-lg-8 col-md-12">
             <div class="card settings-card h-100 border-0">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-rss-square me-2 text-primary"></i>Active Threat Feed Sources</h6>
                     <button class="btn btn-sm btn-primary px-3" onclick="showAddSourceModal()"><i class="fas fa-plus me-1"></i> Add Source</button>
                 </div>
@@ -114,15 +114,10 @@
         </div>
 
                     <!-- Side Tools -->
-
-                    <div class="col-md-4">
-
-                        <div class="card settings-card mb-4 border-0">
-
-                            <div class="card-header py-3 border-0"><h6 class="fw-bold mb-0"><i class="fas fa-file-export me-2 text-warning"></i>Output Lists (EDL)</h6></div>
-
+                    <div class="col-lg-4 col-md-12">
+                        <div class="card settings-card mb-3 border-0">
+                            <div class="card-header py-2 border-0"><h6 class="fw-bold mb-0"><i class="fas fa-file-export me-2 text-warning"></i>Output Lists (EDL)</h6></div>
                             <div class="card-body pt-0">
-
                                 <div class="mb-3">
                                     <label class="small text-muted mb-1 fw-bold">Palo Alto Networks</label>
                                     <div class="row g-1 mb-2">
@@ -194,7 +189,7 @@
                                             {% endfor %}
                                         </div>
                                     {% else %}
-                                        <p class="text-center text-muted small my-3">No custom lists saved.</p>
+                                        <div class="empty-state py-3"><i class="fas fa-list-alt empty-state-icon"></i><div class="empty-state-text">No custom lists saved</div></div>
                                     {% endif %}
                                 </div>
 
@@ -300,7 +295,7 @@
             </div>
 
             <div class="card settings-card border-0 border-start border-4 border-success">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-shield-alt me-2 text-success"></i>Safe List</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-success" onclick="showImportWhitelistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
@@ -310,13 +305,13 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 180px;"><table class="table table-sm mb-0 align-middle">
-                        <tbody class="small">{% if whitelist %}{% for item in whitelist[:5] %}<tr><td class="ps-3 py-2"><code class="text-success">{{ item.item }}</code></td><td class="text-end pe-3"><button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button><a href="{{ url_for('system.remove_whitelist', item_id=item.id) }}" class="text-danger" onclick="return confirm('Remove?')"><i class="fas fa-times-circle"></i></a></td></tr>{% endfor %}{% else %}<tr><td class="text-center py-3 text-muted">Empty.</td></tr>{% endif %}</tbody>
+                        <tbody class="small">{% if whitelist %}{% for item in whitelist[:5] %}<tr><td class="ps-3 py-2"><code class="text-success">{{ item.item }}</code></td><td class="text-end pe-3"><button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button><form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0"><i class="fas fa-times-circle"></i></button></form></td></tr>{% endfor %}{% else %}<tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-shield-alt empty-state-icon text-success"></i><div class="empty-state-text">No safe list entries yet</div><button class="btn btn-xs btn-outline-success empty-state-cta" onclick="showAddWhitelistModal()"><i class="fas fa-plus me-1"></i>Add First Entry</button></div></td></tr>{% endif %}</tbody>
                     </table></div>
                 </div>
             </div>
 
-            <div class="card settings-card border-0 border-start border-4 border-danger mt-4">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+            <div class="card settings-card border-0 border-start border-4 border-danger">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-ban me-2 text-danger"></i>Block List</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-danger" onclick="showImportBlacklistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
@@ -354,7 +349,7 @@
                                 </tr>
                                 {% endfor %}
                             {% else %}
-                                <tr><td class="text-center py-3 text-muted">Empty.</td></tr>
+                                <tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-ban empty-state-icon text-danger"></i><div class="empty-state-text">No blocked indicators</div><button class="btn btn-xs btn-outline-danger empty-state-cta" onclick="showAddBlacklistModal()"><i class="fas fa-plus me-1"></i>Block an Indicator</button></div></td></tr>
                             {% endif %}
                         </tbody>
                     </table></div>
@@ -454,10 +449,10 @@
 
 
     <!-- Task Activity & Schedules -->
-    <div class="row g-4 mb-4">
+    <div class="row g-3 mb-3">
         <div class="col-md-6">
             <div class="card settings-card h-100 border-0">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-history me-2 text-secondary"></i>Recent Task Activity</h6>
                     <div class="d-flex gap-2">
                         <button class="btn btn-xs btn-outline-primary" onclick="viewAllHistory()">View All</button>
@@ -474,7 +469,7 @@
         </div>
         <div class="col-md-6">
             <div class="card settings-card h-100 border-0">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-calendar-alt me-2 text-info"></i>Scheduled Runs</h6>
                     <button class="btn btn-xs btn-outline-primary" onclick="viewAllSchedules()">View All</button>
                 </div>
@@ -554,17 +549,17 @@
     </div>
 
     <!-- Map & Terminal -->
-    <div class="row g-4 mb-4">
+    <div class="row g-3 mb-3">
         <!-- Map: Full-width without card wrapper -->
-        <div class="col-md-12">
-            <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center" style="background: var(--surface-1); border-radius: var(--card-radius) var(--card-radius) 0 0; border: 1px solid var(--border-color); border-bottom: none;">
+        <div class="col-12">
+            <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center" style="background: var(--surface-1); border-radius: var(--card-radius) var(--card-radius) 0 0; border: 1px solid var(--border-color); border-bottom: none;">
                 <h6 class="fw-bold mb-0"><i class="fas fa-globe-americas me-2 text-primary"></i>Global Threat Distribution</h6>
             </div>
             <div class="row g-0" style="border: 1px solid var(--border-color); border-radius: 0 0 var(--card-radius) var(--card-radius); overflow: hidden;">
-                <div class="col-md-9">
-                    <div id="world-map" style="height: 400px; width: 100%;"></div>
+                <div class="col-lg-9 col-md-8">
+                    <div id="world-map" style="height: 380px; width: 100%;"></div>
                 </div>
-                <div class="col-md-3" style="background: var(--surface-1); border-left: 1px solid var(--border-color); padding: 1rem;">
+                <div class="col-lg-3 col-md-4" style="background: var(--surface-1); border-left: 1px solid var(--border-color); padding: 0.75rem;">
                     <table class="table table-sm border-0"><thead class="border-0"><tr class="small text-muted border-0"><th class="border-0">Country</th><th class="text-end border-0">Count</th></tr></thead>
                     <tbody id="countryStatsTableBody">{% for country in country_stats %}<tr><td class="small py-2">{{ country.country_code }}</td><td class="text-end small py-2 fw-bold text-primary">{{ country.count }}</td></tr>{% endfor %}</tbody></table>
                 </div>
@@ -572,9 +567,9 @@
         </div>
 
         <!-- Terminal with fullscreen toggle and log-level badges -->
-        <div class="col-md-12">
+        <div class="col-12">
             <div class="card settings-card border-0" id="terminalCard">
-                <div class="card-header py-3 border-0 d-flex justify-content-between align-items-center">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-terminal me-2 text-info"></i>Live Operational Logs</h6>
                     <div class="d-flex align-items-center gap-3">
                         <!-- Log Level Count Badges -->
