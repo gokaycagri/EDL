@@ -664,11 +664,11 @@ function initMap() {
                 zoomOnScroll: false,
                 zoomButtons: true,
                 regionStyle: {
-                    initial: { fill: '#1a2233', stroke: '#243044', strokeWidth: 0.5 },
-                    hover: { fill: '#243044' }
+                    initial: { fill: '#2a3a58', stroke: '#3d5070', strokeWidth: 0.8 },
+                    hover: { fill: '#3d5070' }
                 },
                 visualizeData: {
-                    scale: ['#1a2233', '#00e5ff'],
+                    scale: ['#2a3a58', '#00e5ff'],
                     values: data
                 },
                 onRegionTooltipShow: function(event, tooltip, code) {

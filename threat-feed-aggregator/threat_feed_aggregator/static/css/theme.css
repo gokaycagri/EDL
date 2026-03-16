@@ -770,11 +770,15 @@ thead.table-light th {
 #world-map {
     border-radius: var(--card-radius);
     overflow: hidden;
-    background: var(--surface-0) !important;
+    background: #141c2b !important;
+}
+
+#world-map svg {
+    border-radius: var(--card-radius);
 }
 
 /* jsVectorMap dark overrides */
-.jvm-tooltip { background: var(--surface-2) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color) !important; }
+.jvm-tooltip { background: var(--surface-2) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color) !important; border-radius: 8px !important; padding: 0 !important; }
 .jvm-zoom-btn { background: var(--surface-2) !important; color: var(--text-primary) !important; border: 1px solid var(--border-color) !important; }
 
 /* === Notification Center === */
