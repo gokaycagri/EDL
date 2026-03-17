@@ -78,65 +78,113 @@ jobs:
     permissions:
       contents: write
     outputs:
-      new_release: ${{ steps.check.outputs.new_release }}
-      app_version: ${{ steps.check.outputs.app_version }}
+      new_release: ${{ steps.bump.outputs.new_release }}
+      app_version: ${{ steps.bump.outputs.new_version }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - name: Check if version changed
-        id: check
+      - name: Auto-bump version from commits
+        id: bump
         working-directory: ./threat-feed-aggregator
         run: |
-          APP_VERSION=$(python -c "from threat_feed_aggregator.version import __version__; print(__version__)")
-          TAG="v${APP_VERSION}"
-          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          if git rev-parse "${TAG}" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists — skipping release."
+          # Skip if last commit is a version bump (prevent infinite loop)
+          LAST_MSG=$(git log -1 --pretty=%s)
+          if [[ "${LAST_MSG}" == chore\(release\):* ]]; then
+            echo "Last commit is a release bump — skipping."
             echo "new_release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "New version detected: ${TAG}"
-            echo "new_release=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - name: Generate release notes
-        if: steps.check.outputs.new_release == 'true'
-        id: notes
-        run: |
+          # Read current version
+          CUR=$(python -c "from threat_feed_aggregator.version import __version__; print(__version__)")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${CUR}"
+
+          # Find previous tag
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "${PREV_TAG}" ]; then
-            CHANGELOG=$(git log --oneline --no-decorate | head -50)
-          else
-            CHANGELOG=$(git log "${PREV_TAG}..HEAD" --oneline --no-decorate)
+            echo "No previous tag — skipping auto-bump."
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # Count new commits since last tag (exclude release bumps)
+          NEW_COMMITS=$(git log "${PREV_TAG}..HEAD" --oneline --no-decorate --invert-grep --grep="^chore(release):" | wc -l)
+          if [ "${NEW_COMMITS}" -eq 0 ]; then
+            echo "No new commits since ${PREV_TAG} — skipping."
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Determine bump type from commit messages
+          COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=%s --no-decorate)
+          if echo "${COMMITS}" | grep -qiE "BREAKING CHANGE|^[a-z]+(\(.+\))?!:"; then
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
+            BUMP="major"
+          elif echo "${COMMITS}" | grep -qE "^feat(\(.+\))?:"; then
+            MINOR=$((MINOR + 1)); PATCH=0
+            BUMP="minor"
+          else
+            PATCH=$((PATCH + 1))
+            BUMP="patch"
+          fi
+
+          NEW_VER="${MAJOR}.${MINOR}.${PATCH}"
+          TAG="v${NEW_VER}"
+
+          # Check if tag already exists
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists — skipping."
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Bump: ${BUMP} (${CUR} → ${NEW_VER})"
+          echo "new_release=true" >> "$GITHUB_OUTPUT"
+          echo "new_version=${NEW_VER}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+
+          # Update version.py
+          echo "__version__ = '${NEW_VER}'" > threat_feed_aggregator/version.py
+
+      - name: Generate release notes
+        if: steps.bump.outputs.new_release == 'true'
+        id: notes
+        run: |
+          CHANGELOG=$(git log "${{ steps.bump.outputs.prev_tag }}..HEAD" --oneline --no-decorate --invert-grep --grep="^chore(release):")
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           echo "changelog<<${EOF_MARKER}" >> "$GITHUB_OUTPUT"
           echo "${CHANGELOG}" >> "$GITHUB_OUTPUT"
           echo "${EOF_MARKER}" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag and GitHub Release
-        if: steps.check.outputs.new_release == 'true'
+      - name: Commit version bump, tag, and release
+        if: steps.bump.outputs.new_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git tag "${{ steps.check.outputs.tag }}"
-          git push origin "${{ steps.check.outputs.tag }}"
-          gh release create "${{ steps.check.outputs.tag }}" \
-            --title "${{ steps.check.outputs.tag }}" \
-            --notes "## Changes since previous release
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add threat-feed-aggregator/threat_feed_aggregator/version.py
+          git commit -m "chore(release): ${{ steps.bump.outputs.tag }}"
+          git tag "${{ steps.bump.outputs.tag }}"
+          git push origin HEAD:master --follow-tags
+          gh release create "${{ steps.bump.outputs.tag }}" \
+            --title "${{ steps.bump.outputs.tag }}" \
+            --notes "## Changes since ${{ steps.bump.outputs.prev_tag }}
 
           ${{ steps.notes.outputs.changelog }}
 
           ---
-          **Docker image:** \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.check.outputs.app_version }}\`"
+          **Docker image:** \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.bump.outputs.new_version }}\`"
 
   publish:
     runs-on: ubuntu-latest
