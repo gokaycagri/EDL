@@ -176,7 +176,8 @@ jobs:
           git add threat-feed-aggregator/threat_feed_aggregator/version.py
           git commit -m "chore(release): ${{ steps.bump.outputs.tag }}"
           git tag "${{ steps.bump.outputs.tag }}"
-          git push origin HEAD:master --follow-tags
+          git push origin HEAD:master
+          git push origin "${{ steps.bump.outputs.tag }}"
           gh release create "${{ steps.bump.outputs.tag }}" \
             --title "${{ steps.bump.outputs.tag }}" \
             --notes "## Changes since ${{ steps.bump.outputs.prev_tag }}
