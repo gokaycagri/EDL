@@ -59,13 +59,7 @@ jobs:
     - name: Verify Flask installation
       working-directory: ./threat-feed-aggregator
       run: |
-        python -c "
-import sys, flask, flask.sessions, flask_session
-print('Flask:', flask.__version__, flask.__file__)
-print('flask.sessions OK:', flask.sessions.__file__)
-print('flask_session:', flask_session.__version__, flask_session.__file__)
-print('sys.path:', sys.path[:5])
-"
+        python -c "import sys, flask, flask.sessions, flask_session; print('Flask:', flask.__version__, flask.__file__); print('flask.sessions OK:', flask.sessions.__file__); print('flask_session:', flask_session.__version__, flask_session.__file__)"
 
     - name: Run Unit Tests with Coverage
       working-directory: ./threat-feed-aggregator
