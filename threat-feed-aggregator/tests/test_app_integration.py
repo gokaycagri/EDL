@@ -8,7 +8,6 @@ import json
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from threat_feed_aggregator.app import app, init_db
-from threat_feed_aggregator.db_manager import get_db_connection
 
 class TestAppIntegration(unittest.TestCase):
     def setUp(self):
