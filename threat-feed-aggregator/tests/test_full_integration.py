@@ -1,35 +1,37 @@
-import unittest
+import os
 import sqlite3
 import sys
-import os
-import json
+import unittest
 from unittest.mock import MagicMock
 
-# Mock missing dependencies
-sys.modules['werkzeug'] = MagicMock()
-sys.modules['werkzeug.security'] = MagicMock()
-sys.modules['flask'] = MagicMock()
-sys.modules['flask_login'] = MagicMock()
-sys.modules['aiohttp'] = MagicMock()
-sys.modules['apscheduler'] = MagicMock()
-sys.modules['apscheduler.schedulers.background'] = MagicMock()
-sys.modules['apscheduler.jobstores.sqlalchemy'] = MagicMock()
-sys.modules['geoip2'] = MagicMock()
-sys.modules['geoip2.database'] = MagicMock()
+# Mock missing dependencies only if not installed
+for _mod in [
+    'werkzeug', 'werkzeug.security', 'flask', 'flask_login',
+    'aiohttp', 'apscheduler', 'apscheduler.schedulers.background',
+    'apscheduler.jobstores.sqlalchemy', 'geoip2', 'geoip2.database',
+]:
+    if _mod not in sys.modules:
+        try:
+            __import__(_mod)
+        except ImportError:
+            sys.modules[_mod] = MagicMock()
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Mock DATA_DIR
 import threat_feed_aggregator.config_manager
+
 threat_feed_aggregator.config_manager.DATA_DIR = "."
 
 from threat_feed_aggregator.database.schema import init_db
-from threat_feed_aggregator.repositories.indicator_repo import upsert_indicators_bulk, get_all_indicators, get_indicators_paginated
 from threat_feed_aggregator.repositories.custom_list_repo import create_custom_list, get_custom_list_by_token
-from threat_feed_aggregator.services.analysis_service import get_analysis_data
-from threat_feed_aggregator.aggregator import _cleanup_whitelisted_items_from_db
+from threat_feed_aggregator.repositories.indicator_repo import (
+    get_indicators_paginated,
+    upsert_indicators_bulk,
+)
 from threat_feed_aggregator.repositories.whitelist_repo import add_whitelist_item
+
 
 class TestFullIntegration(unittest.TestCase):
     def setUp(self):
@@ -70,21 +72,21 @@ class TestFullIntegration(unittest.TestCase):
         # Ideally _cleanup should accept conn.
         # For this test, we can manually verify logic or skip if too hard to mock module level.
         # Let's verify manual deletion logic instead.
-        
+
         # 3. Verify Risk Analysis (Pagination & Filtering)
         print("3. Testing Risk Analysis...")
         # Search for 'Feodo' via source logic
         # Note: In analysis_service, get_analysis_data calls get_indicators_paginated which uses a new connection if not passed.
         # To test with self.conn, we'd need dependency injection.
         # Instead, I'll test the repo function directly which accepts conn.
-        
+
         total, filtered, items = get_indicators_paginated(filters={'source': 'Feodo'}, conn=self.conn)
         self.assertEqual(len(items), 2)
         print(f"   -> Found {len(items)} items for Source 'Feodo' (Expected 2)")
 
         # Test Tagging logic via Service (Unit test style since service is pure logic mostly)
         # We can't easily call service with self.conn.
-        
+
         # 4. Custom EDL
         print("4. Testing Custom EDL...")
         list_id, token = create_custom_list("My List", ["Feodo Tracker"], ["ip"], "text", conn=self.conn)

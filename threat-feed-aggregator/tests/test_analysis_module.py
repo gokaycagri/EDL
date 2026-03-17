@@ -1,18 +1,25 @@
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
-import sys
-import os
 
-# Mock missing dependencies for local testing
-sys.modules['werkzeug'] = MagicMock()
-sys.modules['werkzeug.security'] = MagicMock()
-sys.modules['flask'] = MagicMock()
-sys.modules['flask_login'] = MagicMock()
+# Mock missing dependencies only if not installed
+for _mod in ['werkzeug', 'werkzeug.security', 'flask', 'flask_login']:
+    if _mod not in sys.modules:
+        try:
+            __import__(_mod)
+        except ImportError:
+            sys.modules[_mod] = MagicMock()
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from threat_feed_aggregator.services.analysis_service import _get_tags_from_sources, _calculate_risk_level, get_analysis_data
+from threat_feed_aggregator.services.analysis_service import (
+    _calculate_risk_level,
+    _get_tags_from_sources,
+    get_analysis_data,
+)
+
 
 class TestAnalysisModule(unittest.TestCase):
 
@@ -80,7 +87,7 @@ class TestAnalysisModule(unittest.TestCase):
         self.assertEqual(result['data'][0]['level'], 'Critical')
         self.assertIn('Botnet', result['data'][0]['tags'])
         self.assertIn('Malware', result['data'][0]['tags'])
-        
+
         self.assertEqual(result['data'][1]['indicator'], 'bad.com')
         self.assertEqual(result['data'][1]['level'], 'Medium')
         self.assertIn('Uncategorized', result['data'][1]['tags'])
