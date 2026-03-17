@@ -100,12 +100,11 @@ class TestJWTVerification:
         result = itai_mod._verify_hs256_token("", "secret")
         assert result is None
 
-    def test_no_expiry_is_valid(self):
-        """Tokens without exp claim are accepted (no expiry check)."""
+    def test_no_expiry_is_rejected(self):
+        """Tokens without exp claim are rejected for security."""
         token = _make_hs256_token({"sub": "user1"}, secret="s")
         result = itai_mod._verify_hs256_token(token, "s")
-        assert result is not None
-        assert result["sub"] == "user1"
+        assert result is None
 
     def test_preferred_username_extracted(self):
         token = _make_hs256_token(

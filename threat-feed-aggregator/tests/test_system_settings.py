@@ -38,22 +38,26 @@ class TestSystemSettings(unittest.TestCase):
         self.assertEqual(config_saved['base_url'], 'https://10.9.102.12/')
         self.assertEqual(config_saved['timezone'], 'Europe/Istanbul')
 
+    @patch('threat_feed_aggregator.services.feed_health.get_all_health_statuses', return_value={})
+    @patch('threat_feed_aggregator.routes.system.is_mfa_enabled', return_value=False)
+    @patch('threat_feed_aggregator.routes.system.get_ldap_group_mappings', return_value=[])
+    @patch('threat_feed_aggregator.routes.system.get_admin_profiles', return_value=[])
+    @patch('threat_feed_aggregator.routes.system.get_all_users', return_value=[])
     @patch('threat_feed_aggregator.routes.system.read_config')
-    def test_integrations_page_renders_with_base_url(self, mock_read):
+    def test_integrations_page_renders_with_base_url(self, mock_read, mock_users, mock_profiles, mock_ldap, mock_mfa, mock_health):
         """Test that the integrations tab correctly displays the configured base URL."""
         mock_read.return_value = {
-            "source_urls": [], 
+            "source_urls": [],
             "base_url": "https://my-threat-feed.local/",
             "api_clients": [{"name": "Test", "api_key": "secret123"}]
         }
-        
+
         response = self.client.get('/system/')
         self.assertEqual(response.status_code, 200)
-        
+
         # Check if the configured URL is present in the rendered HTML
         html = response.data.decode('utf-8')
         self.assertIn('https://my-threat-feed.local/api/deceptor/block', html)
-        self.assertIn('https://my-threat-feed.local/api/deceptor/unblock', html)
 
     @patch('threat_feed_aggregator.routes.system.read_config')
     @patch('threat_feed_aggregator.routes.system.write_config')

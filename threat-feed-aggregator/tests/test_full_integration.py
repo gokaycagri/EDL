@@ -1,6 +1,6 @@
 import os
-import sqlite3
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
@@ -35,12 +35,19 @@ from threat_feed_aggregator.repositories.whitelist_repo import add_whitelist_ite
 
 class TestFullIntegration(unittest.TestCase):
     def setUp(self):
-        self.conn = sqlite3.connect(':memory:')
-        self.conn.row_factory = sqlite3.Row
-        init_db(self.conn)
+        self._db_fd, self._db_path = tempfile.mkstemp(suffix='.db')
+        os.environ['TEST_DB_NAME'] = self._db_path
+        os.environ['DB_TYPE'] = 'sqlite'
+
+        import threat_feed_aggregator.database.connection as _conn_mod
+        _conn_mod.DB_NAME = self._db_path
+
+        init_db()
 
     def tearDown(self):
-        self.conn.close()
+        os.close(self._db_fd)
+        os.remove(self._db_path)
+        os.environ.pop('TEST_DB_NAME', None)
 
     def test_end_to_end_flow(self):
         print("\n--- Starting End-to-End Integration Test ---")
@@ -55,50 +62,38 @@ class TestFullIntegration(unittest.TestCase):
             ("8.8.8.8", "US", "ip") # Will be whitelisted
         ]
         # Simulate Feodo
-        upsert_indicators_bulk([indicators[0], indicators[1]], source_name="Feodo Tracker", conn=self.conn)
+        upsert_indicators_bulk([indicators[0], indicators[1]], source_name="Feodo Tracker")
         # Simulate URLHaus
-        upsert_indicators_bulk([indicators[2]], source_name="URLHaus", conn=self.conn)
+        upsert_indicators_bulk([indicators[2]], source_name="URLHaus")
         # Simulate USOM
-        upsert_indicators_bulk([indicators[3]], source_name="USOM", conn=self.conn)
+        upsert_indicators_bulk([indicators[3]], source_name="USOM")
         # Simulate AlienVault (whitelisted item)
-        upsert_indicators_bulk([indicators[4]], source_name="AlienVault", conn=self.conn)
+        upsert_indicators_bulk([indicators[4]], source_name="AlienVault")
 
         # 2. Whitelist Cleanup
         print("2. Testing Whitelist Cleanup...")
-        add_whitelist_item("8.8.8.8", "Google DNS", conn=self.conn)
-        # We need to mock get_whitelist to use our conn or pass conn to _cleanup
-        # Since _cleanup uses module level functions, we rely on them using db_transaction(conn=None) usually.
-        # But here we want to use self.conn.
-        # Ideally _cleanup should accept conn.
-        # For this test, we can manually verify logic or skip if too hard to mock module level.
-        # Let's verify manual deletion logic instead.
+        add_whitelist_item("8.8.8.8", "Google DNS")
 
         # 3. Verify Risk Analysis (Pagination & Filtering)
         print("3. Testing Risk Analysis...")
-        # Search for 'Feodo' via source logic
-        # Note: In analysis_service, get_analysis_data calls get_indicators_paginated which uses a new connection if not passed.
-        # To test with self.conn, we'd need dependency injection.
-        # Instead, I'll test the repo function directly which accepts conn.
-
-        total, filtered, items = get_indicators_paginated(filters={'source': 'Feodo'}, conn=self.conn)
+        total, filtered, items = get_indicators_paginated(filters={'source': 'Feodo'})
         self.assertEqual(len(items), 2)
         print(f"   -> Found {len(items)} items for Source 'Feodo' (Expected 2)")
 
-        # Test Tagging logic via Service (Unit test style since service is pure logic mostly)
-        # We can't easily call service with self.conn.
-
         # 4. Custom EDL
         print("4. Testing Custom EDL...")
-        list_id, token = create_custom_list("My List", ["Feodo Tracker"], ["ip"], "text", conn=self.conn)
-        fetched_list = get_custom_list_by_token(token, conn=self.conn)
+        list_id, token = create_custom_list("My List", ["Feodo Tracker"], ["ip"], "text")
+        fetched_list = get_custom_list_by_token(token)
         self.assertEqual(fetched_list['name'], "My List")
         print("   -> Custom List created and retrieved.")
 
         # 5. Internal Search
         print("5. Testing Internal Search...")
-        # Check 1.1.1.1
-        cursor = self.conn.execute("SELECT source_name FROM indicator_sources WHERE indicator = '1.1.1.1'")
+        from threat_feed_aggregator.database.connection import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT source_name FROM indicator_sources WHERE indicator = '1.1.1.1'")
         rows = cursor.fetchall()
+        conn.close()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['source_name'], 'Feodo Tracker')
         print("   -> Internal search found '1.1.1.1' in 'Feodo Tracker'.")

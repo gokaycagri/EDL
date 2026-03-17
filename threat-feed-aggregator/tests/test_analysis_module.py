@@ -78,7 +78,7 @@ class TestAnalysisModule(unittest.TestCase):
         }
 
         # Call Service
-        result = get_analysis_data(draw=1, start=0, length=10, search_value=None, order_col='risk_score', order_dir='desc')
+        result = get_analysis_data(draw=1, start=0, length=10, search_value=None, filters=None, order_col='risk_score', order_dir='desc')
 
         # Verify Structure
         self.assertEqual(result['draw'], 1)

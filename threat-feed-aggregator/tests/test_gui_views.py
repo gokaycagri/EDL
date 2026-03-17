@@ -7,11 +7,14 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from threat_feed_aggregator.app import app
+from threat_feed_aggregator.database.schema import init_db
 
 class TestGuiViews(unittest.TestCase):
     def setUp(self):
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False # Disable CSRF for easier form testing
+        with app.app_context():
+            init_db()
         self.client = app.test_client()
 
     def login(self):
@@ -22,7 +25,7 @@ class TestGuiViews(unittest.TestCase):
 
     def test_login_page_load(self):
         """Test that the login page loads correctly."""
-        response = self.client.get('/login')
+        response = self.client.get('/auth/login')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Login', response.data)
 
@@ -30,7 +33,7 @@ class TestGuiViews(unittest.TestCase):
     def test_login_action_success(self, mock_check):
         """Test successful login redirection."""
         mock_check.return_value = (True, "Login successful", {"username": "admin", "permissions": {}})
-        response = self.client.post('/login', data={'username': 'admin', 'password': 'password'}, follow_redirects=True)
+        response = self.client.post('/auth/login', data={'username': 'admin', 'password': 'password'}, follow_redirects=True)
         # Should redirect to index, so we check for text present on dashboard
         self.assertIn(b'Dashboard', response.data)
         self.assertIn(b'Sign Out', response.data)
@@ -39,18 +42,22 @@ class TestGuiViews(unittest.TestCase):
     def test_login_action_failure(self, mock_check):
         """Test failed login stays on login page with error."""
         mock_check.return_value = (False, "Invalid credentials", None)
-        response = self.client.post('/login', data={'username': 'admin', 'password': 'wrong'}, follow_redirects=True)
+        response = self.client.post('/auth/login', data={'username': 'admin', 'password': 'wrong'}, follow_redirects=True)
         self.assertIn(b'Invalid credentials', response.data)
         self.assertIn(b'Login', response.data) # Still on login page
 
+    @patch('threat_feed_aggregator.routes.dashboard.get_all_custom_lists', return_value=[])
+    @patch('threat_feed_aggregator.routes.dashboard.get_api_blacklist_items', return_value=[])
+    @patch('threat_feed_aggregator.routes.dashboard.get_whitelist', return_value=[])
+    @patch('threat_feed_aggregator.routes.dashboard.get_country_stats', return_value=[])
     @patch('threat_feed_aggregator.routes.dashboard.get_unique_indicator_count')
     @patch('threat_feed_aggregator.routes.dashboard.get_indicator_counts_by_type')
     @patch('threat_feed_aggregator.routes.dashboard.read_stats')
     @patch('threat_feed_aggregator.routes.dashboard.read_config')
-    def test_dashboard_load(self, mock_config, mock_stats, mock_counts, mock_total):
+    def test_dashboard_load(self, mock_config, mock_stats, mock_counts, mock_total, mock_country, mock_whitelist, mock_blacklist, mock_custom):
         """Test that dashboard loads with stats."""
         self.login()
-        
+
         # Setup mocks for dashboard data
         mock_config.return_value = {'source_urls': [{'name': 'TestFeed', 'url': 'http://test.com'}]}
         mock_stats.return_value = {'TestFeed': {'count': 100}}
@@ -59,7 +66,7 @@ class TestGuiViews(unittest.TestCase):
 
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        
+
         # Check if key elements are rendered
         self.assertIn(b'Dashboard', response.data)
         self.assertIn(b'TestFeed', response.data) # Source name
@@ -67,7 +74,7 @@ class TestGuiViews(unittest.TestCase):
 
     @patch('threat_feed_aggregator.routes.system.write_config')
     @patch('threat_feed_aggregator.routes.system.read_config')
-    @patch('threat_feed_aggregator.app.update_scheduled_jobs')
+    @patch('threat_feed_aggregator.scheduler_manager.update_scheduled_jobs')
     def test_add_source(self, mock_update_jobs, mock_read, mock_write):
         """Test adding a new threat feed source."""
         self.login()

@@ -28,7 +28,7 @@ class TestAppIntegration(unittest.TestCase):
         os.remove(self.db_path)
 
     def test_login_page_loads(self):
-        response = self.client.get('/login')
+        response = self.client.get('/auth/login')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Login', response.data)
 
@@ -36,13 +36,13 @@ class TestAppIntegration(unittest.TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 302)
         # Location header is string in newer Werkzeug
-        self.assertIn('/login', response.headers['Location'])
+        self.assertIn('/auth/login', response.headers['Location'])
 
     def test_protected_endpoint_requires_auth(self):
         # /api/history is a valid route checking login
         response = self.client.get('/api/history')
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/login', response.headers['Location'])
+        self.assertIn('/auth/login', response.headers['Location'])
 
 if __name__ == '__main__':
     unittest.main()

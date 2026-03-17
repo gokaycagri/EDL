@@ -9,8 +9,9 @@ from threat_feed_aggregator.data_collector import fetch_data_from_url
 
 class TestDataCollector(unittest.TestCase):
 
+    @patch('threat_feed_aggregator.data_collector._is_ssl_bypass_url', return_value=False)
     @patch('threat_feed_aggregator.data_collector.requests.get')
-    def test_fetch_data_from_url_success(self, mock_get):
+    def test_fetch_data_from_url_success(self, mock_get, mock_ssl_bypass):
         # Configure the mock to return a successful response
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -24,10 +25,11 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertEqual(result, "line1\nline2\nline3")
-        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, proxy_auth=None, verify=True)
 
+    @patch('threat_feed_aggregator.data_collector._is_ssl_bypass_url', return_value=False)
     @patch('threat_feed_aggregator.data_collector.requests.get')
-    def test_fetch_data_from_url_failure(self, mock_get):
+    def test_fetch_data_from_url_failure(self, mock_get, mock_ssl_bypass):
         # Configure the mock to raise an exception
         mock_get.side_effect = requests.exceptions.RequestException("Test error")
 
@@ -37,7 +39,7 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertIsNone(result)
-        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, proxy_auth=None, verify=True)
 
 if __name__ == '__main__':
     unittest.main()

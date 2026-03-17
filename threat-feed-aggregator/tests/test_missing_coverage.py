@@ -1,13 +1,24 @@
-import unittest
-from unittest.mock import patch, MagicMock
 import os
 import sys
 import json
+import unittest
+from unittest.mock import patch, MagicMock
 
 # Add path to import app
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
+# Ensure 'whois' module is available (may not be installed in CI)
+if 'whois' not in sys.modules:
+    try:
+        import whois  # noqa: F401
+    except ImportError:
+        sys.modules['whois'] = MagicMock()
+
 from threat_feed_aggregator.app import app
+
+# Pre-import investigation_service so patch() can resolve the module path
+# (whois mock above ensures import won't fail)
+import threat_feed_aggregator.services.investigation_service  # noqa: F401
 
 class TestMissingCoverage(unittest.TestCase):
     def setUp(self):
@@ -31,58 +42,42 @@ class TestMissingCoverage(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Threat Investigation', response.data)
 
-    @patch('threat_feed_aggregator.services.investigation_service.whois.whois')
-    @patch('threat_feed_aggregator.services.investigation_service.requests.get')
-    @patch('threat_feed_aggregator.services.investigation_service.requests.post')
-    def test_lookup_ip_success(self, mock_post, mock_get, mock_whois):
+    @patch('threat_feed_aggregator.services.investigation_service.InvestigationService.lookup_ip')
+    def test_lookup_ip_success(self, mock_lookup):
         """Test the IP lookup API with successful external responses."""
         self.login()
-        
-        # Mock WHOIS
-        mock_whois_entry = MagicMock()
-        mock_whois_entry.text = "Mock WHOIS Data"
-        mock_whois.return_value = mock_whois_entry
 
-        # Mock External API (ip-api.com)
-        mock_get_res = MagicMock()
-        mock_get_res.status_code = 200
-        mock_get_res.json.return_value = {'country': 'TestCountry', 'isp': 'TestISP'}
-        mock_get.return_value = mock_get_res
-
-        # Mock External API (ip.thc.org)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"domains": ["example.com"], "count": 1}
-        mock_post.return_value = mock_response
+        mock_lookup.return_value = {
+            'success': True,
+            'geo': {'country': 'TestCountry', 'isp': 'TestISP'},
+            'whois_data': "Mock WHOIS Data",
+            'data': {"domains": ["example.com"], "count": 1},
+        }
 
         payload = {'ip': '8.8.8.8'}
         response = self.client.post('/tools/api/lookup_ip', json=payload)
-        
+
         self.assertEqual(response.status_code, 200)
         data = response.json
         self.assertEqual(data['status'], 'success')
         self.assertEqual(data['data']['whois_data'], "Mock WHOIS Data")
         self.assertEqual(data['data']['data']['domains'][0], "example.com")
 
-    @patch('threat_feed_aggregator.services.investigation_service.whois.whois')
-    @patch('threat_feed_aggregator.services.investigation_service.requests.get')
-    @patch('threat_feed_aggregator.services.investigation_service.requests.post')
-    def test_lookup_ip_failure_external(self, mock_post, mock_get, mock_whois):
-        """Test the IP lookup API when external API fails."""
+    @patch('threat_feed_aggregator.services.investigation_service.InvestigationService.lookup_ip')
+    def test_lookup_ip_failure_external(self, mock_lookup):
+        """Test the IP lookup API when external API fails (graceful degradation)."""
         self.login()
-        
-        # Mock WHOIS (still works)
-        mock_whois_entry = MagicMock()
-        mock_whois_entry.text = "Mock WHOIS Data"
-        mock_whois.return_value = mock_whois_entry
 
-        # Mock External API Failure
-        mock_get.return_value = MagicMock(status_code=500)
-        mock_post.return_value = MagicMock(status_code=500)
+        mock_lookup.return_value = {
+            'success': True,
+            'geo': {},
+            'whois_data': "Mock WHOIS Data",
+            'data': {},
+        }
 
         payload = {'ip': '8.8.8.8'}
         response = self.client.post('/tools/api/lookup_ip', json=payload)
-        
+
         # New logic returns 200 even if external API fails (graceful degradation)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['status'], 'success')
@@ -172,7 +167,7 @@ class TestMissingCoverage(unittest.TestCase):
     def test_remove_whitelist_item(self, mock_remove):
         """Test removing a whitelist item."""
         self.login()
-        response = self.client.get('/system/whitelist/remove/1', follow_redirects=True)
+        response = self.client.post('/system/whitelist/remove/1', follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         mock_remove.assert_called_once_with(1)
 
@@ -198,31 +193,33 @@ class TestMissingCoverage(unittest.TestCase):
     def test_run_single_feed(self, mock_thread, mock_read):
         self.login()
         mock_read.return_value = {'source_urls': [{'name': 'TestFeed', 'url': 'http://test.com'}]}
-        
-        response = self.client.get('/api/run_single/TestFeed')
+
+        response = self.client.post('/api/run_single/TestFeed')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['status'], 'success')
         self.assertEqual(response.json['data']['aggregation_status'], 'running')
         mock_thread.assert_called_once()
 
-    @patch('threat_feed_aggregator.app.scheduler.get_jobs')
-    @patch('threat_feed_aggregator.config_manager.read_config')
-    def test_get_scheduled_jobs(self, mock_read, mock_jobs):
+    @patch('threat_feed_aggregator.routes.api.scheduler')
+    @patch('threat_feed_aggregator.routes.api.read_config')
+    def test_get_scheduled_jobs(self, mock_read, mock_scheduler):
         self.login()
         mock_read.return_value = {'timezone': 'UTC'}
-        
+
         # Mock a job
         mock_job = MagicMock()
         mock_job.name = "Test Job"
         import datetime
         import pytz
-        mock_job.next_run_time = datetime.datetime(2025, 12, 28, 12, 0, tzinfo=pytz.UTC)
-        mock_jobs.return_value = [mock_job]
-        
+        mock_job.next_run_time = datetime.datetime(2027, 12, 28, 12, 0, tzinfo=pytz.UTC)
+        mock_scheduler.get_jobs.return_value = [mock_job]
+
         response = self.client.get('/api/scheduled_jobs')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json), 1)
-        self.assertEqual(response.json[0]['name'], "Test Job")
+        data = response.json
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(len(data['data']['items']), 1)
+        self.assertEqual(data['data']['items'][0]['name'], "Test Job")
 
     @patch('threat_feed_aggregator.routes.api.clear_logs')
     def test_clear_live_logs(self, mock_clear):

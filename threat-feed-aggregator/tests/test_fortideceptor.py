@@ -14,8 +14,8 @@ class TestFortiDeceptor(unittest.TestCase):
         app.config['TESTING'] = True
         app.config['WTF_CSRF_ENABLED'] = False
         self.client = app.test_client()
-        self.api_key = "test_api_key_123"
-        
+        self.api_key = "4Sb4rLIIlEONmHo768OaLIGcTrmK9Mp6"
+
         # Mock the config to allow our test API key
         self.mock_config = {
             "api_clients": [
