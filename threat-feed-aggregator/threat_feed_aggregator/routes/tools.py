@@ -118,7 +118,7 @@ def save_dedup_schedule():
         write_config(config)
         update_scheduled_jobs()
 
-        return api_response(message="Schedule updated successfully.")
+        return api_response({"success": True}, message="Schedule updated successfully.")
     except Exception as e:
         logger.error(f"Error saving schedule: {e}")
         return api_error(str(e), "SCHEDULE_ERROR", 500)
@@ -143,7 +143,7 @@ def analyze_dns_duplicates():
         )
 
         return api_response(
-            {"resolved": processed_count, "deleted": deleted_count, "duplicates": []},
+            {"success": True, "resolved": processed_count, "deleted": deleted_count, "duplicates": []},
             message=f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}."
         )
     except Exception as e:
@@ -163,7 +163,7 @@ def delete_dns_duplicates():
         from ..db_manager import delete_indicators
         count = delete_indicators(indicators)
 
-        return api_response({"deleted_count": count})
+        return api_response({"success": True, "deleted_count": count})
     except Exception as e:
         logger.error(f"Error in delete_dns_duplicates: {e}")
         return api_error(str(e), "DNS_DELETE_ERROR", 500)

@@ -200,19 +200,29 @@
         })
         .then(r => r.json())
         .then(resp => {
-            var data = resp.data || resp;
+            const data = (resp && resp.data) ? resp.data : {};
+            const isSuccess = resp && resp.status === 'success';
             document.getElementById('loading').style.display = 'none';
             document.getElementById('analyzeBtn').disabled = false;
 
-            if (data.success) {
+            if (isSuccess) {
                 if (data.duplicates && data.duplicates.length > 0) {
                      renderTable(data.duplicates);
                      document.getElementById('dupCountHeader').innerText = data.duplicates.length;
                 } else {
                      appendLog('Analysis complete. No new duplicates found.', 'text-success');
                 }
+
+                if (typeof data.resolved !== 'undefined') {
+                    document.getElementById('statScanned').innerText = data.resolved;
+                }
+                if (typeof data.deleted !== 'undefined') {
+                    document.getElementById('statRemoved').innerText = data.deleted;
+                    document.getElementById('dupCountHeader').innerText = data.deleted;
+                }
+                document.getElementById('statLastRun').innerText = new Date().toLocaleString();
             } else {
-                Swal.fire('Error', data.error || 'Analysis failed', 'error');
+                Swal.fire('Error', (resp && resp.message) || 'Analysis failed', 'error');
             }
         })
         .catch(err => {
@@ -227,6 +237,61 @@
         if (logInterval) clearInterval(logInterval);
         updateDedupLogs();
         logInterval = setInterval(updateDedupLogs, 3000);
+    }
+
+    function extractLogTimestamp(line) {
+        const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:,\d{3})?/);
+        return match ? match[1] : '';
+    }
+
+    function updateStatCardsFromLogs(relevantLogs) {
+        let latestScanned = null;
+        let latestRemoved = null;
+        let latestRun = null;
+
+        relevantLogs.forEach(line => {
+            const timeText = extractLogTimestamp(line);
+            let match = line.match(/Deduplication Sweep Complete\. Scanned (\d+) cached domains\. Removed (\d+) duplicates\./i);
+
+            if (match) {
+                latestScanned = parseInt(match[1], 10);
+                latestRemoved = parseInt(match[2], 10);
+                latestRun = timeText || latestRun;
+                return;
+            }
+
+            match = line.match(/Completed manual run \(resolved=(\d+), deleted=(\d+)\)/i);
+            if (match) {
+                latestScanned = parseInt(match[1], 10);
+                latestRemoved = parseInt(match[2], 10);
+                latestRun = timeText || latestRun;
+                return;
+            }
+
+            match = line.match(/Batch completed \(processed=(\d+)\)/i);
+            if (match) {
+                latestScanned = parseInt(match[1], 10);
+                latestRun = timeText || latestRun;
+                return;
+            }
+
+            match = line.match(/Auto-delete sweep completed \(deleted=(\d+)\)/i);
+            if (match) {
+                latestRemoved = parseInt(match[1], 10);
+                latestRun = timeText || latestRun;
+            }
+        });
+
+        if (latestScanned !== null) {
+            document.getElementById('statScanned').innerText = latestScanned;
+        }
+        if (latestRemoved !== null) {
+            document.getElementById('statRemoved').innerText = latestRemoved;
+            document.getElementById('dupCountHeader').innerText = latestRemoved;
+        }
+        if (latestRun) {
+            document.getElementById('statLastRun').innerText = latestRun;
+        }
     }
 
     function updateDedupLogs() {
@@ -244,6 +309,10 @@
                     line.includes('Analyze') ||
                     line.includes('dns_deduplication')
                 );
+
+                if (relevantLogs.length > 0) {
+                    updateStatCardsFromLogs(relevantLogs);
+                }
 
                 if (relevantLogs.length > 0) {
                     logWindow.textContent = '';
@@ -379,8 +448,8 @@
         })
         .then(r => r.json())
         .then(resp => {
-            var data = resp.data || resp;
-            if (data.success) {
+            const isSuccess = resp && resp.status === 'success';
+            if (isSuccess) {
                 Swal.fire({
                     icon: 'success',
                     title: 'Configuration Saved',
@@ -389,8 +458,11 @@
                     showConfirmButton: false
                 });
             } else {
-                Swal.fire('Error', data.error, 'error');
+                Swal.fire('Error', (resp && resp.message) || 'Could not save scheduler settings.', 'error');
             }
+        })
+        .catch(() => {
+            Swal.fire('Error', 'Network error occurred while saving configuration.', 'error');
         });
     }
 </script>
