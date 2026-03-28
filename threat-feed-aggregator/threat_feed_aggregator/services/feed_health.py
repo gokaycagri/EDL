@@ -1,9 +1,9 @@
 """
 Feed health monitoring — tracks consecutive failures per source and auto-disables after threshold.
 """
+from datetime import UTC, datetime
 import logging
 import threading
-from datetime import UTC, datetime
 
 from ..config_manager import read_config, write_config
 

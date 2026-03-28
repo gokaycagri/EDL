@@ -5,9 +5,9 @@ import ssl
 import threading
 import time
 
+from ldap3 import ALL, Connection, Server, Tls
 import pyotp
 import qrcode
-from ldap3 import ALL, Connection, Server, Tls
 
 from .db_manager import get_profile_by_ldap_groups, get_user_permissions, local_user_exists, verify_local_user
 

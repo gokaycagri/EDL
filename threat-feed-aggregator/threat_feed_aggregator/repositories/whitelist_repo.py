@@ -1,6 +1,6 @@
+from datetime import UTC, datetime
 import logging
 import sqlite3
-from datetime import UTC, datetime
 
 try:
     from psycopg2 import IntegrityError as PgIntegrityError

@@ -2,9 +2,9 @@
 Feed processing — async fetch, parse, filter, enrich, and save threat feed data.
 """
 import asyncio
+from datetime import UTC, datetime
 import logging
 import time
-from datetime import UTC, datetime
 
 from aiohttp import BasicAuth
 

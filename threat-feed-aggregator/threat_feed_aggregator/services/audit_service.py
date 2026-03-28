@@ -1,8 +1,8 @@
 """
 Audit logging service — records security-relevant actions for compliance and forensics.
 """
-import logging
 from datetime import UTC, datetime
+import logging
 
 from ..database.connection import db_readonly, db_transaction
 

@@ -557,10 +557,10 @@ def update_settings():
 @login_required
 @permission_required('system', 'rw')
 def add_api_client():
+    from datetime import datetime
     import secrets
     import string
     import uuid
-    from datetime import datetime
 
     name = request.form.get('name')
     allowed_ips_str = request.form.get('allowed_ips', '')

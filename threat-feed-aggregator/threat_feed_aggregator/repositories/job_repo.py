@@ -1,5 +1,5 @@
-import logging
 from datetime import UTC, datetime
+import logging
 
 from ..database.connection import db_transaction
 

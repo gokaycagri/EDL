@@ -1,7 +1,7 @@
+from datetime import UTC, datetime
 import json
 import logging
 import secrets
-from datetime import UTC, datetime
 
 from ..database.connection import db_transaction
 

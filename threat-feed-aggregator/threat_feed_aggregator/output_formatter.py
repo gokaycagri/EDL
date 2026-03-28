@@ -1,6 +1,6 @@
 import csv
-import json
 from io import StringIO
+import json
 
 from .utils import aggregate_ips
 

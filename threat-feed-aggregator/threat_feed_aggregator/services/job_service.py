@@ -1,6 +1,6 @@
+from datetime import UTC, datetime
 import logging
 import threading
-from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 

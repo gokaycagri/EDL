@@ -1,6 +1,6 @@
+from functools import lru_cache
 import logging
 import os
-from functools import lru_cache
 
 import geoip2.database
 

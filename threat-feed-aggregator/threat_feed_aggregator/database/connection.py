@@ -1,8 +1,8 @@
+from contextlib import contextmanager
 import logging
 import os
 import sqlite3
 import threading
-from contextlib import contextmanager
 
 try:
     import psycopg2

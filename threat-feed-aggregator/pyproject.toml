@@ -25,6 +25,9 @@ ignore = [
     "N817",   # CamelCase imported as acronym
 ]
 
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

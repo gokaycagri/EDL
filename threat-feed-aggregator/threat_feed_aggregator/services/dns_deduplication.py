@@ -1,6 +1,6 @@
 import asyncio
-import logging
 from datetime import UTC, datetime
+import logging
 from urllib.parse import urlparse
 
 import aiodns

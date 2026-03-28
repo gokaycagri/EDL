@@ -1,7 +1,7 @@
+from datetime import UTC, datetime
 import json
 import os
 import sys
-from datetime import UTC, datetime
 
 
 def get_base_path():

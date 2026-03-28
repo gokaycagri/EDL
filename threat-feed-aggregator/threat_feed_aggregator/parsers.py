@@ -1,9 +1,9 @@
 import csv
+from io import StringIO
 import ipaddress
 import json
 import logging
 import re
-from io import StringIO
 
 logger = logging.getLogger(__name__)
 

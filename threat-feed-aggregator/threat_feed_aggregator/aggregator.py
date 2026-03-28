@@ -6,8 +6,8 @@ This module is the main entry point for aggregation. The heavy lifting is in:
   - edl_generator.py: EDL file generation with atomic writes
 """
 import asyncio
-import logging
 from datetime import UTC, datetime
+import logging
 
 from .config_manager import read_config, read_stats, write_stats
 from .db_manager import (
