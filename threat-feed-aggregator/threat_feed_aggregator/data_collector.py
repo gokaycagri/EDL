@@ -30,7 +30,7 @@ def fetch_data_from_url(url, auth=None):
     Fetches data from a given URL synchronously.
     """
     try:
-        proxies, _, proxy_auth = get_proxy_settings()
+        proxies, _, _ = get_proxy_settings()
 
         # SSL verification — bypass only for configured internal hosts
         verify_ssl = not _is_ssl_bypass_url(url)
@@ -38,7 +38,7 @@ def fetch_data_from_url(url, auth=None):
             import urllib3
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-        response = requests.get(url, timeout=30, proxies=proxies, auth=auth, proxy_auth=proxy_auth, verify=verify_ssl)
+        response = requests.get(url, timeout=30, proxies=proxies, auth=auth, verify=verify_ssl)
         if response.status_code == 404:
             logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
             return None

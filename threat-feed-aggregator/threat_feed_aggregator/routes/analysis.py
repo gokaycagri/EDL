@@ -77,9 +77,13 @@ def data():
 @login_required
 def export_indicators():
     """Export filtered indicators as CSV or JSON download."""
+    ALLOWED_ORDER_COLS = {'indicator', 'type', 'country', 'risk_score', 'level', 'source_count', 'tags', 'last_seen'}
+
     export_format = request.args.get('format', 'csv')
     search_value = request.args.get('search', None)
     order_col = request.args.get('order_col', 'risk_score')
+    if order_col not in ALLOWED_ORDER_COLS:
+        order_col = 'risk_score'
     order_dir = request.args.get('order_dir', 'desc')
 
     filters = {}
@@ -90,15 +94,25 @@ def export_indicators():
         except json.JSONDecodeError:
             pass
 
-    # Fetch all matching (limit=100000 as safety cap)
+    # Fetch with reasonable cap
     _, _, rows = get_indicators_paginated(
         start=0, length=100000, search_value=search_value,
         filters=filters, order_col=order_col, order_dir=order_dir
     )
 
     if export_format == 'json':
+        def generate_json():
+            yield '[\n'
+            first = True
+            for row in rows:
+                if not first:
+                    yield ',\n'
+                yield json.dumps(row)
+                first = False
+            yield '\n]'
+
         return Response(
-            json.dumps(rows, indent=2),
+            stream_with_context(generate_json()),
             mimetype='application/json',
             headers={'Content-Disposition': 'attachment; filename=indicators_export.json'}
         )

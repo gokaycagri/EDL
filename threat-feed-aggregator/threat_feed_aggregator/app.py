@@ -41,8 +41,9 @@ except ImportError:
     def get_remote_address(): return "127.0.0.1"
 
 from flask import Flask
-from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
+
+from flask_session import Session
 
 app = Flask(__name__)
 csrf = CSRFProtect()
@@ -123,7 +124,8 @@ def health_check():
         conn.close()
         health["database"] = "connected"
     except Exception as e:
-        health["database"] = f"error: {e}"
+        logger.error(f"Health check DB error: {e}")
+        health["database"] = "error"
         health["status"] = "degraded"
 
     try:
@@ -176,11 +178,14 @@ def inject_version():
 
 LOCK_FILE = os.path.join(DATA_DIR, 'scheduler.lock')
 
+_scheduler_lock_fh = None  # Must survive GC to hold the OS file lock
+
 def init_scheduler_safe():
+    global _scheduler_lock_fh
     try:
         import fcntl
-        f = open(LOCK_FILE, 'w')
-        fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _scheduler_lock_fh = open(LOCK_FILE, 'w')
+        fcntl.lockf(_scheduler_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         from .scheduler_manager import init_scheduler
         logger.info('MASTER LOCK ACQUIRED. Starting scheduler master process...')
         init_scheduler()

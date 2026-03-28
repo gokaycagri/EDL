@@ -101,7 +101,7 @@ class FeedAggregator:
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.warning(f"[{source_name}] Error writing batch {current_batch_num} (Attempt {attempt+1}): {e}. Retrying...")
-                        time.sleep(2 * (attempt + 1))
+                        time.sleep(0.5 * (attempt + 1))
                     else:
                         logger.error(f"[{source_name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}")
 

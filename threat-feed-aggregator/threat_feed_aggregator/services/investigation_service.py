@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 
 import requests
@@ -8,6 +9,9 @@ from ..utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
+_WHOIS_TIMEOUT = 10  # seconds
+
+
 class InvestigationService:
     @staticmethod
     def lookup_ip(ip_address):
@@ -15,21 +19,26 @@ class InvestigationService:
         Performs WHOIS, IP-API, and THC lookup for an IP address.
         Returns: dict with keys 'success', 'geo', 'whois_data', 'data'
         """
-        # 1. WHOIS
+        # 1. WHOIS (with timeout to prevent thread blocking)
         whois_data_str = "WHOIS lookup failed or no data available."
         try:
-            whois_info = whois.whois(ip_address)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(whois.whois, ip_address)
+                whois_info = future.result(timeout=_WHOIS_TIMEOUT)
             whois_data_str = whois_info.text if whois_info and whois_info.text else "No WHOIS data found."
+        except concurrent.futures.TimeoutError:
+            logger.warning(f"WHOIS lookup timed out for {ip_address}")
+            whois_data_str = "WHOIS lookup timed out."
         except Exception as whois_e:
             logger.warning(f"WHOIS lookup failed for {ip_address}: {whois_e}")
             whois_data_str = f"WHOIS lookup error: {whois_e}"
 
         proxies, _, _ = get_proxy_settings()
 
-        # 2. IP-API.com
+        # 2. IP-API.com (HTTPS for confidentiality)
         ip_api_data = {}
         try:
-            ip_api_url = f"http://ip-api.com/json/{ip_address}?fields=status,message,continent,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,mobile,proxy,hosting,query"
+            ip_api_url = f"https://ip-api.com/json/{ip_address}?fields=status,message,continent,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,mobile,proxy,hosting,query"
             r_ip = requests.get(ip_api_url, timeout=REQUEST_TIMEOUT_DEFAULT, proxies=proxies)
             if r_ip.status_code == 200:
                 ip_api_data = r_ip.json()

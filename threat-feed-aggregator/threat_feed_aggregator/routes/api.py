@@ -77,8 +77,10 @@ def _csv_row(values):
     return buffer.getvalue()
 
 CACHE_DIR = os.path.join(DATA_DIR, 'edl_cache')
-if not os.path.exists(CACHE_DIR):
-    os.makedirs(CACHE_DIR)
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+except OSError:
+    logger.warning(f"Could not create EDL cache directory: {CACHE_DIR}")
 
 def _get_cached_edl_path(token, fmt):
     return os.path.join(CACHE_DIR, f"{token}.{fmt}")
@@ -169,8 +171,9 @@ def get_saved_custom_edl(token):
     try:
         iterator = get_filtered_indicators_iter(include_sources)
 
-        # Write to temporary file then rename (atomic-ish)
-        temp_path = cache_path + ".tmp"
+        # Write to unique temporary file then rename (atomic, concurrent-safe)
+        import uuid
+        temp_path = cache_path + f".{uuid.uuid4().hex}.tmp"
 
         with open(temp_path, 'w', encoding='utf-8') as f:
             if output_format == 'text':
@@ -209,9 +212,8 @@ def get_saved_custom_edl(token):
                             first_item = False
                     f.write(']')
 
-        # Move temp file to cache path
-        import shutil
-        shutil.move(temp_path, cache_path)
+        # Atomically replace cache file
+        os.replace(temp_path, cache_path)
 
         if output_format == 'text':
             mimetype = 'text/plain'

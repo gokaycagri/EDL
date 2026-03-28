@@ -160,7 +160,7 @@ def fetch_and_process_single_feed(source_config):
             current_stats["last_updated"] = datetime.now(UTC).isoformat()
             write_stats(current_stats)
 
-        _cleanup_whitelisted_items_from_db()
+        # Skip full whitelist cleanup on single-feed runs — it runs during full aggregation.
         regenerate_edl_files()
         logger.info(f"Completed scheduled fetch for {name}.")
     except Exception as e:

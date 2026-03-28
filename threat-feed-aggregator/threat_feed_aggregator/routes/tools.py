@@ -97,6 +97,8 @@ def save_dedup_schedule():
     from ..scheduler_manager import update_scheduled_jobs
 
     try:
+        import re as _re
+
         config = read_config()
 
         enabled = request.form.get('enabled') == 'on'
@@ -105,6 +107,10 @@ def save_dedup_schedule():
         end_time = request.form.get('end_time', '23:59')
         interval = request.form.get('interval', type=int) or 60
         batch_size = request.form.get('batch_size', type=int) or 50
+
+        _TIME_RE = _re.compile(r'^\d{2}:\d{2}$')
+        if not _TIME_RE.match(start_time) or not _TIME_RE.match(end_time):
+            return api_error("Invalid time format. Use HH:MM.", "VALIDATION_ERROR", 400)
 
         config['dns_dedup_schedule'] = {
             'enabled': enabled,
@@ -133,8 +139,12 @@ def analyze_dns_duplicates():
 
         logger.info("DNS Deduplication Analyze: Manual run requested.")
 
-        # Trigger single batch processing
-        processed_count = asyncio.run(process_background_dns_batch(batch_size=50))
+        # Run async batch in a dedicated event loop thread to avoid conflicts
+        loop = asyncio.new_event_loop()
+        try:
+            processed_count = loop.run_until_complete(process_background_dns_batch(batch_size=50))
+        finally:
+            loop.close()
 
         # Trigger sweep immediately
         deleted_count = run_deduplication_sweep()
