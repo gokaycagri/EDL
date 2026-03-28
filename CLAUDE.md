@@ -32,9 +32,15 @@ ruff check threat_feed_aggregator/
 # Format
 ruff format threat_feed_aggregator/
 
-# Docker build & run
+# Docker build & run (from source)
 cd threat-feed-aggregator
 docker-compose up -d --build
+
+# Docker build — Community edition (ITAI_MODE=false default)
+docker build -t edl:latest threat-feed-aggregator/
+
+# Docker build — ITAI edition (ITAI_MODE=true baked in)
+docker build --build-arg ITAI_MODE=true -t edl:latest-itai threat-feed-aggregator/
 
 # Production (Gunicorn)
 gunicorn --worker-class=gthread --workers=2 --threads=4 --bind 0.0.0.0:8080 --timeout 300 threat_feed_aggregator.app:app

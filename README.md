@@ -53,9 +53,34 @@
 
 ---
 
+## Editions
+
+Two editions are published from the same codebase:
+
+| Edition | Image Tag | Description |
+|---------|-----------|-------------|
+| **Community** | `ghcr.io/mustafacagricaliskan/edl:latest` | Standalone deployment with local auth, MFA, LDAP/AD |
+| **ITAI** | `ghcr.io/mustafacagricaliskan/edl:latest-itai` | ITAI Hub integration with SSO, trace propagation, iframe embedding |
+
+Both editions contain the same code — the difference is the default `ITAI_MODE` environment variable (`false` for Community, `true` for ITAI). You can override this at runtime via `docker-compose.yml` or `-e ITAI_MODE=true/false`.
+
+---
+
 ## Quick Start
 
-### 1. Docker Deployment (Recommended)
+### 1. Docker — Pre-built Image (Recommended)
+
+```bash
+# Community edition (standalone)
+docker pull ghcr.io/mustafacagricaliskan/edl:latest
+docker run -d -p 8080:8080 -e SECRET_KEY=changeme ghcr.io/mustafacagricaliskan/edl:latest
+
+# ITAI edition (Hub integration)
+docker pull ghcr.io/mustafacagricaliskan/edl:latest-itai
+docker run -d -p 8080:8080 -e ITAI_JWT_SECRET=shared_secret ghcr.io/mustafacagricaliskan/edl:latest-itai
+```
+
+### 2. Docker — Build from Source
 
 ```bash
 git clone https://github.com/mustafacagricaliskan/EDL.git
@@ -65,7 +90,7 @@ cd EDL
 cp .env.example .env
 # Edit .env — set SECRET_KEY and ADMIN_PASSWORD
 
-# Start
+# Start with docker-compose
 cd threat-feed-aggregator
 docker-compose up -d --build
 ```
