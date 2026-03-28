@@ -2,6 +2,7 @@ import ipaddress
 import logging
 import os
 import re
+import threading
 from datetime import datetime
 
 import pytz
@@ -75,6 +76,8 @@ def load_safe_list():
 # Load safe list once on module import (or reload periodically if needed)
 SAFE_ITEMS, SAFE_NETWORKS = load_safe_list()
 
+_safe_list_lock = threading.Lock()
+
 def reload_safe_list():
     """Reloads the safe list from file into global variables."""
     global SAFE_ITEMS, SAFE_NETWORKS
@@ -85,48 +88,47 @@ def add_to_safe_list(item):
     if not item:
         return False, "Empty item"
 
-    # Check if already exists (simple check)
-    if item in SAFE_ITEMS:
-        return False, "Item already in safe list"
+    with _safe_list_lock:
+        if item in SAFE_ITEMS:
+            return False, "Item already in safe list"
 
-    try:
-        # Append to file
-        with open(SAFE_LIST_FILE, 'a') as f:
-            f.write(f"\n{item}")
+        try:
+            with open(SAFE_LIST_FILE, 'a') as f:
+                f.write(f"\n{item}")
 
-        # Reload memory
-        reload_safe_list()
-        return True, "Item added to safe list"
-    except Exception as e:
-        logger.error(f"Error writing to safe list file: {e}")
-        return False, str(e)
+            reload_safe_list()
+            return True, "Item added to safe list"
+        except Exception as e:
+            logger.error(f"Error writing to safe list file: {e}")
+            return False, str(e)
 
 def remove_from_safe_list(item_to_remove):
     """Removes an item from the safe list file."""
     if not os.path.exists(SAFE_LIST_FILE):
         return False, "Safe list file not found"
 
-    try:
-        with open(SAFE_LIST_FILE) as f:
-            lines = f.readlines()
+    with _safe_list_lock:
+        try:
+            with open(SAFE_LIST_FILE) as f:
+                lines = f.readlines()
 
-        with open(SAFE_LIST_FILE, 'w') as f:
-            found = False
-            for line in lines:
-                if line.strip() == item_to_remove:
-                    found = True
-                    continue # Skip this line
-                f.write(line)
+            with open(SAFE_LIST_FILE, 'w') as f:
+                found = False
+                for line in lines:
+                    if line.strip() == item_to_remove:
+                        found = True
+                        continue
+                    f.write(line)
 
-        if found:
-            reload_safe_list()
-            return True, "Item removed from safe list"
-        else:
-            return False, "Item not found in safe list"
+            if found:
+                reload_safe_list()
+                return True, "Item removed from safe list"
+            else:
+                return False, "Item not found in safe list"
 
-    except Exception as e:
-        logger.error(f"Error removing from safe list file: {e}")
-        return False, str(e)
+        except Exception as e:
+            logger.error(f"Error removing from safe list file: {e}")
+            return False, str(e)
 
 def _check_global_safelist(indicator):
     """Checks against the hardcoded global safe list (IPs/CIDRs)."""

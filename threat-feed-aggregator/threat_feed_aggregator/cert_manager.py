@@ -62,7 +62,7 @@ def generate_self_signed_cert():
     ).add_extension(
         x509.SubjectAlternativeName([
             x509.DNSName("localhost"),
-            x509.IPAddress(os.net.ip_address("10.9.102.12") if hasattr(os, 'net') else __import__('ipaddress').ip_address("10.9.102.12"))
+            x509.IPAddress(__import__('ipaddress').ip_address("127.0.0.1")),
         ]),
         critical=False,
     ).sign(key, hashes.SHA256())

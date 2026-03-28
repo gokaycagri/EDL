@@ -9,7 +9,7 @@ except ImportError:
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from ..database.connection import DB_TYPE, db_transaction
+from ..database.connection import DB_TYPE, db_readonly, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def set_admin_password(password, conn=None):
             return False, str(e)
 
 def get_admin_password_hash(conn=None):
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute("SELECT password_hash FROM users WHERE username = 'admin'")
         result = cursor.fetchone()
         return result['password_hash'] if result else None
@@ -45,7 +45,7 @@ def check_admin_credentials(password, conn=None):
 
 def get_all_users(conn=None):
     """Returns a list of all local users with their profile names."""
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         try:
             cursor = db.execute('''
                 SELECT u.username, p.name as profile_name
@@ -103,7 +103,7 @@ def delete_local_user(username, conn=None):
 
 def verify_local_user(username, password, conn=None):
     """Verifies credentials for any local user."""
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
         if result and check_password_hash(result['password_hash'], password):
@@ -112,7 +112,7 @@ def verify_local_user(username, password, conn=None):
 
 def local_user_exists(username, conn=None):
     """Checks if a user exists in the local database."""
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute("SELECT 1 FROM users WHERE username = ?", (username,))
         return cursor.fetchone() is not None
 
@@ -120,7 +120,7 @@ def local_user_exists(username, conn=None):
 
 def get_user_mfa_secret(username, conn=None):
     """Retrieves the MFA secret for a user."""
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute("SELECT mfa_secret FROM users WHERE username = ?", (username,))
         result = cursor.fetchone()
         return result['mfa_secret'] if result else None
@@ -155,7 +155,7 @@ def is_mfa_enabled(username, conn=None):
 # --- Admin Profile Management ---
 
 def get_admin_profiles(conn=None):
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute('SELECT * FROM admin_profiles ORDER BY id ASC')
         return [dict(row) for row in cursor.fetchall()]
 
@@ -196,7 +196,7 @@ def update_admin_profile(profile_id, description, permissions, conn=None):
 
 def get_user_permissions(username, conn=None):
     """Retrieves the permissions dict for a specific user."""
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute('''
             SELECT p.permissions
             FROM users u
@@ -214,7 +214,7 @@ def get_user_permissions(username, conn=None):
 # --- LDAP Group Mappings ---
 
 def get_ldap_group_mappings(conn=None):
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         cursor = db.execute('''
             SELECT m.id, m.group_dn, p.name as profile_name
             FROM ldap_group_mappings m
@@ -247,7 +247,7 @@ def get_profile_by_ldap_groups(user_groups, conn=None):
     Checks user groups against mappings and returns the best profile_id.
     Prioritizes profile_id 1 (Super_User) if multiple groups match.
     """
-    with db_transaction(conn) as db:
+    with db_readonly() as db:
         try:
             cursor = db.execute('SELECT group_dn, profile_id FROM ldap_group_mappings')
             mappings = cursor.fetchall()

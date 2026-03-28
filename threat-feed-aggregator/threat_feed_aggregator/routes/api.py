@@ -693,6 +693,7 @@ def restore_system():
 
 @bp_api.route('/safe_list/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_safe_list_item():
     item = request.form.get('item')
     if item:
@@ -711,6 +712,7 @@ def add_safe_list_item():
 
 @bp_api.route('/safe_list/remove', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def remove_safe_list_item():
     item = request.form.get('item')
     if item:
