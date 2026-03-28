@@ -87,7 +87,12 @@ jobs:
               echo ""
             fi
             echo "---"
-            echo "**Docker Image:** \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.version.outputs.tag }}\`"
+            echo "### Docker Images"
+            echo ""
+            echo "| Edition | Image |"
+            echo "|---------|-------|"
+            echo "| **Community** (standalone) | \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.version.outputs.version }}\` |"
+            echo "| **ITAI** (Hub integration) | \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.version.outputs.version }}-itai\` |"
           } > /tmp/release_notes.md
           cat /tmp/release_notes.md
 

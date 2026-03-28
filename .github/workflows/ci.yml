@@ -186,7 +186,12 @@ jobs:
           ${{ steps.notes.outputs.changelog }}
 
           ---
-          **Docker image:** \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.bump.outputs.new_version }}\`"
+          ### Docker Images
+
+          | Edition | Image |
+          |---------|-------|
+          | **Community** (standalone) | \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.bump.outputs.new_version }}\` |
+          | **ITAI** (Hub integration) | \`ghcr.io/${{ github.repository_owner }}/edl:${{ steps.bump.outputs.new_version }}-itai\` |"
 
   publish:
     runs-on: ubuntu-latest
@@ -222,20 +227,47 @@ jobs:
       - name: Determine Docker tags
         id: tags
         run: |
-          TAGS="${REGISTRY}/${IMAGE_NAME}:latest"
-          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${{ steps.version.outputs.app_version }}"
-          TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:sha-${{ steps.version.outputs.short_sha }}"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAGS="${TAGS},${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}"
-          fi
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          VER="${{ steps.version.outputs.app_version }}"
+          SHA="sha-${{ steps.version.outputs.short_sha }}"
 
-      - name: Build and push Docker image
+          # Community edition tags
+          COMMUNITY="${REGISTRY}/${IMAGE_NAME}:latest"
+          COMMUNITY="${COMMUNITY},${REGISTRY}/${IMAGE_NAME}:${VER}"
+          COMMUNITY="${COMMUNITY},${REGISTRY}/${IMAGE_NAME}:${SHA}"
+
+          # ITAI edition tags
+          ITAI="${REGISTRY}/${IMAGE_NAME}:latest-itai"
+          ITAI="${ITAI},${REGISTRY}/${IMAGE_NAME}:${VER}-itai"
+          ITAI="${ITAI},${REGISTRY}/${IMAGE_NAME}:${SHA}-itai"
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            COMMUNITY="${COMMUNITY},${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}"
+            ITAI="${ITAI},${REGISTRY}/${IMAGE_NAME}:${GITHUB_REF_NAME}-itai"
+          fi
+
+          echo "community=${COMMUNITY}" >> "$GITHUB_OUTPUT"
+          echo "itai=${ITAI}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Community edition
         uses: docker/build-push-action@v5
         with:
           context: ./threat-feed-aggregator
           push: true
-          tags: ${{ steps.tags.outputs.tags }}
+          tags: ${{ steps.tags.outputs.community }}
+          build-args: ITAI_MODE=false
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=EDL Community Edition (standalone)
+
+      - name: Build and push ITAI edition
+        uses: docker/build-push-action@v5
+        with:
+          context: ./threat-feed-aggregator
+          push: true
+          tags: ${{ steps.tags.outputs.itai }}
+          build-args: ITAI_MODE=true
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.app_version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=EDL ITAI Edition (Hub integration)

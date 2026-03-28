@@ -34,6 +34,10 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV PORT=8080
 
+# Edition: community (false) or itai (true)
+ARG ITAI_MODE=false
+ENV ITAI_MODE=${ITAI_MODE}
+
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libldap2 \
