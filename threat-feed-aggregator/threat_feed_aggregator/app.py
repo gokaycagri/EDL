@@ -40,10 +40,9 @@ except ImportError:
 
     def get_remote_address(): return "127.0.0.1"
 
-from flask import Flask
-from flask_wtf.csrf import CSRFProtect
-
+from flask import Flask  # noqa: I001
 from flask_session import Session
+from flask_wtf.csrf import CSRFProtect
 
 app = Flask(__name__)
 csrf = CSRFProtect()
