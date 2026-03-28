@@ -32,6 +32,7 @@ class TestMissingCoverage(unittest.TestCase):
             sess['logged_in'] = True
             sess['username'] = 'admin'
             sess['role'] = 'admin' # Assuming role might be needed
+            sess['permissions'] = {'system': 'rw'}
 
     # --- Tools Routes Tests ---
 

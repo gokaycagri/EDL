@@ -281,7 +281,7 @@ class TestRestoreValidation:
             content_type="multipart/form-data",
             follow_redirects=True,
         )
-        assert b"Invalid file in archive" in resp.data
+        assert b"Unexpected file in archive" in resp.data
 
     def test_restore_rejects_unexpected_files(self, auth_client):
         buf = io.BytesIO()
@@ -295,4 +295,4 @@ class TestRestoreValidation:
             content_type="multipart/form-data",
             follow_redirects=True,
         )
-        assert b"Invalid file in archive" in resp.data
+        assert b"Unexpected file in archive" in resp.data

@@ -16,6 +16,7 @@ class TestSystemSettings(unittest.TestCase):
         with self.client.session_transaction() as sess:
             sess['logged_in'] = True
             sess['username'] = 'admin'
+            sess['permissions'] = {'system': 'rw'}
 
     @patch('threat_feed_aggregator.routes.system.read_config')
     @patch('threat_feed_aggregator.routes.system.write_config')

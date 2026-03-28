@@ -25,7 +25,7 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertEqual(result, "line1\nline2\nline3")
-        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, proxy_auth=None, verify=True)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, verify=True)
 
     @patch('threat_feed_aggregator.data_collector._is_ssl_bypass_url', return_value=False)
     @patch('threat_feed_aggregator.data_collector.requests.get')
@@ -39,7 +39,7 @@ class TestDataCollector(unittest.TestCase):
 
         # Assert the result
         self.assertIsNone(result)
-        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, proxy_auth=None, verify=True)
+        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, verify=True)
 
 if __name__ == '__main__':
     unittest.main()

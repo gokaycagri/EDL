@@ -22,6 +22,7 @@ class TestGuiViews(unittest.TestCase):
         with self.client.session_transaction() as sess:
             sess['logged_in'] = True
             sess['username'] = 'admin'
+            sess['permissions'] = {'system': 'rw'}
 
     def test_login_page_load(self):
         """Test that the login page loads correctly."""
