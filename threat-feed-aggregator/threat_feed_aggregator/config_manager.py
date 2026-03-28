@@ -154,9 +154,16 @@ def read_stats():
             pass
     return {}
 
+_stats_lock = threading.Lock()
+
 def write_stats(stats):
-    with open(STATS_FILE, "w") as f:
-        json.dump(stats, f, indent=4)
+    tmp_path = STATS_FILE + ".tmp"
+    with _stats_lock:
+        with open(tmp_path, "w") as f:
+            json.dump(stats, f, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, STATS_FILE)
 
 def update_stats_last_updated(stats=None):
     if stats is None:

@@ -34,15 +34,10 @@ def api_key_required(f):
         auth_header = request.headers.get('Authorization') or request.headers.get('X-API-KEY')
 
         if auth_header:
-            import re
-            # Step 1: Remove any quotes, colons, and joiners
-            cleaned = auth_header.replace('"', '').replace("'", "").replace(':', '').strip()
-
-            # Step 2: Extract key if 'Bearer' exists (case insensitive)
-            # Handle cases like 'bearer4Sb...', 'bearer 4Sb...', or 'Bearer Bearer 4Sb...'
-            match = re.search(r'(?:bearer\s*)?([a-zA-Z0-9]{10,})', cleaned, re.IGNORECASE)
-            if match:
-                request_key = match.group(1)
+            cleaned = auth_header.strip()
+            # Strip Bearer prefix (case insensitive)
+            if cleaned.lower().startswith('bearer '):
+                request_key = cleaned[7:].strip()
             else:
                 request_key = cleaned
 
@@ -52,10 +47,16 @@ def api_key_required(f):
             logger.warning(f"API Key Missing! IP: {client_ip} Path: {request.path}")
             return api_error("Unauthorized: Missing API Key", "AUTH_MISSING_KEY", 401)
 
-        api_clients = config.get('api_clients', [])
-        valid_client = next((c for c in api_clients if c.get('api_key') == request_key), None)
+        import hmac
 
-        if not valid_client and request_key == config.get('api_key'):
+        api_clients = config.get('api_clients', [])
+        valid_client = next(
+            (c for c in api_clients if hmac.compare_digest(c.get('api_key', ''), request_key)),
+            None,
+        )
+
+        global_key = config.get('api_key', '')
+        if not valid_client and global_key and hmac.compare_digest(global_key, request_key):
              valid_client = {'name': 'Global', 'allowed_ips': []}
 
         if not valid_client:
@@ -107,7 +108,7 @@ def verify_2fa():
         user_data = session['pre_mfa_auth']
         username = user_data['username']
         secret = get_user_mfa_secret(username)
-        if verify_totp(secret, code):
+        if verify_totp(secret, code, username=username):
             # Regenerate session to prevent session fixation
             session.clear()
             session['logged_in'] = True

@@ -2,6 +2,8 @@ import base64
 import io
 import logging
 import ssl
+import threading
+import time
 
 import pyotp
 import qrcode
@@ -10,6 +12,31 @@ from ldap3 import ALL, Connection, Server, Tls
 from .db_manager import get_profile_by_ldap_groups, get_user_permissions, local_user_exists, verify_local_user
 
 logger = logging.getLogger(__name__)
+
+# --- TOTP Replay Protection ---
+# Tracks recently used TOTP codes to prevent replay within the validity window.
+# Key: (username, code), Value: expiry timestamp
+_used_totp_codes = {}
+_used_totp_lock = threading.Lock()
+_TOTP_REPLAY_TTL = 120  # 2x the valid_window period (60s window * 2)
+
+
+def _is_totp_replayed(username, code):
+    """Check if a TOTP code was already used and mark it as used."""
+    now = time.monotonic()
+    key = (username, code)
+
+    with _used_totp_lock:
+        # Purge expired entries
+        expired = [k for k, exp in _used_totp_codes.items() if exp <= now]
+        for k in expired:
+            del _used_totp_codes[k]
+
+        if key in _used_totp_codes:
+            return True
+
+        _used_totp_codes[key] = now + _TOTP_REPLAY_TTL
+        return False
 
 # --- MFA Helpers ---
 
@@ -32,8 +59,8 @@ def generate_qr_code(username, secret, issuer_name="Threat Feed Aggregator"):
     img.save(buffered)
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
-def verify_totp(secret, code):
-    """Verifies a TOTP code against the secret."""
+def verify_totp(secret, code, username=None):
+    """Verifies a TOTP code against the secret, with replay protection."""
     if not secret or not code:
         return False
 
@@ -45,6 +72,10 @@ def verify_totp(secret, code):
         # valid_window=2 allows for 60s before/after the current time (accommodating drift)
         result = totp.verify(code, valid_window=2)
         if result:
+            # Reject replayed codes within the validity window
+            if username and _is_totp_replayed(username, code):
+                logger.warning(f"TOTP replay detected for user: {username}")
+                return False
             logger.info("TOTP verification successful.")
         else:
             logger.warning("TOTP verification failed (Invalid Code)")

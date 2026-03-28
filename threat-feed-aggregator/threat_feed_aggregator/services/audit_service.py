@@ -4,7 +4,7 @@ Audit logging service — records security-relevant actions for compliance and f
 import logging
 from datetime import UTC, datetime
 
-from ..database.connection import db_transaction
+from ..database.connection import db_readonly, db_transaction
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ def log_action(username, action, target=None, details=None, ip_address=None):
 
 def get_audit_log(limit=100, offset=0, username=None, action=None):
     """Retrieve audit log entries with optional filtering."""
-    with db_transaction() as db:
+    with db_readonly() as db:
         query = "SELECT * FROM audit_log"
         params = []
         conditions = []

@@ -943,9 +943,11 @@ def deceptor_block():
             except Exception as db_err:
                 logger.error(f"Failed to upsert Deceptor indicators to main DB: {db_err}")
 
+        # Regenerate EDL files in background thread so firewalls pick up new blocks quickly
+        regenerate_edl_files()
+
         # ALWAYS return success 200 if the request reached here with valid API Key
         # This prevents Deceptor from showing "Failed" status during probes
-        # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
         return jsonify({'status': 'success', 'message': f'Processed {added_count} indicators.'}), 200
 
     except Exception as e:
@@ -977,7 +979,7 @@ def deceptor_unblock():
 
         # 3. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
-            # regenerate_edl_files() <-- DEACTIVATED to prevent GUI freezing
+            regenerate_edl_files()
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
 
         return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404

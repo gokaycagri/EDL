@@ -31,12 +31,26 @@ job_defaults = {
 
 scheduler = BackgroundScheduler(jobstores=jobstores, job_defaults=job_defaults)
 
+def _fetch_feed_by_name(source_name):
+    """Look up the current config for a source by name and fetch it."""
+    from .aggregator import fetch_and_process_single_feed
+
+    config = read_config()
+    source_config = next(
+        (s for s in config.get('source_urls', []) if s['name'] == source_name),
+        None,
+    )
+    if not source_config:
+        logger.warning(f"Source '{source_name}' no longer in config, skipping scheduled fetch.")
+        return
+    fetch_and_process_single_feed(source_config)
+
+
 def update_scheduled_jobs():
     """Refreshes the scheduler jobs based on current config."""
     from apscheduler.jobstores.base import ConflictingIdError
     from sqlalchemy.exc import IntegrityError
 
-    from .aggregator import fetch_and_process_single_feed
     from .azure_services import process_azure_feeds
     from .github_services import process_github_feeds
     from .microsoft_services import process_microsoft_feeds
@@ -56,12 +70,12 @@ def update_scheduled_jobs():
                 job_id = f"feed_fetch_{source_name}"
                 try:
                     scheduler.add_job(
-                        fetch_and_process_single_feed,
+                        _fetch_feed_by_name,
                         'interval',
                         minutes=interval_minutes,
                         id=job_id,
                         name=source_name,
-                        args=[source_config],
+                        args=[source_name],
                         replace_existing=True
                     )
                     logger.info(f"Scheduled job for {source_name} to run every {interval_minutes} minutes.")

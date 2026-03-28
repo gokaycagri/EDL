@@ -185,11 +185,10 @@ def db_transaction(conn=None):
             if should_close:
                 conn.commit()
     except Exception as e:
-        if should_close:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise e
     finally:
         if should_close:

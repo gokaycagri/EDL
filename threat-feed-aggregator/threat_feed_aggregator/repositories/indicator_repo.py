@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 
-from ..database.connection import DB_TYPE, db_readonly, db_transaction
+from ..database.connection import DB_TYPE, db_readonly, db_transaction, get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -166,20 +166,26 @@ def clean_database_vacuum(conn=None):
             logger.info("Database vacuumed and optimized.")
 
 def get_all_indicators_iter(conn=None):
-    with db_readonly() as db:
+    db = conn or get_db_connection()
+    try:
         cursor = db.execute('SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators')
-        rows = cursor.fetchall()
-    yield from rows
+        yield from cursor
+    finally:
+        if conn is None:
+            db.close()
 
 def get_filtered_indicators_iter(source_names=None, conn=None):
-    with db_readonly() as db:
+    db = conn or get_db_connection()
+    try:
         if not source_names:
             cursor = db.execute('SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators')
         else:
             placeholders = ','.join(['?'] * len(source_names))
             cursor = db.execute(f'SELECT DISTINCT i.* FROM indicators i JOIN indicator_sources s ON i.indicator = s.indicator WHERE s.source_name IN ({placeholders})', source_names)
-        rows = cursor.fetchall()
-    yield from rows
+        yield from cursor
+    finally:
+        if conn is None:
+            db.close()
 
 def remove_old_indicators(source_retention_map=None, default_days=30, conn=None):
     if source_retention_map is None:
@@ -364,10 +370,13 @@ def get_domains_for_resolution(limit=100, retry_days=7, conn=None):
         return [{'indicator': r[0], 'type': r[1]} for r in db.execute(q, (cutoff, limit)).fetchall()]
 
 def get_dns_resolution_cache_iter(conn=None):
-    with db_readonly() as db:
+    db = conn or get_db_connection()
+    try:
         cursor = db.execute('SELECT domain, resolved_ips FROM dns_resolution_cache')
-        rows = cursor.fetchall()
-    yield from rows
+        yield from cursor
+    finally:
+        if conn is None:
+            db.close()
 
 def delete_indicators(indicators_list, conn=None):
     if not indicators_list:
