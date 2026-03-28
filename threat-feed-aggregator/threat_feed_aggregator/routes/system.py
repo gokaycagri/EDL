@@ -38,6 +38,7 @@ from .auth import login_required
 
 @bp_system.route('/custom_lists/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_custom_list_route():
     name = request.form.get('name')
     data_format = request.form.get('format', 'text')
@@ -87,6 +88,7 @@ def add_custom_list_route():
 
 @bp_system.route('/custom_lists/delete', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def remove_custom_list_route():
     list_id = request.form.get('list_id', type=int)
     if list_id:
@@ -111,6 +113,7 @@ def index():
 
 @bp_system.route('/feed_health/reenable', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def reenable_feed():
     from ..services.feed_health import reenable_source
     source_name = request.form.get('source_name')
@@ -121,6 +124,7 @@ def reenable_feed():
 
 @bp_system.route('/ldap/mappings/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_ldap_mapping():
     import logging
     logger = logging.getLogger(__name__)
@@ -146,6 +150,7 @@ def add_ldap_mapping():
 
 @bp_system.route('/ldap/mappings/delete', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def delete_ldap_mapping():
     mapping_id = request.form.get('mapping_id', type=int)
 
@@ -160,6 +165,7 @@ def delete_ldap_mapping():
 
 @bp_system.route('/users/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_user():
     from ..utils import validate_password_strength
     username = request.form.get('username')
@@ -185,6 +191,7 @@ def add_user():
 
 @bp_system.route('/admin_profiles/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_profile():
     import json
     name = request.form.get('name')
@@ -206,6 +213,7 @@ def add_profile():
 
 @bp_system.route('/admin_profiles/update', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def update_profile():
     import json
     profile_id = request.form.get('profile_id', type=int)
@@ -227,6 +235,7 @@ def update_profile():
 
 @bp_system.route('/admin_profiles/delete', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def delete_profile():
     profile_id = request.form.get('profile_id', type=int)
 
@@ -241,6 +250,7 @@ def delete_profile():
 
 @bp_system.route('/users/delete', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def delete_user():
     username = request.form.get('username')
 
@@ -411,6 +421,7 @@ def import_blacklist():
 
 @bp_system.route('/add_source', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_source():
     # Note: In app.py this was /add
     name = request.form.get('name')
@@ -459,6 +470,7 @@ def add_source():
 
 @bp_system.route('/update_source/<int:index>', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def update_source(index):
     # Note: In app.py this was /update/<int:index>
     name = request.form.get('name')
@@ -504,6 +516,7 @@ def update_source(index):
 
 @bp_system.route('/remove_source/<int:index>', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def remove_source(index):
     # Note: In app.py this was /remove/<int:index>
     config = read_config()
@@ -518,6 +531,7 @@ def remove_source(index):
 
 @bp_system.route('/update_settings', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def update_settings():
     lifetime = request.form.get('indicator_lifetime_days')
     timezone = request.form.get('timezone')
@@ -541,6 +555,7 @@ def update_settings():
 
 @bp_system.route('/api_client/add', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def add_api_client():
     import secrets
     import string
@@ -578,6 +593,7 @@ def add_api_client():
 
 @bp_system.route('/api_client/regenerate_key', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def regenerate_api_client_key():
     import secrets
     import string
@@ -600,6 +616,7 @@ def regenerate_api_client_key():
 
 @bp_system.route('/api_client/remove', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def remove_api_client():
     client_id = request.form.get('client_id')
 
@@ -617,6 +634,7 @@ def remove_api_client():
 
 @bp_system.route('/update_ldap', methods=['POST'])
 @login_required
+@permission_required('system', 'rw')
 def update_ldap():
     enabled = request.form.get('ldap_enabled') == 'on'
 

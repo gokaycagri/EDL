@@ -666,9 +666,13 @@ def restore_system():
                 valid_files = ['config.json', 'threat_feed.db', 'safe_list.txt', 'jobs.sqlite']
                 file_names = zf.namelist()
                 for name in file_names:
-                    if name not in valid_files or '..' in name or name.startswith('/'):
-                        raise ValueError(f"Invalid file in archive: {name}")
-                zf.extractall(DATA_DIR)
+                    if name not in valid_files:
+                        raise ValueError(f"Unexpected file in archive: {name}")
+                    dest = os.path.realpath(os.path.join(DATA_DIR, name))
+                    if not dest.startswith(os.path.realpath(DATA_DIR) + os.sep):
+                        raise ValueError(f"Path traversal detected: {name}")
+                    with zf.open(name) as src, open(dest, 'wb') as dst:
+                        dst.write(src.read())
 
             flash('System restored successfully. Configuration reloaded.', 'success')
 
