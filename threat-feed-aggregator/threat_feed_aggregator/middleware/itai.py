@@ -64,10 +64,37 @@ def register_itai_middleware(app):
     app.config["SESSION_COOKIE_SECURE"] = True
 
     @app.before_request
-    def _extract_trace_id():
+    def _itai_before_request():
+        # Trace ID propagation
         tid = request.headers.get("X-ITAI-Trace-ID")
         if tid:
             trace_id_var.set(tid)
+
+        # SSO auto-login via query param (iframe first load)
+        token = request.args.get("itai_token")
+        if token and not session.get("logged_in"):
+            if not ITAI_JWT_SECRET:
+                logger.error("ITAI_JWT_SECRET not configured — cannot verify SSO token from query param.")
+                return None
+
+            payload = _verify_hs256_token(token, ITAI_JWT_SECRET)
+            if payload is not None:
+                username = payload.get("preferred_username") or payload.get("sub", "itai_user")
+                jwt_permissions = payload.get("permissions")
+                permissions = jwt_permissions if isinstance(jwt_permissions, dict) else {
+                    "dashboard": "rw", "system": "rw", "tools": "rw", "analysis": "rw",
+                }
+                session.clear()
+                session["logged_in"] = True
+                session["username"] = username
+                session["permissions"] = permissions
+                session["profile_name"] = "ITAI SSO"
+                logger.info(f"SSO auto-login via query param for user: {username}")
+                # Session is set — let request continue normally (no redirect).
+                # The itai_token stays in URL for this one request but the
+                # session cookie ensures subsequent requests don't need it.
+            else:
+                logger.warning("SSO query param token verification failed.")
 
     @app.after_request
     def _inject_trace_id(response):
