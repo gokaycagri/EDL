@@ -20,6 +20,7 @@ from ..db_manager import (
     add_api_blacklist_item,
     add_whitelist_item,
     clear_job_history,
+    get_api_blacklist_items,
     get_custom_list_by_token,
     get_custom_list_count,
     get_filtered_indicators_iter,
@@ -957,6 +958,179 @@ def deceptor_block():
     except Exception as e:
         logger.error(f"FortiDeceptor API Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# --- JSON API Endpoints for ITAI Adapter ---
+
+
+@bp_api.route('/whitelist')
+@login_required
+def get_whitelist_api():
+    """Returns paginated whitelist as JSON."""
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+
+    all_items = get_whitelist()
+    total = len(all_items)
+    start = (page - 1) * per_page
+    end = start + per_page
+    items = all_items[start:end]
+
+    return api_response({
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    })
+
+
+@bp_api.route('/blacklist')
+@login_required
+def get_blacklist_api():
+    """Returns paginated API blacklist as JSON."""
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+
+    all_items = get_api_blacklist_items()
+    total = len(all_items)
+    start = (page - 1) * per_page
+    end = start + per_page
+    items = all_items[start:end]
+
+    return api_response({
+        "items": items,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+    })
+
+
+@bp_api.route('/safe_list/add_api', methods=['POST'])
+@login_required
+@permission_required('system', 'rw')
+def add_safe_list_item_api():
+    """JSON version of safe list add — accepts application/json body."""
+    data = request.get_json(silent=True) or {}
+    item = data.get("item", "").strip()
+    if not item:
+        return api_error("item is required", "VALIDATION_ERROR", 400)
+
+    is_valid, _ = validate_indicator(item)
+    if not is_valid:
+        return api_error(
+            f'"{item}" is not a valid IP, CIDR, or Domain/URL.',
+            "VALIDATION_ERROR",
+            400,
+        )
+
+    success, message = add_to_safe_list(item)
+    if success:
+        return api_response({"added": item})
+    return api_error(message, "SAFE_LIST_ADD_FAILED", 400)
+
+
+@bp_api.route('/safe_list/remove_api', methods=['POST'])
+@login_required
+@permission_required('system', 'rw')
+def remove_safe_list_item_api():
+    """JSON version of safe list remove — accepts application/json body."""
+    data = request.get_json(silent=True) or {}
+    item = data.get("item", "").strip()
+    if not item:
+        return api_error("item is required", "VALIDATION_ERROR", 400)
+
+    success, message = remove_from_safe_list(item)
+    if success:
+        return api_response({"removed": item})
+    return api_error(message, "SAFE_LIST_REMOVE_FAILED", 400)
+
+
+@bp_api.route('/backup_api', methods=['POST'])
+@login_required
+@permission_required('system', 'rw')
+def backup_system_api():
+    """JSON version of backup — saves zip to DATA_DIR and returns path."""
+    try:
+        from ..services.audit_service import log_action
+
+        username = session.get('username', 'unknown')
+        log_action(
+            username,
+            'backup_api',
+            ip_address=request.remote_addr,
+            details=f"User: {username}",
+        )
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_filename = f'threat_feed_backup_{timestamp}.zip'
+        backup_path = os.path.join(DATA_DIR, backup_filename)
+
+        with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            files_to_backup = ['config.json', 'threat_feed.db', 'safe_list.txt', 'jobs.sqlite']
+            for filename in files_to_backup:
+                file_path = os.path.join(DATA_DIR, filename)
+                if os.path.exists(file_path):
+                    zf.write(file_path, filename)
+
+        return api_response({"path": backup_path, "filename": backup_filename}, message="Backup created")
+    except Exception as e:
+        logger.error(f"Backup API error: {e}")
+        return api_error(str(e), "BACKUP_ERROR", 500)
+
+
+@bp_api.route('/restore_api', methods=['POST'])
+@login_required
+@permission_required('system', 'rw')
+def restore_system_api():
+    """JSON version of restore — accepts base64-encoded zip in body."""
+    import base64
+
+    data = request.get_json(silent=True) or {}
+    zip_b64 = data.get("zip_data", "").strip()
+    if not zip_b64:
+        return api_error("zip_data (base64-encoded zip) is required", "VALIDATION_ERROR", 400)
+
+    try:
+        zip_bytes = base64.b64decode(zip_b64)
+    except Exception:
+        return api_error("zip_data is not valid base64", "VALIDATION_ERROR", 400)
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            valid_files = ['config.json', 'threat_feed.db', 'safe_list.txt', 'jobs.sqlite']
+            for name in zf.namelist():
+                if name not in valid_files:
+                    return api_error(
+                        f"Unexpected file in archive: {name}",
+                        "VALIDATION_ERROR",
+                        400,
+                    )
+                dest = os.path.realpath(os.path.join(DATA_DIR, name))
+                if not dest.startswith(os.path.realpath(DATA_DIR) + os.sep):
+                    return api_error(
+                        f"Path traversal detected: {name}",
+                        "VALIDATION_ERROR",
+                        400,
+                    )
+                with zf.open(name) as src, open(dest, 'wb') as dst:
+                    dst.write(src.read())
+
+        update_scheduled_jobs()
+
+        from ..services.audit_service import log_action
+
+        username = session.get('username', 'unknown')
+        log_action(
+            username,
+            'restore_api',
+            ip_address=request.remote_addr,
+            details=f"User: {username}",
+        )
+
+        return api_response({"restored": True}, message="System restored successfully. Configuration reloaded.")
+    except Exception as e:
+        logger.error(f"Restore API error: {e}")
+        return api_error(str(e), "RESTORE_ERROR", 500)
 
 
 @bp_api.route('/deceptor/unblock', methods=['POST'])
