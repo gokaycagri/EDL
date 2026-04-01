@@ -1138,30 +1138,55 @@ def restore_system_api():
 def deceptor_unblock():
     """
     FortiDeceptor integration for unblocking IPs.
-    Extracts IP from 'whunblockheader' or 'whunblockdata'.
+    Tries all common field locations (mirrors block endpoint robustness).
     """
+    import re as _re
     try:
-        # 1. Extract IP
-        ip = request.headers.get('whunblockheader')
+        raw_body = request.get_data(as_text=True)
+        data_all = request.get_json(silent=True) or request.form
+
+        logger.info(f"Deceptor UNBLOCK request | Client IP: {request.remote_addr} | Body length: {len(raw_body)}")
+
+        # 1. Extract IP — check all possible locations FortiDeceptor may use
+        ip = (
+            request.headers.get('whunblockheader')
+            or request.headers.get('whblockheader')
+            or request.headers.get('Hacker-IP')
+            or data_all.get('whunblockdata')
+            or data_all.get('whblockdata')
+            or data_all.get('whblockheader')
+            or data_all.get('Hacker-IP')
+        )
+
+        # Fallback: regex scan raw body for first IPv4
         if not ip:
-            data = request.get_json(silent=True) or request.form
-            ip = data.get('whunblockdata')
+            matches = _re.findall(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', raw_body)
+            if matches:
+                ip = matches[0]
+                logger.info(f"Deceptor UNBLOCK: IP extracted via regex fallback: {ip}")
 
         if not ip:
-            return jsonify({'status': 'error', 'message': 'Missing IP (Hacker-IP)'}), 400
+            logger.error(f"Deceptor UNBLOCK Failed: No IP found in request (body length: {len(raw_body)})")
+            return jsonify({'status': 'error', 'message': 'Missing IP'}), 400
+
+        ip = ip.strip()
 
         # 2. Validate IP before removal
         is_valid, _ = validate_indicator(ip)
         if not is_valid:
+            logger.warning(f"Deceptor UNBLOCK: invalid indicator: {ip}")
             return jsonify({'status': 'error', 'message': f'Invalid indicator: {ip}'}), 400
 
         # 3. Remove from API Blacklist
         if remove_api_blacklist_item(ip):
             regenerate_edl_files()
+            logger.info(f"Deceptor UNBLOCK: {ip} removed from blacklist.")
             return jsonify({'status': 'success', 'message': f"IP {ip} removed from blacklist."})
 
-        return jsonify({'status': 'error', 'message': 'Item not found in blacklist'}), 404
+        logger.info(f"Deceptor UNBLOCK: {ip} not found in blacklist (may already be removed).")
+        # Return success so FortiDeceptor doesn't keep retrying for already-removed entries
+        return jsonify({'status': 'success', 'message': f"IP {ip} not found in blacklist (already removed)."}), 200
 
     except Exception as e:
-        logger.error(f"FortiDeceptor API Error: {e}")
+        logger.error(f"FortiDeceptor UNBLOCK API Error: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
