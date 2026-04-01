@@ -50,6 +50,24 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
     unique_indicators_map = {item[0]: item for item in indicators}
     deduplicated_indicators = list(unique_indicators_map.values())
 
+    # Safety guard: never ingest RFC1918 private IPv4 IP/CIDR indicators from feeds.
+    from ..utils import is_rfc1918_private_ipv4_indicator
+
+    filtered_indicators = [
+        item for item in deduplicated_indicators if not is_rfc1918_private_ipv4_indicator(item[0], item[2])
+    ]
+
+    private_dropped = len(deduplicated_indicators) - len(filtered_indicators)
+    if private_dropped:
+        logger.warning(
+            "[%s] Skipped %s RFC1918 private IPv4 indicators during bulk upsert.",
+            source_name,
+            private_dropped,
+        )
+
+    if not filtered_indicators:
+        return
+
     CHUNK_SIZE = 5000  # Process in batches
     now_iso = datetime.now(UTC).isoformat()
 
@@ -58,8 +76,8 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
             # Create temp table
             db.execute('CREATE TEMPORARY TABLE IF NOT EXISTS temp_bulk_indicators (indicator TEXT, country TEXT, type TEXT)')
 
-            for i in range(0, len(deduplicated_indicators), CHUNK_SIZE):
-                chunk = deduplicated_indicators[i:i + CHUNK_SIZE]
+            for i in range(0, len(filtered_indicators), CHUNK_SIZE):
+                chunk = filtered_indicators[i:i + CHUNK_SIZE]
                 db.execute('DELETE FROM temp_bulk_indicators')
                 db.executemany('INSERT INTO temp_bulk_indicators VALUES (?, ?, ?)', chunk)
 
@@ -94,7 +112,7 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
                     ''', (now_iso, source_name))
 
             invalidate_stats_cache()
-            logger.info(f"Bulk upsert completed for {source_name}: {len(deduplicated_indicators)} items.")
+            logger.info(f"Bulk upsert completed for {source_name}: {len(filtered_indicators)} items.")
         except Exception as e:
             logger.error(f"Error bulk upserting for {source_name}: {e}")
             raise

@@ -12,6 +12,7 @@ from ..db_manager import (
     get_domains_for_resolution,
     update_dns_cache_batch,
 )
+from ..config_manager import read_stats, write_stats
 
 logger = logging.getLogger(__name__)
 
@@ -157,4 +158,22 @@ def run_deduplication_sweep():
         total_deleted += count
 
     logger.info(f"Deduplication Sweep Complete. Scanned {scanned_count} cached domains. Removed {total_deleted} duplicates.")
+    
+    # Update stats.json with deduplication results
+    try:
+        stats = read_stats()
+        if "dedup_stats" not in stats:
+            stats["dedup_stats"] = {
+                "total_deleted": 0,
+                "last_run": None,
+                "last_deleted": 0
+            }
+        stats["dedup_stats"]["total_deleted"] += total_deleted
+        stats["dedup_stats"]["last_run"] = datetime.now(UTC).isoformat()
+        stats["dedup_stats"]["last_deleted"] = total_deleted
+        write_stats(stats)
+        logger.info(f"Stats updated. Total duplicates removed so far: {stats['dedup_stats']['total_deleted']}")
+    except Exception as e:
+        logger.error(f"Failed to update dedup stats: {e}")
+    
     return total_deleted

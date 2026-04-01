@@ -1,5 +1,5 @@
 """Tests for indicator validation utility."""
-from threat_feed_aggregator.utils import validate_indicator
+from threat_feed_aggregator.utils import is_rfc1918_private_ipv4_indicator, validate_indicator
 
 
 class TestValidateIndicator:
@@ -54,3 +54,13 @@ class TestValidateIndicator:
         # "localhost" or similar — implementation dependent
         result = validate_indicator("localhost")
         assert isinstance(result, tuple)
+
+    def test_private_helper_ipv4(self):
+        assert is_rfc1918_private_ipv4_indicator("10.236.58.12", "ip") is True
+        assert is_rfc1918_private_ipv4_indicator("172.20.10.0/24", "cidr") is True
+        assert is_rfc1918_private_ipv4_indicator("192.168.1.111", "ip") is True
+
+    def test_private_helper_non_private_or_non_ipv4(self):
+        assert is_rfc1918_private_ipv4_indicator("8.8.8.8", "ip") is False
+        assert is_rfc1918_private_ipv4_indicator("2001:db8::1", "ip") is False
+        assert is_rfc1918_private_ipv4_indicator("example.com", "domain") is False

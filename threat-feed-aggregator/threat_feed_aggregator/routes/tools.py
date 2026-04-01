@@ -134,6 +134,8 @@ def save_dedup_schedule():
 def analyze_dns_duplicates():
     try:
         import asyncio
+        import json
+        from pathlib import Path
 
         from ..services.dns_deduplication import process_background_dns_batch, run_deduplication_sweep
 
@@ -152,13 +154,71 @@ def analyze_dns_duplicates():
             f"DNS Deduplication Analyze: Completed manual run (resolved={processed_count}, deleted={deleted_count})."
         )
 
+        # Get total deleted from stats.json
+        stats_file = Path(__file__).parent.parent / "data" / "stats.json"
+        total_deleted = 0
+        if stats_file.exists():
+            try:
+                with open(stats_file) as f:
+                    stats = json.load(f)
+                    total_deleted = stats.get("dedup_stats", {}).get("total_deleted", 0)
+            except Exception as e:
+                logger.warning(f"Could not read total dedup stats: {e}")
+
         return api_response(
-            {"success": True, "resolved": processed_count, "deleted": deleted_count, "duplicates": []},
-            message=f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}."
+            {
+                "success": True, 
+                "resolved": processed_count, 
+                "deleted": deleted_count,
+                "total_deleted": total_deleted,
+                "duplicates": []
+            },
+            message=f"Analysis complete. Resolved {processed_count}, Deleted {deleted_count}. Total deleted so far: {total_deleted}."
         )
     except Exception as e:
         logger.error(f"Error in analyze_dns_duplicates: {e}")
         return api_error(str(e), "DNS_DEDUP_ERROR", 500)
+
+@bp_tools.route('/api/dns_deduplication/status', methods=['GET'])
+@login_required
+def get_dns_dedup_status():
+    """Get current DNS deduplication statistics"""
+    try:
+        import json
+        from pathlib import Path
+
+        stats_file = Path(__file__).parent.parent / "data" / "stats.json"
+        dedup_stats = {
+            "total_deleted": 0,
+            "last_run": None,
+            "last_deleted": 0,
+            "cache_entries": 0
+        }
+
+        # Read dedup stats from stats.json
+        if stats_file.exists():
+            try:
+                with open(stats_file) as f:
+                    stats = json.load(f)
+                    dedup_stats.update(stats.get("dedup_stats", {}))
+            except Exception as e:
+                logger.warning(f"Could not read dedup stats: {e}")
+
+        # Get cache entry count
+        from ..db_manager import (
+            db_readonly,
+        )
+        try:
+            with db_readonly() as db:
+                cursor = db.execute('SELECT COUNT(*) FROM dns_resolution_cache')
+                dedup_stats["cache_entries"] = cursor.fetchone()[0]
+        except Exception as e:
+            logger.warning(f"Could not get cache count: {e}")
+
+        return api_response(dedup_stats, message="DNS deduplication status retrieved successfully.")
+    except Exception as e:
+        logger.error(f"Error in get_dns_dedup_status: {e}")
+        return api_error(str(e), "DNS_STATUS_ERROR", 500)
 
 @bp_tools.route('/api/dns_deduplication/delete', methods=['POST'])
 @login_required

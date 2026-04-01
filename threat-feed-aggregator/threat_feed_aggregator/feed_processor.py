@@ -20,7 +20,7 @@ from .db_manager import (
 from .geoip_manager import get_country_code
 from .parsers import get_parser
 from .services.job_service import job_service
-from .utils import is_whitelisted
+from .utils import is_rfc1918_private_ipv4_indicator, is_whitelisted
 
 logger = logging.getLogger(__name__)
 
@@ -54,12 +54,18 @@ class FeedAggregator:
         whitelist_db = get_whitelist(conn=self.db_conn)
         whitelist_filters = [w["item"] for w in whitelist_db]
         filtered_items = []
+        dropped_private = 0
         for item, item_type in items:
             if not item or item_type == "unknown":
+                continue
+            if is_rfc1918_private_ipv4_indicator(item, item_type):
+                dropped_private += 1
                 continue
             whitelisted, _ = is_whitelisted(item, whitelist_filters)
             if not whitelisted:
                 filtered_items.append((item, item_type))
+        if dropped_private:
+            logger.warning("Skipped %s RFC1918 private IPv4 indicators during feed filtering.", dropped_private)
         return filtered_items
 
     def enrich_data(self, items, source_name):
@@ -196,7 +202,11 @@ def test_feed_source(source_config):
                 return False, "No data fetched from URL.", []
             if not items and source_config.get("format") != "taxii":
                 items = aggregator.parse_data(raw_data, source_config)
-            valid_items = [item for item, item_type in items if item and item_type != "unknown"]
+            valid_items = [
+                item
+                for item, item_type in items
+                if item and item_type != "unknown" and not is_rfc1918_private_ipv4_indicator(item, item_type)
+            ]
             count = len(valid_items)
             sample = valid_items[:5]
             if count == 0:

@@ -9,6 +9,7 @@ import threading
 
 from .config_manager import DATA_DIR
 from .db_manager import get_all_indicators_iter, get_api_blacklist_items
+from .utils import is_rfc1918_private_ipv4_indicator
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,14 @@ def regenerate_edl_files():
                 open(tmp["url_list"], "w") as url_l,
             ):
                 count = 0
+                skipped_private = 0
                 for row in get_all_indicators_iter():
                     ind = row["indicator"]
                     itype = row["type"]
+
+                    if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
+                        skipped_private += 1
+                        continue
 
                     if itype in ("ip", "cidr"):
                         pa_ip.write(f"{ind}\n")
@@ -63,6 +69,11 @@ def regenerate_edl_files():
                 for item in get_api_blacklist_items():
                     ind = item["item"]
                     itype = item["type"]
+
+                    if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
+                        skipped_private += 1
+                        continue
+
                     if itype in ("ip", "cidr"):
                         pa_ip.write(f"{ind}\n")
                         fn_ip.write(f"{ind}\n")
@@ -78,7 +89,11 @@ def regenerate_edl_files():
             shutil.copy(paths["palo_alto_ip"], os.path.join(DATA_DIR, "palo_alto_edl.txt"))
             shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
 
-            logger.info(f"EDL files regenerated successfully. (Processed: {count} records)")
+            logger.info(
+                "EDL files regenerated successfully. (Processed: %s records, skipped private: %s)",
+                count,
+                skipped_private,
+            )
         except Exception as e:
             logger.error(f"Error regenerating EDL files: {e}")
             for key in tmp:

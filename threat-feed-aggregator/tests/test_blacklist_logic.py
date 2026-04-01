@@ -64,5 +64,11 @@ class TestBlacklistLogic(unittest.TestCase):
         self.assertNotIn(self.test_ip_expired, item_ips_after)
         self.assertIn(self.test_ip_valid, item_ips_after)
 
+    def test_rejects_private_ipv4(self):
+        """Private RFC1918 IPs must never be accepted into API blacklist."""
+        success, msg = add_api_blacklist_item("10.0.0.1", comment="Should be rejected", conn=self.conn)
+        self.assertFalse(success)
+        self.assertIn("RFC1918", msg)
+
 if __name__ == '__main__':
     unittest.main()

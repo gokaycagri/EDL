@@ -11,7 +11,7 @@ services:
       - 10.236.6.12
     ports:
       - "443:8080"
-      - "8080:8080"
+      - "8787:8080"
     volumes:
       # Persist config and EDLs (DB is now in Postgres service)
       - ./threat-feed-aggregator/data:/app/threat_feed_aggregator/data

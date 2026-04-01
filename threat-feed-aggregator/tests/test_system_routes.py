@@ -167,6 +167,71 @@ class TestBlacklistAdd:
         assert b"not a valid" in resp.data
 
 
+class TestBulkIndicatorDelete:
+    """POST /system/indicators/bulk_delete"""
+
+    def test_requires_auth(self, client):
+        resp = client.post("/system/indicators/bulk_delete", data={"items": "1.1.1.1"})
+        assert resp.status_code == 302
+        assert "/auth/login" in resp.headers.get("Location", "")
+
+    def test_requires_rw_permission(self, readonly_client):
+        resp = readonly_client.post(
+            "/system/indicators/bulk_delete",
+            data={"items": "1.1.1.1"},
+            follow_redirects=True,
+        )
+        assert b"Access Denied" in resp.data
+
+    def test_empty_input_rejected(self, auth_client):
+        resp = auth_client.post(
+            "/system/indicators/bulk_delete",
+            data={"items": ""},
+            follow_redirects=True,
+        )
+        assert b"No indicators provided" in resp.data
+
+    def test_invalid_only_input_rejected(self, auth_client):
+        resp = auth_client.post(
+            "/system/indicators/bulk_delete",
+            data={"items": "not_valid!!!"},
+            follow_redirects=True,
+        )
+        assert b"No valid indicators found" in resp.data
+
+    @patch("threat_feed_aggregator.aggregator.regenerate_edl_files")
+    @patch("threat_feed_aggregator.routes.system.delete_indicators", return_value=2)
+    def test_bulk_delete_success(self, mock_delete, mock_regen, auth_client):
+        resp = auth_client.post(
+            "/system/indicators/bulk_delete",
+            data={"items": "1.1.1.1\n8.8.8.8"},
+            follow_redirects=True,
+        )
+        assert mock_delete.called
+        assert mock_delete.call_args[0][0] == ["1.1.1.1", "8.8.8.8"]
+        assert mock_regen.called
+        assert b"Deleted 2 indicators from database" in resp.data
+
+    @patch("threat_feed_aggregator.aggregator.regenerate_edl_files")
+    @patch("threat_feed_aggregator.routes.system.remove_api_blacklist_item", return_value=True)
+    @patch(
+        "threat_feed_aggregator.routes.system.get_api_blacklist_item_by_value",
+        side_effect=[{"id": 1}, None],
+    )
+    @patch("threat_feed_aggregator.routes.system.delete_indicators", return_value=1)
+    def test_bulk_delete_with_blocklist_cleanup(self, mock_delete, mock_lookup, mock_remove, mock_regen, auth_client):
+        resp = auth_client.post(
+            "/system/indicators/bulk_delete",
+            data={"items": "1.1.1.1\n8.8.8.8", "remove_from_blocklist": "on"},
+            follow_redirects=True,
+        )
+        assert mock_delete.called
+        assert mock_lookup.call_count == 2
+        mock_remove.assert_called_once_with("1.1.1.1")
+        assert mock_regen.called
+        assert b"removed 1 from block list" in resp.data
+
+
 # ============================================================
 # Import / Export
 # ============================================================

@@ -33,7 +33,7 @@ class TestUpsertIndicatorsBulk:
         indicators = [
             ("1.2.3.4", "US", "ip"),
             ("evil.com", None, "domain"),
-            ("10.0.0.0/8", None, "cidr"),
+            ("8.8.8.0/24", None, "cidr"),
         ]
         upsert_indicators_bulk(indicators, source_name="TestSource")
 
@@ -43,6 +43,25 @@ class TestUpsertIndicatorsBulk:
 
             sources = db.execute("SELECT COUNT(*) FROM indicator_sources").fetchone()[0]
             assert sources == 3
+
+    def test_skips_rfc1918_private_ipv4_indicators(self, db_with_schema):
+        from threat_feed_aggregator.repositories.indicator_repo import upsert_indicators_bulk
+        import threat_feed_aggregator.database.connection as conn_mod
+        importlib.reload(conn_mod)
+        db_transaction = conn_mod.db_transaction
+
+        indicators = [
+            ("10.0.0.0/8", None, "cidr"),
+            ("192.168.1.10", None, "ip"),
+            ("1.2.3.4", "US", "ip"),
+        ]
+        upsert_indicators_bulk(indicators, source_name="PrivateFilterTest")
+
+        with db_transaction() as db:
+            rows = db.execute("SELECT indicator, type FROM indicators ORDER BY indicator").fetchall()
+            assert len(rows) == 1
+            assert rows[0]["indicator"] == "1.2.3.4"
+            assert rows[0]["type"] == "ip"
 
     def test_upsert_preserves_existing_score(self, db_with_schema):
         from threat_feed_aggregator.repositories.indicator_repo import upsert_indicators_bulk

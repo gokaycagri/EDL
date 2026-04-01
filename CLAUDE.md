@@ -18,13 +18,13 @@ python -m threat_feed_aggregator.app
 
 # Run all tests
 cd threat-feed-aggregator
-python -m pytest tests/ -v --tb=short
+python -m pytest tests/ -v --tb=short --import-mode=importlib
 
 # Run a single test file
-python -m pytest tests/test_contract.py -v
+python -m pytest tests/test_contract.py -v --import-mode=importlib
 
 # Run ITAI integration contract tests (subset run in CI)
-python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v --tb=short
+python -m pytest tests/test_contract.py tests/test_sso.py tests/test_manifest_compat.py -v --tb=short --import-mode=importlib
 
 # Lint
 ruff check threat_feed_aggregator/
@@ -32,7 +32,10 @@ ruff check threat_feed_aggregator/
 # Format
 ruff format threat_feed_aggregator/
 
-# Docker build & run (from source)
+# Security scan
+bandit -r threat_feed_aggregator/ --skip B608,B301,B403,B404,B603,B605,B607
+
+# Docker build & run
 cd threat-feed-aggregator
 docker-compose up -d --build
 
@@ -46,7 +49,7 @@ docker build --build-arg ITAI_MODE=true -t edl:latest-itai threat-feed-aggregato
 gunicorn --worker-class=gthread --workers=2 --threads=4 --bind 0.0.0.0:8080 --timeout 300 threat_feed_aggregator.app:app
 ```
 
-System dependencies for CI/dev: `libldap2-dev libsasl2-dev libssl-dev whois`
+System dependencies for CI/dev: `libldap2-dev libsasl2-dev libssl-dev whois libjpeg-dev zlib1g-dev`
 
 ## Architecture
 
@@ -82,9 +85,10 @@ Jinja2 templates in `templates/`, static assets in `static/`. Uses Bootstrap/Sof
 
 ### Configuration
 
-- **Runtime config**: `data/config.json` (threat sources, scheduling, proxy, LDAP, `ssl_bypass_hosts`)
-- **Environment**: `SECRET_KEY` (required for production), `ADMIN_PASSWORD`, `PORT`, `DB_TYPE`, `ITAI_MODE`, `ITAI_JWT_SECRET`, `FLASK_DEBUG`
-- **Version**: `threat_feed_aggregator/version.py`
+- **Runtime config**: `data/config.json` (threat sources, scheduling, proxy, LDAP, `ssl_bypass_hosts`). Access via `config_manager.py` which caches with mtime-based invalidation. Example config at `threat_feed_aggregator/config/config.json.example`.
+- **Environment**: `SECRET_KEY` (required for production), `ADMIN_PASSWORD`, `PORT`, `DB_TYPE`, `ITAI_MODE`, `ITAI_JWT_SECRET`, `FLASK_DEBUG`, `SESSION_TIMEOUT_MINUTES` (default 60)
+- **Version**: `threat_feed_aggregator/version.py` — auto-bumped by CI based on conventional commit messages (feat → minor, fix → patch, BREAKING CHANGE → major)
+- **Container init**: `prestart.py` (called by `entrypoint.sh`) initializes DB schema, sets admin user from `ADMIN_PASSWORD`, generates self-signed SSL certs, and runs any pending migration SQL
 
 ## Code Style
 
@@ -149,6 +153,19 @@ An adapter in the ITAI repo (`modules/external/EDL/adapter.py`) proxies 28 tools
 - New endpoints should follow existing URL patterns (`/api/` for data, `/tools/api/` for investigation)
 
 **Full endpoint-to-tool mapping:** See [docs/itai-adapter-contract.md](docs/itai-adapter-contract.md)
+
+## Testing
+
+### Test Fixtures (conftest.py)
+
+- **`auth_client`** — pre-authenticated Flask test client with admin permissions
+- **`readonly_client`** — test client with read-only user permissions
+- **`_isolate_db`** — each test gets an isolated temp SQLite DB; APScheduler is mocked to prevent background job interference
+- Tests must use `--import-mode=importlib` (required for project structure compatibility)
+
+### Database Migrations
+
+Schema migrations use inline `ALTER TABLE IF NOT EXISTS` in `database/schema.py` — there is no Alembic/Flyway. New columns are added directly in `schema.py` and applied automatically on startup.
 
 ## Branching
 

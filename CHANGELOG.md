@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.26.1] - 2026-04-01
+
+### Added
+- **Bulk Indicator Delete Module:** New in-app UI card on the dashboard (`POST /system/indicators/bulk_delete`) lets administrators paste a list of IPs, CIDRs, domains, or URLs and delete them from the database in one operation. Optionally removes entries from the block list simultaneously. Requires `system:rw` permission.
+- **RFC1918 Private IP Guard:** Defense-in-depth enforcement prevents RFC1918 private IPv4 addresses and CIDRs (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) from entering the system. Blocked at ingestion (`indicator_repo`), block list (`whitelist_repo`), feed processing (`feed_processor`), and EDL export (`edl_generator`).
+
+### Security
+- **Private IP Ingestion Prevention:** External feeds can no longer introduce RFC1918 private addresses into indicators or block list entries. Existing private records are logged and skipped during EDL generation.
+- **Database Cleanup:** One-time SQL migration script (`scripts/cleanup_private_ipv4_postgres.sql`) removes any pre-existing private IP entries.
+
+### Changed
+- **Port Mapping:** Host port remapped from `8080` to `8787` in `docker-compose.yml` to free port 8080 for other services.
+- **EDL Generator:** Now skips and counts private IPv4 entries during file generation with a `skipped_private` log metric.
+
+### Tests
+- Added RFC1918 test coverage across `test_indicator_repo.py`, `test_edl_generator.py`, `test_validate_indicator.py`, `test_blacklist_logic.py`.
+- Added `TestBulkIndicatorDelete` class (6 test cases) in `test_system_routes.py`.
+
 ## [1.20.1] - 2026-03-16
 
 ### Added

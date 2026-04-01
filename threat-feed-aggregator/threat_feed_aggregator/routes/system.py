@@ -1,3 +1,4 @@
+import re
 import threading
 
 from flask import flash, redirect, render_template, request, session, url_for
@@ -18,8 +19,10 @@ from ..db_manager import (
     delete_custom_list,
     delete_ldap_group_mapping,
     delete_local_user,
+    delete_indicators,
     delete_whitelisted_indicators,
     get_admin_profiles,
+    get_api_blacklist_item_by_value,
     get_all_users,
     get_ldap_group_mappings,
     is_mfa_enabled,
@@ -34,6 +37,23 @@ from ..db_manager import (
 from ..response_helpers import api_error, api_response
 from . import bp_system
 from .auth import login_required
+
+
+def _parse_bulk_indicator_input(raw_items):
+    """Parse user input into a unique indicator list while preserving order."""
+    if not raw_items:
+        return []
+
+    candidates = re.split(r"[\s,;]+", raw_items)
+    parsed = []
+    seen = set()
+    for candidate in candidates:
+        item = candidate.strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        parsed.append(item)
+    return parsed
 
 
 @bp_system.route('/custom_lists/add', methods=['POST'])
@@ -1144,6 +1164,58 @@ def update_blacklist():
     else:
         flash('Invalid data for update.', 'danger')
 
+    return redirect(url_for('dashboard.index'))
+
+
+@bp_system.route('/indicators/bulk_delete', methods=['POST'])
+@login_required
+@permission_required('system', 'rw')
+def bulk_delete_indicators_route():
+    """Bulk-delete indicators from DB, optionally from block list too."""
+    raw_items = request.form.get('items', '')
+    remove_from_blocklist = request.form.get('remove_from_blocklist') == 'on'
+
+    items = _parse_bulk_indicator_input(raw_items)
+    if not items:
+        flash('No indicators provided for deletion.', 'warning')
+        return redirect(url_for('dashboard.index'))
+
+    from ..utils import validate_indicator
+
+    valid_items = []
+    invalid_count = 0
+    for item in items:
+        is_valid, _ = validate_indicator(item)
+        if is_valid:
+            valid_items.append(item)
+        else:
+            invalid_count += 1
+
+    if not valid_items:
+        flash('No valid indicators found in the input.', 'danger')
+        return redirect(url_for('dashboard.index'))
+
+    deleted_from_db = delete_indicators(valid_items)
+    deleted_from_blocklist = 0
+
+    if remove_from_blocklist:
+        for item in valid_items:
+            if get_api_blacklist_item_by_value(item) and remove_api_blacklist_item(item):
+                deleted_from_blocklist += 1
+
+    if deleted_from_db > 0 or deleted_from_blocklist > 0:
+        from ..aggregator import regenerate_edl_files
+
+        regenerate_edl_files()
+
+    message = f"Deleted {deleted_from_db} indicators from database"
+    if remove_from_blocklist:
+        message += f", removed {deleted_from_blocklist} from block list"
+    if invalid_count:
+        message += f". Skipped {invalid_count} invalid entries"
+    message += "."
+
+    flash(message, 'success' if (deleted_from_db > 0 or deleted_from_blocklist > 0) else 'warning')
     return redirect(url_for('dashboard.index'))
 
 @bp_system.route('/change_password', methods=['POST'])

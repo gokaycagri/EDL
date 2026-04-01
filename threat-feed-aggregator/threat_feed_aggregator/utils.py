@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAFE_LIST_FILE = os.path.join(BASE_DIR, "data", "safe_list.txt")
 
+# RFC1918 private IPv4 ranges that must never be exported to external blocklists.
+PRIVATE_IPV4_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
 def format_timestamp(ts_str, fmt='%d/%m/%Y %H:%M'):
     """
     Formats an ISO timestamp string using the configured system timezone.
@@ -320,6 +327,36 @@ def validate_indicator(item):
             pass
 
     return False, "invalid"
+
+
+def is_rfc1918_private_ipv4_indicator(item, item_type=None):
+    """
+    Returns True when the indicator belongs to one of RFC1918 IPv4 private ranges.
+
+    Supported indicators:
+    - IPv4 address (e.g. 10.1.2.3)
+    - IPv4 CIDR (e.g. 10.0.0.0/8)
+    """
+    if not item:
+        return False
+
+    normalized_type = (item_type or "").lower()
+    if normalized_type and normalized_type not in {"ip", "cidr", "ip/cidr"}:
+        return False
+
+    try:
+        if "/" in item or normalized_type in {"cidr", "ip/cidr"}:
+            network = ipaddress.ip_network(item, strict=False)
+            if network.version != 4:
+                return False
+            return any(network.subnet_of(private_net) for private_net in PRIVATE_IPV4_NETWORKS)
+
+        ip_obj = ipaddress.ip_address(item)
+        if ip_obj.version != 4:
+            return False
+        return any(ip_obj in private_net for private_net in PRIVATE_IPV4_NETWORKS)
+    except ValueError:
+        return False
 
 def get_proxy_settings():
     """

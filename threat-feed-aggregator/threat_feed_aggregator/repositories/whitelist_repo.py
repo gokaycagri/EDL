@@ -82,10 +82,13 @@ def add_api_blacklist_item(item, item_type='ip', comment="", expires_at=None, co
     if source:
         comment = f"[{source}] {comment}".strip()
 
-    from ..utils import validate_indicator
+    from ..utils import is_rfc1918_private_ipv4_indicator, validate_indicator
     is_valid, _ = validate_indicator(item)
     if not is_valid:
         return False, f"'{item}' is not a valid IP, CIDR, or Domain/URL."
+
+    if is_rfc1918_private_ipv4_indicator(item, item_type):
+        return False, "RFC1918 private IPv4 indicators cannot be added to blacklist."
 
     # We use db_transaction to ensure proper locking and transaction management
     with db_transaction(conn) as db:
@@ -159,13 +162,16 @@ def update_api_blacklist_item(item_id, new_item, item_type='ip', comment="", con
     if not new_item:
         return False, "Item cannot be empty."
 
-    from ..utils import validate_indicator
+    from ..utils import is_rfc1918_private_ipv4_indicator, validate_indicator
     is_valid, inferred_type = validate_indicator(new_item)
     if not is_valid:
         return False, f"'{new_item}' is not a valid IP, CIDR, or Domain/URL."
 
     if inferred_type != 'unknown':
         item_type = inferred_type
+
+    if is_rfc1918_private_ipv4_indicator(new_item, item_type):
+        return False, "RFC1918 private IPv4 indicators cannot be added to blacklist."
 
     with db_transaction(conn) as db:
         try:
