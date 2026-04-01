@@ -47,6 +47,26 @@ class TestFortiDeceptor(unittest.TestCase):
     @patch('threat_feed_aggregator.routes.auth.read_config')
     @patch('threat_feed_aggregator.routes.api.add_api_blacklist_item')
     @patch('threat_feed_aggregator.routes.api.regenerate_edl_files')
+    def test_deceptor_block_via_header_with_tab_separator(self, mock_regen, mock_add, mock_read_config):
+        """Test blocking still works if Bearer is followed by non-space whitespace."""
+        mock_read_config.return_value = self.mock_config
+        mock_add.return_value = (True, "Item added to blacklist.")
+
+        headers = {
+            'Authorization': f'Bearer\t{self.api_key}',
+            'whblockheader': '192.168.1.51'
+        }
+
+        response = self.client.post('/api/deceptor/block', headers=headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['status'], 'success')
+        mock_add.assert_called_once()
+        self.assertEqual(mock_add.call_args[0][0], '192.168.1.51')
+
+    @patch('threat_feed_aggregator.routes.auth.read_config')
+    @patch('threat_feed_aggregator.routes.api.add_api_blacklist_item')
+    @patch('threat_feed_aggregator.routes.api.regenerate_edl_files')
     def test_deceptor_block_via_json(self, mock_regen, mock_add, mock_read_config):
         """Test blocking an IP using the whblockdata in JSON body."""
         mock_read_config.return_value = self.mock_config

@@ -11,6 +11,21 @@ from . import bp_auth
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_api_key(auth_value):
+    if not auth_value:
+        return None
+
+    cleaned = auth_value.strip()
+    if not cleaned:
+        return None
+
+    scheme_and_value = cleaned.split(None, 1)
+    if len(scheme_and_value) == 2 and scheme_and_value[0].lower() == "bearer":
+        return scheme_and_value[1].strip()
+
+    return cleaned
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -30,7 +45,6 @@ def api_key_required(f):
         # Configure Flask ProxyFix middleware if behind a trusted reverse proxy.
         client_ip = request.remote_addr
 
-        request_key = None
         auth_header = (
             request.headers.get('Authorization')
             or request.headers.get('X-API-KEY')
@@ -38,13 +52,7 @@ def api_key_required(f):
             or request.form.get('api_key')
         )
 
-        if auth_header:
-            cleaned = auth_header.strip()
-            # Strip Bearer prefix (case insensitive)
-            if cleaned.lower().startswith('bearer '):
-                request_key = cleaned[7:].strip()
-            else:
-                request_key = cleaned
+        request_key = _normalize_api_key(auth_header)
 
         if request_key:
             logger.info(f"API Access Attempt | Key: {request_key[:6]}*** | IP: {client_ip}")
