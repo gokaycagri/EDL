@@ -31,7 +31,12 @@ def api_key_required(f):
         client_ip = request.remote_addr
 
         request_key = None
-        auth_header = request.headers.get('Authorization') or request.headers.get('X-API-KEY')
+        auth_header = (
+            request.headers.get('Authorization')
+            or request.headers.get('X-API-KEY')
+            or request.headers.get('Api-Key')
+            or request.form.get('api_key')
+        )
 
         if auth_header:
             cleaned = auth_header.strip()
