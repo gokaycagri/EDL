@@ -89,6 +89,10 @@ def _get_cached_edl_path(token, fmt):
 def _is_cache_valid(path, ttl_seconds=600):
     if not os.path.exists(path):
         return False
+    # If file exists but is empty, treat as invalid — force regeneration
+    if os.path.getsize(path) == 0:
+        logger.debug(f"Cache file {path} is empty — invalidating.")
+        return False
     mtime = os.stat(path).st_mtime
     age = time.time() - mtime
     return age < ttl_seconds
@@ -160,8 +164,11 @@ def get_saved_custom_edl(token):
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        resp = send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype, conditional=False)
         resp.headers['Content-Disposition'] = 'inline'
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
         return resp
 
     # 2. Regenerate Cache (Streaming)
@@ -222,8 +229,11 @@ def get_saved_custom_edl(token):
             mimetype = 'application/json'
         else:
             mimetype = 'text/csv'
-        resp = send_file(cache_path, mimetype=mimetype)
+        resp = send_file(cache_path, mimetype=mimetype, conditional=False)
         resp.headers['Content-Disposition'] = 'inline'
+        resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
         return resp
 
     except Exception as e:
@@ -501,6 +511,25 @@ def feed_health_api():
     """Returns health status for all feeds."""
     from ..services.feed_health import get_all_health_statuses
     return api_response(get_all_health_statuses())
+
+
+@bp_api.route('/active_sources')
+@login_required
+def active_sources_api():
+    """Returns distinct source names that have actual data in the indicator_sources table.
+    Used for populating custom EDL source selection — guarantees only valid source names are shown."""
+    from ..database.connection import db_readonly
+    try:
+        with db_readonly() as db:
+            cursor = db.execute(
+                'SELECT source_name, COUNT(DISTINCT indicator) as count '
+                'FROM indicator_sources GROUP BY source_name ORDER BY source_name'
+            )
+            sources = [{'name': row['source_name'], 'count': row['count']} for row in cursor.fetchall()]
+        return api_response({'sources': sources})
+    except Exception as e:
+        logger.error(f"active_sources_api error: {e}")
+        return api_error('Failed to fetch active sources', 500)
 
 
 @bp_api.route('/source_stats')

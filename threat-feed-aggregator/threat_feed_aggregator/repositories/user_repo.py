@@ -110,6 +110,13 @@ def verify_local_user(username, password, conn=None):
             return True
         return False
 
+def has_local_password(username, conn=None):
+    """Checks whether a user has a password-backed local account."""
+    with db_readonly() as db:
+        cursor = db.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+        result = cursor.fetchone()
+        return result is not None and result['password_hash'] != 'LDAP_USER'
+
 def local_user_exists(username, conn=None):
     """Checks if a user exists in the local database."""
     with db_readonly() as db:

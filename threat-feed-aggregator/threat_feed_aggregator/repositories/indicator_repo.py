@@ -184,26 +184,42 @@ def clean_database_vacuum(conn=None):
             logger.info("Database vacuumed and optimized.")
 
 def get_all_indicators_iter(conn=None):
+    """Fetches ALL indicators. Uses fetchall() to ensure all rows are loaded
+    while the DB connection is still open (critical for PostgreSQL pool + background threads)."""
     db = conn or get_db_connection()
     try:
         cursor = db.execute('SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators')
-        yield from cursor
+        rows = cursor.fetchall()  # Fetch ALL before releasing connection
+        logger.debug(f"get_all_indicators_iter: fetched {len(rows)} rows from indicators table.")
     finally:
         if conn is None:
             db.close()
+    yield from rows
+
 
 def get_filtered_indicators_iter(source_names=None, conn=None):
+    """Fetches indicators filtered by source names. Uses fetchall() to ensure all rows are loaded
+    while the DB connection is still open (critical for PostgreSQL pool + background threads)."""
     db = conn or get_db_connection()
     try:
         if not source_names:
             cursor = db.execute('SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators')
         else:
             placeholders = ','.join(['?'] * len(source_names))
-            cursor = db.execute(f'SELECT DISTINCT i.* FROM indicators i JOIN indicator_sources s ON i.indicator = s.indicator WHERE s.source_name IN ({placeholders})', source_names)
-        yield from cursor
+            # Use explicit columns (not i.*) for PostgreSQL DictCursor compatibility
+            cursor = db.execute(
+                f'SELECT DISTINCT i.indicator, i.last_seen, i.country, i.type, i.risk_score, i.source_count '
+                f'FROM indicators i JOIN indicator_sources s ON i.indicator = s.indicator '
+                f'WHERE s.source_name IN ({placeholders})',
+                source_names
+            )
+        rows = cursor.fetchall()  # Fetch ALL before releasing connection
+        logger.debug(f"get_filtered_indicators_iter: fetched {len(rows)} rows (sources={source_names}).")
     finally:
         if conn is None:
             db.close()
+    yield from rows
+
 
 def remove_old_indicators(source_retention_map=None, default_days=30, conn=None):
     if source_retention_map is None:

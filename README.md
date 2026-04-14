@@ -1,7 +1,7 @@
 # Threat Feed Aggregator
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.20.0-blue?style=for-the-badge" alt="Version 1.20.0">
+  <img src="https://img.shields.io/badge/Version-1.26.12-blue?style=for-the-badge" alt="Version 1.26.12">
   <img src="https://img.shields.io/badge/Python-3.13+-green?style=for-the-badge&logo=python" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/Flask-3.0-lightgrey?style=for-the-badge&logo=flask" alt="Flask 3.0">
   <img src="https://img.shields.io/badge/Docker-Ready-cyan?style=for-the-badge&logo=docker" alt="Docker Ready">
@@ -202,6 +202,37 @@ threat_feed_aggregator/
 - `GET /api/run_single/<name>` — Trigger single source fetch
 - `GET /api/status` — Aggregation status
 - `GET /api/backup` — System backup (admin only)
+
+---
+
+## Changelog
+
+### [v1.26.12] - 2026-04-14
+
+#### 🔐 Authentication & LDAP
+- **`has_local_password()`** helper added to `user_repo` — distinguishes true local accounts from LDAP-only users (password_hash = `LDAP_USER`) to prevent local login bypass.
+- **`auth_manager`** now falls back to LDAP credential check when a user has no local password, preventing silent login failures for hybrid users.
+- **LDAP group mapping error messages** now return a human-readable error when a user's LDAP groups are not mapped to any Admin Profile.
+- **System route** (`/system/test_ldap`) uses `_check_ldap_credentials` directly for on-demand LDAP connectivity testing.
+
+#### 📋 Indicator Repository
+- Added paginated and filtered indicator fetch methods to `indicator_repo` for improved dashboard performance with large datasets.
+- Bulk upsert logic hardened against race conditions in multi-worker Gunicorn environments.
+
+#### 🔄 EDL Generator
+- Atomic temp-file-then-rename pattern extended: each regeneration run now uses a UUID-based unique temp filename (`.<run_id>.tmp`) to prevent cross-worker file collisions.
+- RFC 1918 private IP guard applied consistently to both feed indicators and API blacklist items during EDL generation.
+- Legacy compatibility copies (`palo_alto_edl.txt`, `fortinet_edl.txt`) preserved after regeneration.
+
+#### 🌐 API Routes
+- Custom EDL cache invalidation now treats empty files as invalid (force-regeneration on next request).
+- EDL cache path uses UUID-based temp files for concurrent-safe atomic writes.
+- `active_sources` endpoint returns only sources with actual data in the DB (not just config entries).
+
+#### 💻 Dashboard (UI/JS)
+- `dashboard.js` refactored with improved error handling and visual feedback for feed health status.
+- Indicator browser updated with smoother filtering and pagination state preservation.
+- Template (`index.html`) minor accessibility and layout fixes.
 
 ---
 

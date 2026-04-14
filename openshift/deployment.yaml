@@ -164,8 +164,8 @@ objects:
       spec:
         containers:
         - name: threat-feed-aggregator
-          # IMPORTANT: Update this image path to your internal registry
-          image: image-registry.openshift-image-registry.svc:5000/myproject/threat-feed-aggregator:latest
+          # IMPORTANT: Pin production to the published Quay digest to avoid stale tag reuse.
+          image: quay.mfa.gov.tr/admin/threat-feed-aggregator@sha256:b22cba863a9b8dc64d930594d4e2da5b6aa57629a49381784f8faff8c6664c40
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

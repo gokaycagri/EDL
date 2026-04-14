@@ -786,11 +786,8 @@ def test_ldap_connection():
 
     logger.info(f"LDAP Test initiated for user: {username}")
 
-    if servers_override:
-        from ..auth_manager import check_credentials
-        success, message, _ = check_credentials(username, password)
-    else:
-        success, message, _ = check_credentials(username, password)
+    from ..auth_manager import _check_ldap_credentials
+    success, message, _ = _check_ldap_credentials(username, password)
 
     if success:
         logger.info(f"LDAP Test SUCCESS for user: {username}")

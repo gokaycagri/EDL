@@ -43,8 +43,12 @@ except ImportError:
 from flask import Flask  # noqa: I001
 from flask_session import Session
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__)
+# Trust proxy headers from 1 proxy level (OpenShift/Quay ingress)
+# This ensures url_for(_external=True) generates correct HTTPS URLs
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 csrf = CSRFProtect()
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 

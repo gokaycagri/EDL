@@ -17,39 +17,68 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateSourceStats, 10000);
     setInterval(updateScheduledJobs, 30000);
 
-    // Populate Sources for Generic EDL
+    // Populate Sources for Custom/Generic EDL — fetch from DB to ensure only active sources are shown
     var edlList = document.getElementById('edl_sources_list');
     if (edlList) {
-        if (window.AppConfig && window.AppConfig.sourceUrls && window.AppConfig.sourceUrls.length > 0) {
-            edlList.textContent = '';
-            window.AppConfig.sourceUrls.forEach(function(s, idx) {
-                var wrapper = document.createElement('div');
-                wrapper.className = 'form-check form-check-sm mb-0';
+        edlList.innerHTML = '<div class="text-muted small text-center py-1"><i class="fas fa-spinner fa-spin"></i> Loading sources...</div>';
+        fetch('/api/active_sources')
+            .then(function(r) { return r.json(); })
+            .then(function(resp) {
+                var sources = (resp.data && resp.data.sources) ? resp.data.sources : [];
+                edlList.textContent = '';
+                if (sources.length === 0) {
+                    var noSrc = document.createElement('div');
+                    noSrc.className = 'text-muted small text-center';
+                    noSrc.textContent = 'No active sources with data yet.';
+                    edlList.appendChild(noSrc);
+                    return;
+                }
+                sources.forEach(function(s, idx) {
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'form-check form-check-sm mb-0';
 
-                var input = document.createElement('input');
-                input.className = 'form-check-input source-check';
-                input.type = 'checkbox';
-                input.name = 'sources';
-                input.value = s.name;
-                input.id = 'src_chk_' + idx;
+                    var input = document.createElement('input');
+                    input.className = 'form-check-input source-check';
+                    input.type = 'checkbox';
+                    input.name = 'sources';
+                    input.value = s.name;
+                    input.id = 'src_chk_' + idx;
 
-                var label = document.createElement('label');
-                label.className = 'form-check-label small text-truncate d-block';
-                label.setAttribute('for', 'src_chk_' + idx);
-                label.title = s.name;
-                label.textContent = s.name;
+                    var label = document.createElement('label');
+                    label.className = 'form-check-label small text-truncate d-block';
+                    label.setAttribute('for', 'src_chk_' + idx);
+                    label.title = s.name + ' (' + s.count + ' indicators)';
+                    label.textContent = s.name + ' (' + s.count + ')';
 
-                wrapper.appendChild(input);
-                wrapper.appendChild(label);
-                edlList.appendChild(wrapper);
+                    wrapper.appendChild(input);
+                    wrapper.appendChild(label);
+                    edlList.appendChild(wrapper);
+                });
+            })
+            .catch(function() {
+                // Fallback to config sources if API fails
+                edlList.textContent = '';
+                if (window.AppConfig && window.AppConfig.sourceUrls && window.AppConfig.sourceUrls.length > 0) {
+                    window.AppConfig.sourceUrls.forEach(function(s, idx) {
+                        var wrapper = document.createElement('div');
+                        wrapper.className = 'form-check form-check-sm mb-0';
+                        var input = document.createElement('input');
+                        input.className = 'form-check-input source-check';
+                        input.type = 'checkbox';
+                        input.name = 'sources';
+                        input.value = s.name;
+                        input.id = 'src_chk_' + idx;
+                        var label = document.createElement('label');
+                        label.className = 'form-check-label small text-truncate d-block';
+                        label.setAttribute('for', 'src_chk_' + idx);
+                        label.title = s.name;
+                        label.textContent = s.name;
+                        wrapper.appendChild(input);
+                        wrapper.appendChild(label);
+                        edlList.appendChild(wrapper);
+                    });
+                }
             });
-        } else {
-            edlList.textContent = '';
-            var noSrc = document.createElement('div');
-            noSrc.className = 'text-muted small text-center';
-            noSrc.textContent = 'No sources configured.';
-            edlList.appendChild(noSrc);
-        }
     }
 
     // Handle Flash Messages

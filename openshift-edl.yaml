@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: aggregator
-        image: <IMAGE_ADRESINIZ> # Örn: image-registry.openshift-image-registry.svc:5000/proje/aggregator:latest
+        image: quay.mfa.gov.tr/admin/threat-feed-aggregator@sha256:b22cba863a9b8dc64d930594d4e2da5b6aa57629a49381784f8faff8c6664c40
         ports:
         - containerPort: 8080
         env:

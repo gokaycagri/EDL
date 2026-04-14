@@ -9,7 +9,7 @@ from ldap3 import ALL, Connection, Server, Tls
 import pyotp
 import qrcode
 
-from .db_manager import get_profile_by_ldap_groups, get_user_permissions, local_user_exists, verify_local_user
+from .db_manager import get_profile_by_ldap_groups, get_user_permissions, has_local_password, verify_local_user
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ def _check_ldap_credentials(username, password):
                         if not profile_id:
                             logger.warning(f"LDAP Auth success for {username} but no matching Admin Profile found for groups: {user_groups}")
                             conn.unbind()
-                            return False, "Authenticated but no matching Admin Profile found for your groups.", None
+                            return False, "LDAP authentication succeeded, but none of your LDAP groups is mapped to an Admin Profile.", None
 
                         # Get permissions for this profile
                         from .db_manager import get_admin_profiles
@@ -266,7 +266,7 @@ def check_credentials(username, password):
     """
     logger.info(f"Login attempt for user: {username}")
     # 1. Check Local DB (Admin + Other Local Users)
-    if local_user_exists(username):
+    if has_local_password(username):
         if verify_local_user(username, password):
             perms = get_user_permissions(username)
             logger.info(f"Local login successful for user: {username}")
