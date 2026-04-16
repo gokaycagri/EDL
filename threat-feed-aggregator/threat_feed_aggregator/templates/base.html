@@ -121,7 +121,7 @@
             {% block content %}{% endblock %}
             {% if request.endpoint != 'auth.login' %}
             <div class="app-footer">
-                Threat Feed Aggregator v{{ config.get('VERSION', '1.20.0') }} &middot; Enterprise RBAC Edition
+                Threat Feed Aggregator v{{ version }} &middot; Enterprise RBAC Edition
             </div>
             {% endif %}
         </div>
