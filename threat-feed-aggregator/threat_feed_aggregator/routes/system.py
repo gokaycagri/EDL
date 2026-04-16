@@ -33,6 +33,7 @@ from ..db_manager import (
     update_api_blacklist_item,
     update_local_user_password,
     update_whitelist_item,
+    verify_local_user,
 )
 from ..response_helpers import api_error, api_response
 from . import bp_system
@@ -386,6 +387,7 @@ def _parse_import_file(file):
 
 @bp_system.route("/whitelist/import", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def import_whitelist():
     if "import_file" not in request.files:
         flash("No file part", "danger")
@@ -428,6 +430,7 @@ def import_whitelist():
 
 @bp_system.route("/blacklist/import", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def import_blacklist():
     if "import_file" not in request.files:
         flash("No file part", "danger")
@@ -857,6 +860,7 @@ def check_proxy_status():
 
 @bp_system.route("/update_proxy", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def update_proxy():
     import logging
 
@@ -884,6 +888,7 @@ def update_proxy():
 
 @bp_system.route("/update_dns", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def update_dns():
     import logging
 
@@ -1034,6 +1039,7 @@ def test_proxy_connection():
 
 @bp_system.route("/upload_cert", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def upload_cert():
     if "pfx_file" not in request.files:
         flash("No file part", "danger")
@@ -1059,6 +1065,7 @@ def upload_cert():
 
 @bp_system.route("/upload_root_ca", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def upload_root_ca():
     if "ca_file" not in request.files:
         flash("No file part", "danger")
@@ -1085,6 +1092,7 @@ def upload_root_ca():
 
 @bp_system.route("/whitelist/add", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def add_whitelist():
     # Note: In app.py this was /add_whitelist
     item = request.form.get("item")
@@ -1115,6 +1123,7 @@ def add_whitelist():
 
 @bp_system.route("/whitelist/remove/<int:item_id>", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def remove_whitelist(item_id):
     # Note: In app.py this was /remove_whitelist/<int:item_id>
     remove_whitelist_item(item_id)
@@ -1123,6 +1132,7 @@ def remove_whitelist(item_id):
 
 @bp_system.route("/whitelist/update", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def update_whitelist():
     item_id = request.form.get("id", type=int)
     item = request.form.get("item")
@@ -1145,6 +1155,7 @@ def update_whitelist():
 
 @bp_system.route("/blacklist/add", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def add_blacklist():
     item = request.form.get("item")
     comment = request.form.get("comment", "")
@@ -1177,6 +1188,7 @@ def add_blacklist():
 
 @bp_system.route("/blacklist/remove/<path:item_val>", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def remove_blacklist(item_val):
     remove_api_blacklist_item(item_val)
     # Trigger regeneration to remove the item immediately
@@ -1188,6 +1200,7 @@ def remove_blacklist(item_val):
 
 @bp_system.route("/blacklist/update", methods=["POST"])
 @login_required
+@permission_required("system", "rw")
 def update_blacklist():
     item_id = request.form.get("id", type=int)
     item = request.form.get("item")
@@ -1264,12 +1277,12 @@ def bulk_delete_indicators_route():
 @bp_system.route("/change_password", methods=["POST"])
 @login_required
 def change_password():
-    # Note: In app.py this was /change_admin_password
+    username = session.get("username", "admin")
     current_password = request.form.get("current_password")
     new_password = request.form.get("new_password")
     confirm_new_password = request.form.get("confirm_new_password")
 
-    if not check_admin_credentials(current_password):
+    if not verify_local_user(username, current_password):
         flash("Current password is incorrect.", "danger")
         return redirect(url_for("dashboard.index"))
 
@@ -1277,9 +1290,9 @@ def change_password():
         flash("New passwords do not match or are empty.", "danger")
         return redirect(url_for("dashboard.index"))
 
-    success, message = set_admin_password(new_password)
+    success, message = update_local_user_password(username, new_password)
     if success:
-        flash("Admin password updated successfully. Please re-login with your new password.", "success")
+        flash("Password updated successfully. Please re-login with your new password.", "success")
         session.pop("logged_in", None)
         session.pop("username", None)
         return redirect(url_for("auth.login"))

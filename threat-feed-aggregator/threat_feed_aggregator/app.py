@@ -208,6 +208,15 @@ LOCK_FILE = os.path.join(DATA_DIR, "scheduler.lock")
 _scheduler_lock_fh = None  # Must survive GC to hold the OS file lock
 
 
+def _start_scheduler():
+    """Start APScheduler and sync jobs from config."""
+    from .scheduler_manager import scheduler, update_scheduled_jobs
+
+    if not scheduler.running:
+        scheduler.start()
+    update_scheduled_jobs()
+
+
 def init_scheduler_safe():
     global _scheduler_lock_fh
     try:
@@ -215,22 +224,22 @@ def init_scheduler_safe():
 
         _scheduler_lock_fh = open(LOCK_FILE, "w")
         fcntl.lockf(_scheduler_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        from .scheduler_manager import init_scheduler
-
         logger.info("MASTER LOCK ACQUIRED. Starting scheduler master process...")
-        init_scheduler()
+        _start_scheduler()
         return True
     except (OSError, ImportError):
         if sys.platform == "win32":
-            from .scheduler_manager import init_scheduler
-
-            init_scheduler()
+            _start_scheduler()
             return True
         return False
 
 
-if os.environ.get("GUNICORN_WORKER") != "1" or init_scheduler_safe():
-    pass
+# Start scheduler: in gunicorn only the lock-winner runs it;
+# outside gunicorn (dev server) always start it.
+if os.environ.get("GUNICORN_WORKER") == "1":
+    init_scheduler_safe()
+else:
+    _start_scheduler()
 
 if __name__ == "__main__":
     init_db()

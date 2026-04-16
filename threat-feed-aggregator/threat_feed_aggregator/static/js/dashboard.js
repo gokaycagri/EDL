@@ -563,60 +563,8 @@ function runSingleSource(name) {
         .catch(function() { Swal.fire('Error', 'Failed to trigger single fetch', 'error'); });
 }
 
-// === Source Modals ===
-function showAddSourceModal() {
-    Swal.fire({
-        title: 'Add Threat Source',
-        confirmButtonColor: '#00e5ff',
-        html: '<div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="srcName" class="form-control"></div>' +
-              '<div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="srcUrl" class="form-control"></div>' +
-              '<div class="row g-2 mb-2"><div class="col-6"><label class="small fw-bold">Format</label><select id="srcFormat" class="form-select"><option value="text">Text</option><option value="json">JSON</option><option value="csv">CSV</option></select></div><div class="col-6"><label class="small fw-bold">Interval (min)</label><input type="number" id="srcInterval" class="form-control" value="60"></div></div>' +
-              '<div class="text-start mb-2"><label class="small fw-bold">JSON Key / CSV Col</label><input type="text" id="srcKey" class="form-control" placeholder="e.g. data.ip (dot notation ok)"><small class="text-muted" style="font-size:0.7rem">Dot notation supported for nested JSON.</small></div>' +
-              '<div class="row g-2"><div class="col-6 text-start"><label class="small fw-bold">Auth Username</label><input type="text" id="srcAuthUser" class="form-control" placeholder="Optional"></div><div class="col-6 text-start"><label class="small fw-bold">Auth Password</label><input type="password" id="srcAuthPass" class="form-control" placeholder="Optional"></div></div>',
-        confirmButtonText: 'Add', showCancelButton: true,
-        preConfirm: function() {
-            var name = document.getElementById('srcName').value;
-            var url = document.getElementById('srcUrl').value;
-            if (!name || !url) Swal.showValidationMessage('Required');
-            return {
-                name: name, url: url,
-                format: document.getElementById('srcFormat').value,
-                schedule_interval_minutes: document.getElementById('srcInterval').value,
-                key_or_column: document.getElementById('srcKey').value,
-                auth_user: document.getElementById('srcAuthUser').value,
-                auth_pass: document.getElementById('srcAuthPass').value
-            };
-        }
-    }).then(function(result) { if (result.isConfirmed) submitForm(AppConfig.urls.addSource, result.value); });
-}
-
-function showEditSourceModal(index, source) {
-    Swal.fire({
-        title: 'Edit Source: ' + source.name,
-        confirmButtonColor: '#00e5ff',
-        html: '<div class="text-start mb-2"><label class="small fw-bold">Name</label><input type="text" id="eName" class="form-control" value="' + source.name + '"></div>' +
-              '<div class="text-start mb-2"><label class="small fw-bold">URL</label><input type="text" id="eUrl" class="form-control" value="' + source.url + '"></div>' +
-              '<div class="row g-2 mb-2"><div class="col-6"><label class="small fw-bold">Format</label><select id="eFormat" class="form-select"><option value="text" ' + (source.format === 'text' ? 'selected' : '') + '>Text</option><option value="json" ' + (source.format === 'json' ? 'selected' : '') + '>JSON</option><option value="csv" ' + (source.format === 'csv' ? 'selected' : '') + '>CSV</option></select></div><div class="col-6"><label class="small fw-bold">Interval</label><input type="number" id="eInterval" class="form-control" value="' + source.schedule_interval_minutes + '"></div></div>' +
-              '<div class="text-start mb-2"><label class="small fw-bold">JSON Key / CSV Col</label><input type="text" id="eKey" class="form-control" value="' + (source.key_or_column || '') + '" placeholder="e.g. data.ip"><small class="text-muted" style="font-size:0.7rem">Dot notation supported for nested JSON.</small></div>' +
-              '<div class="row g-2 mb-2"><div class="col-6 text-start"><label class="small fw-bold">Auth User</label><input type="text" id="eAuthUser" class="form-control" value="' + (source.auth_user || '') + '"></div><div class="col-6 text-start"><label class="small fw-bold">Auth Pass</label><input type="password" id="eAuthPass" class="form-control" value="' + (source.auth_pass || '') + '"></div></div>' +
-              '<div class="text-start"><label class="small fw-bold">Confidence (0-100)</label><input type="number" id="eConf" class="form-control" value="' + (source.confidence || 50) + '"></div>',
-        showCancelButton: true, confirmButtonText: 'Save Changes',
-        preConfirm: function() {
-            var name = document.getElementById('eName').value;
-            var url = document.getElementById('eUrl').value;
-            if (!name || !url) Swal.showValidationMessage('Required');
-            return {
-                name: name, url: url,
-                format: document.getElementById('eFormat').value,
-                schedule_interval_minutes: document.getElementById('eInterval').value,
-                confidence: document.getElementById('eConf').value,
-                key_or_column: document.getElementById('eKey').value,
-                auth_user: document.getElementById('eAuthUser').value,
-                auth_pass: document.getElementById('eAuthPass').value
-            };
-        }
-    }).then(function(res) { if (res.isConfirmed) submitForm('/system/update_source/' + index, res.value); });
-}
+// Source modals are provided by source_manager.js (loaded globally via base.html).
+// showAddSourceModal() and showEditSourceModal() use AppConfig.urls for form targets.
 
 function testSource(name) {
     Swal.fire({ title: 'Testing Feed...', allowOutsideClick: false, didOpen: function() { Swal.showLoading(); } });
@@ -632,9 +580,12 @@ function testSource(name) {
     .then(function(resp) {
         if (resp.status === 'success') {
             var sample = (resp.data && resp.data.sample) ? resp.data.sample : [];
+            // Escape HTML to prevent XSS from feed data
+            function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+            var sampleHtml = sample.map(function(s) { return '<li>' + esc(s) + '</li>'; }).join('');
             Swal.fire({
                 title: 'Test OK!',
-                html: '<div class="text-start text-success fw-bold">' + resp.message + '</div><hr><small>Sample:</small><ul class="small"><li>' + sample.join('</li><li>') + '</li></ul>',
+                html: '<div class="text-start text-success fw-bold">' + esc(resp.message) + '</div><hr><small>Sample:</small><ul class="small">' + sampleHtml + '</ul>',
                 icon: 'success'
             });
             updateHistory();
