@@ -1,6 +1,7 @@
 """
 Audit logging service — records security-relevant actions for compliance and forensics.
 """
+
 from datetime import UTC, datetime
 import logging
 

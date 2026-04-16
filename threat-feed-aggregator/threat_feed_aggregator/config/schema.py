@@ -5,6 +5,7 @@ Usage:
     from .schema import validate_config
     errors = validate_config(config_dict)  # returns list of error strings, empty if valid
 """
+
 import logging
 
 from pydantic import BaseModel, field_validator

@@ -5,6 +5,7 @@ This module is the main entry point for aggregation. The heavy lifting is in:
   - feed_processor.py: FeedAggregator class, async source processing
   - edl_generator.py: EDL file generation with atomic writes
 """
+
 import asyncio
 from datetime import UTC, datetime
 import logging
@@ -125,10 +126,13 @@ def run_aggregator(source_urls):
 
     # Webhook notification
     total_indicators = sum(v.get("count", 0) for v in all_url_counts.values())
-    webhook_notify("aggregation_complete", {
-        "sources_processed": len(all_url_counts),
-        "total_new_indicators": total_indicators,
-    })
+    webhook_notify(
+        "aggregation_complete",
+        {
+            "sources_processed": len(all_url_counts),
+            "total_new_indicators": total_indicators,
+        },
+    )
 
     return {"url_counts": all_url_counts, "processed_data": []}
 

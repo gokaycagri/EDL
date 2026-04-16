@@ -8,6 +8,7 @@ import pytz
 
 try:
     import structlog
+
     HAS_STRUCTLOG = True
 except ImportError:
     HAS_STRUCTLOG = False
@@ -16,12 +17,14 @@ from .config_manager import DATA_DIR
 
 # Circular buffer to hold the last 1000 log lines in memory
 LOG_BUFFER = collections.deque(maxlen=1000)
-LOG_FILE_PATH = os.path.join(DATA_DIR, 'app.log')
+LOG_FILE_PATH = os.path.join(DATA_DIR, "app.log")
+
 
 class TimezoneFormatter(logging.Formatter):
     """
     Custom formatter that handles timezone conversion.
     """
+
     _reading_config = False  # guard against read_config → log → formatTime recursion
 
     def formatTime(self, record, datefmt=None):
@@ -30,8 +33,9 @@ class TimezoneFormatter(logging.Formatter):
         try:
             TimezoneFormatter._reading_config = True
             from .config_manager import read_config
+
             config = read_config()
-            tz_name = config.get('timezone', 'UTC')
+            tz_name = config.get("timezone", "UTC")
             tz = pytz.timezone(tz_name)
 
             dt = datetime.fromtimestamp(record.created, tz=pytz.utc)
@@ -39,19 +43,21 @@ class TimezoneFormatter(logging.Formatter):
 
             if datefmt:
                 return local_dt.strftime(datefmt)
-            return local_dt.strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+            return local_dt.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
         except Exception:
             return super().formatTime(record, datefmt)
         finally:
             TimezoneFormatter._reading_config = False
 
+
 class MemoryLogHandler(logging.Handler):
     """
     Custom logging handler that stores log records in a memory buffer.
     """
+
     def __init__(self):
         super().__init__()
-        self.setFormatter(TimezoneFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s'))
+        self.setFormatter(TimezoneFormatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
 
     def emit(self, record):
         try:
@@ -59,6 +65,7 @@ class MemoryLogHandler(logging.Handler):
             LOG_BUFFER.append(msg)
         except Exception:
             self.handleError(record)
+
 
 def _load_buffer_from_file():
     """
@@ -68,7 +75,7 @@ def _load_buffer_from_file():
         return
 
     try:
-        with open(LOG_FILE_PATH, encoding='utf-8', errors='ignore') as f:
+        with open(LOG_FILE_PATH, encoding="utf-8", errors="ignore") as f:
             # Efficiently read last 1000 lines
             # For simplicity in this context, reading all and taking last 1000 is okay for moderate file sizes (5MB rotation)
             lines = f.readlines()
@@ -77,11 +84,13 @@ def _load_buffer_from_file():
     except Exception as e:
         print(f"Error loading logs from file: {e}")
 
+
 def get_live_logs():
     """
     Returns the current contents of the log buffer as a list.
     """
     return list(LOG_BUFFER)
+
 
 def clear_logs():
     """
@@ -89,23 +98,26 @@ def clear_logs():
     """
     LOG_BUFFER.clear()
 
+
 class SessionFilter(logging.Filter):
     """
     Filters out harmless race-condition warnings from cachelib/flask_session.
     Happens when a session file is deleted while being accessed.
     """
+
     def filter(self, record):
         msg = record.getMessage()
         if "Exception raised while handling cache file" in msg and "flask_session" in msg:
             return False
         return True
 
+
 def setup_memory_logging():
     """
     Attaches the memory handler and file handler to the root logger and adds filters.
     """
     root_logger = logging.getLogger()
-    formatter = TimezoneFormatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    formatter = TimezoneFormatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
 
     # 1. Setup Memory Handler (if not exists)
     has_memory_handler = any(isinstance(h, MemoryLogHandler) for h in root_logger.handlers)
@@ -119,7 +131,7 @@ def setup_memory_logging():
     has_file_handler = any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers)
     if not has_file_handler:
         # Rotate at 5MB, keep 2 backups
-        file_handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=5*1024*1024, backupCount=2)
+        file_handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=5 * 1024 * 1024, backupCount=2)
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.INFO)
         root_logger.addHandler(file_handler)

@@ -8,6 +8,7 @@ from .utils import get_proxy_settings
 
 logger = logging.getLogger(__name__)
 
+
 async def get_async_session(verify_ssl=True):
     """
     Creates an aiohttp ClientSession with a robust threaded DNS resolver.
@@ -19,11 +20,13 @@ async def get_async_session(verify_ssl=True):
 
     return aiohttp.ClientSession(connector=connector)
 
+
 def _is_ssl_bypass_url(url):
     """Check if URL is in the configured SSL bypass list."""
     config = read_config()
-    bypass_hosts = config.get('ssl_bypass_hosts', [])
+    bypass_hosts = config.get("ssl_bypass_hosts", [])
     return any(host in url for host in bypass_hosts)
+
 
 def fetch_data_from_url(url, auth=None):
     """
@@ -36,6 +39,7 @@ def fetch_data_from_url(url, auth=None):
         verify_ssl = not _is_ssl_bypass_url(url)
         if not verify_ssl:
             import urllib3
+
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         response = requests.get(url, timeout=30, proxies=proxies, auth=auth, verify=verify_ssl)
@@ -45,11 +49,12 @@ def fetch_data_from_url(url, auth=None):
         response.raise_for_status()
         return response.text
     except requests.exceptions.RequestException as e:
-        if getattr(e, 'response', None) is not None and e.response.status_code == 404:
-             logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
+        if getattr(e, "response", None) is not None and e.response.status_code == 404:
+            logger.warning(f"FEED NOT FOUND (404): The source at {url} is no longer available.")
         else:
-             logger.error(f"Error fetching data from {url}: {e}")
+            logger.error(f"Error fetching data from {url}: {e}")
         return None
+
 
 async def fetch_data_from_url_async(url, session=None, auth=None):
     """

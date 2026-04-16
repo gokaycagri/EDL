@@ -210,7 +210,7 @@
                     const mapLinkContainer = document.getElementById('resMapLink');
                     mapLinkContainer.textContent = '';
                     const mapLink = document.createElement('a');
-                    mapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + (geo.lat || ip) + ',' + (geo.lon || '');
+                    mapLink.href = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((geo.lat || ip) + ',' + (geo.lon || ''));
                     mapLink.target = '_blank';
                     mapLink.className = 'btn btn-sm btn-outline-primary w-100';
                     const mapIcon = document.createElement('i');
@@ -219,9 +219,9 @@
                     mapLink.appendChild(document.createTextNode('View on Map'));
                     mapLinkContainer.appendChild(mapLink);
 
-                    document.getElementById('vtLink').href = 'https://www.virustotal.com/gui/ip-address/' + ip;
-                    document.getElementById('abuseLink').href = 'https://www.abuseipdb.com/check/' + ip;
-                    document.getElementById('talosLink').href = 'https://talosintelligence.com/reputation_center/lookup?search=' + ip;
+                    document.getElementById('vtLink').href = 'https://www.virustotal.com/gui/ip-address/' + encodeURIComponent(ip);
+                    document.getElementById('abuseLink').href = 'https://www.abuseipdb.com/check/' + encodeURIComponent(ip);
+                    document.getElementById('talosLink').href = 'https://talosintelligence.com/reputation_center/lookup?search=' + encodeURIComponent(ip);
 
                     saveRecentSearch(ip);
                 } else {

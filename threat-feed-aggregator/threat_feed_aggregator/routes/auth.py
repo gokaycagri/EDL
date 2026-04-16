@@ -26,18 +26,21 @@ def _normalize_api_key(auth_value):
 
     return cleaned
 
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'logged_in' not in session:
-            return redirect(url_for('auth.login', next=request.url))
+        if "logged_in" not in session:
+            return redirect(url_for("auth.login", next=request.url))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 def api_key_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if session.get('logged_in'):
+        if session.get("logged_in"):
             return f(*args, **kwargs)
 
         config = read_config()
@@ -46,10 +49,10 @@ def api_key_required(f):
         client_ip = request.remote_addr
 
         auth_header = (
-            request.headers.get('Authorization')
-            or request.headers.get('X-API-KEY')
-            or request.headers.get('Api-Key')
-            or request.form.get('api_key')
+            request.headers.get("Authorization")
+            or request.headers.get("X-API-KEY")
+            or request.headers.get("Api-Key")
+            or request.form.get("api_key")
         )
 
         request_key = _normalize_api_key(auth_header)
@@ -62,78 +65,88 @@ def api_key_required(f):
 
         import hmac
 
-        api_clients = config.get('api_clients', [])
+        api_clients = config.get("api_clients", [])
         valid_client = next(
-            (c for c in api_clients if hmac.compare_digest(c.get('api_key', ''), request_key)),
+            (c for c in api_clients if hmac.compare_digest(c.get("api_key", ""), request_key)),
             None,
         )
 
-        global_key = config.get('api_key', '')
+        global_key = config.get("api_key", "")
         if not valid_client and global_key and hmac.compare_digest(global_key, request_key):
-             valid_client = {'name': 'Global', 'allowed_ips': []}
+            valid_client = {"name": "Global", "allowed_ips": []}
 
         if not valid_client:
             logger.warning(f"Unauthorized Key from {client_ip}: {request_key[:10]}...")
             return api_error("Unauthorized: Invalid API Key", "AUTH_INVALID_KEY", 401)
 
-        allowed_ips = valid_client.get('allowed_ips', [])
+        allowed_ips = valid_client.get("allowed_ips", [])
         if allowed_ips and client_ip not in allowed_ips:
-             logger.warning(f"IP Forbidden: {client_ip} not in {allowed_ips}")
-             return api_error(f"Forbidden Host: {client_ip}", "AUTH_IP_FORBIDDEN", 403)
+            logger.warning(f"IP Forbidden: {client_ip} not in {allowed_ips}")
+            return api_error(f"Forbidden Host: {client_ip}", "AUTH_IP_FORBIDDEN", 403)
 
         return f(*args, **kwargs)
+
     return decorated_function
 
-@bp_auth.route('/login', methods=['GET', 'POST'])
+
+@bp_auth.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username = request.form.get('username', '')
-        password = request.form.get('password', '')
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
         if username and password:
             success, message, info = check_credentials(username, password)
             if success:
                 from ..services.audit_service import log_action
-                log_action(username, 'login', ip_address=request.remote_addr)
+
+                log_action(username, "login", ip_address=request.remote_addr)
                 if is_mfa_enabled(username):
                     session.clear()
-                    session['pre_mfa_auth'] = {'username': username, 'permissions': info.get('permissions', {}), 'profile_name': info.get('profile_name', 'Local')}
-                    return redirect(url_for('auth.verify_2fa'))
+                    session["pre_mfa_auth"] = {
+                        "username": username,
+                        "permissions": info.get("permissions", {}),
+                        "profile_name": info.get("profile_name", "Local"),
+                    }
+                    return redirect(url_for("auth.verify_2fa"))
                 # Regenerate session to prevent session fixation
                 session.clear()
-                session['logged_in'] = True
-                session['username'] = username
-                session['permissions'] = info.get('permissions', {})
-                session['profile_name'] = info.get('profile_name', 'Local')
-                flash(message, 'success')
-                return redirect(url_for('dashboard.index'))
+                session["logged_in"] = True
+                session["username"] = username
+                session["permissions"] = info.get("permissions", {})
+                session["profile_name"] = info.get("profile_name", "Local")
+                flash(message, "success")
+                return redirect(url_for("dashboard.index"))
             else:
                 from ..services.audit_service import log_action
-                log_action(username, 'login_failed', ip_address=request.remote_addr)
-                flash(message, 'danger')
-    return render_template('login.html')
 
-@bp_auth.route('/login/verify-2fa', methods=['GET', 'POST'])
+                log_action(username, "login_failed", ip_address=request.remote_addr)
+                flash(message, "danger")
+    return render_template("login.html")
+
+
+@bp_auth.route("/login/verify-2fa", methods=["GET", "POST"])
 def verify_2fa():
-    if 'pre_mfa_auth' not in session:
-        return redirect(url_for('auth.login'))
-    if request.method == 'POST':
-        code = request.form.get('code')
-        user_data = session['pre_mfa_auth']
-        username = user_data['username']
+    if "pre_mfa_auth" not in session:
+        return redirect(url_for("auth.login"))
+    if request.method == "POST":
+        code = request.form.get("code")
+        user_data = session["pre_mfa_auth"]
+        username = user_data["username"]
         secret = get_user_mfa_secret(username)
         if verify_totp(secret, code, username=username):
             # Regenerate session to prevent session fixation
             session.clear()
-            session['logged_in'] = True
-            session['username'] = username
-            session['permissions'] = user_data['permissions']
-            session['profile_name'] = user_data['profile_name']
-            return redirect(url_for('dashboard.index'))
+            session["logged_in"] = True
+            session["username"] = username
+            session["permissions"] = user_data["permissions"]
+            session["profile_name"] = user_data["profile_name"]
+            return redirect(url_for("dashboard.index"))
         else:
-            flash('Invalid Code', 'danger')
-    return render_template('login_2fa.html')
+            flash("Invalid Code", "danger")
+    return render_template("login_2fa.html")
 
-@bp_auth.route('/logout', methods=['POST'])
+
+@bp_auth.route("/logout", methods=["POST"])
 def logout():
     session.clear()
-    return redirect(url_for('auth.login'))
+    return redirect(url_for("auth.login"))

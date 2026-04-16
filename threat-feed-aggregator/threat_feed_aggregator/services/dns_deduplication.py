@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 import aiodns
 
+from ..config_manager import read_stats, write_stats
 from ..db_manager import (
     delete_indicators,
     get_all_indicators_iter,
@@ -12,20 +13,21 @@ from ..db_manager import (
     get_domains_for_resolution,
     update_dns_cache_batch,
 )
-from ..config_manager import read_stats, write_stats
 
 logger = logging.getLogger(__name__)
+
 
 async def resolve_domain(resolver, domain):
     try:
         # A record lookup
-        result = await resolver.query(domain, 'A')
+        result = await resolver.query(domain, "A")
         return [r.host for r in result]
     except Exception:
         return []
 
+
 def extract_domain(indicator, itype):
-    if itype == 'url':
+    if itype == "url":
         try:
             parsed = urlparse(indicator)
             if parsed.hostname:
@@ -35,6 +37,7 @@ def extract_domain(indicator, itype):
         # If urlparse fails, skip rather than return nonsense like "http:"
         return None
     return indicator
+
 
 async def process_background_dns_batch(batch_size=50):
     """
@@ -59,17 +62,14 @@ async def process_background_dns_batch(batch_size=50):
     items_to_process = []
 
     for item in candidates:
-        original = item['indicator']
-        itype = item['type']
+        original = item["indicator"]
+        itype = item["type"]
         domain = extract_domain(original, itype)
 
         if not domain:
             continue
 
-        items_to_process.append({
-            'original': original,
-            'domain': domain
-        })
+        items_to_process.append({"original": original, "domain": domain})
         tasks.append(resolve_domain(resolver, domain))
 
     results = await asyncio.gather(*tasks)
@@ -83,16 +83,12 @@ async def process_background_dns_batch(batch_size=50):
 
         # Store IPs as comma-separated string
         ip_str = ",".join(ips)
-        cache_updates.append({
-            'domain': item['original'],
-            'resolved_ips': ip_str,
-            'last_resolved': now_iso
-        })
+        cache_updates.append({"domain": item["original"], "resolved_ips": ip_str, "last_resolved": now_iso})
 
     # 4. Update Cache Only
     if cache_updates:
         update_dns_cache_batch(cache_updates)
-        resolved_non_empty = sum(1 for item in cache_updates if item['resolved_ips'])
+        resolved_non_empty = sum(1 for item in cache_updates if item["resolved_ips"])
         logger.info(
             f"DNS Batch: Cache updated for {len(cache_updates)} domains; "
             f"{resolved_non_empty} resolved with at least one A record."
@@ -101,6 +97,7 @@ async def process_background_dns_batch(batch_size=50):
         logger.info("DNS Batch: No cache updates were generated.")
 
     return len(candidates)
+
 
 def run_deduplication_sweep():
     """
@@ -114,8 +111,8 @@ def run_deduplication_sweep():
     # 1. Load all Threat IPs into memory (efficient Set)
     threat_ips = set()
     for row in get_all_indicators_iter():
-        if row['type'] == 'ip':
-            threat_ips.add(row['indicator'])
+        if row["type"] == "ip":
+            threat_ips.add(row["indicator"])
 
     if not threat_ips:
         logger.info("Deduplication Sweep: No IP indicators found to check against.")
@@ -132,15 +129,15 @@ def run_deduplication_sweep():
     cache_iter = get_dns_resolution_cache_iter()
 
     for row in cache_iter:
-        domain = row['domain']
-        resolved_ips_str = row['resolved_ips']
+        domain = row["domain"]
+        resolved_ips_str = row["resolved_ips"]
         scanned_count += 1
 
         if not resolved_ips_str:
             continue
 
         # Parse IPs from CSV
-        resolved_ips = resolved_ips_str.split(',')
+        resolved_ips = resolved_ips_str.split(",")
 
         # Check intersection
         # If ANY resolved IP is in our threat_ips set
@@ -157,17 +154,15 @@ def run_deduplication_sweep():
         count = delete_indicators(domains_to_delete)
         total_deleted += count
 
-    logger.info(f"Deduplication Sweep Complete. Scanned {scanned_count} cached domains. Removed {total_deleted} duplicates.")
-    
+    logger.info(
+        f"Deduplication Sweep Complete. Scanned {scanned_count} cached domains. Removed {total_deleted} duplicates."
+    )
+
     # Update stats.json with deduplication results
     try:
         stats = read_stats()
         if "dedup_stats" not in stats:
-            stats["dedup_stats"] = {
-                "total_deleted": 0,
-                "last_run": None,
-                "last_deleted": 0
-            }
+            stats["dedup_stats"] = {"total_deleted": 0, "last_run": None, "last_deleted": 0}
         stats["dedup_stats"]["total_deleted"] += total_deleted
         stats["dedup_stats"]["last_run"] = datetime.now(UTC).isoformat()
         stats["dedup_stats"]["last_deleted"] = total_deleted
@@ -175,5 +170,5 @@ def run_deduplication_sweep():
         logger.info(f"Stats updated. Total duplicates removed so far: {stats['dedup_stats']['total_deleted']}")
     except Exception as e:
         logger.error(f"Failed to update dedup stats: {e}")
-    
+
     return total_deleted

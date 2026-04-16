@@ -5,7 +5,7 @@ import json
 from .utils import aggregate_ips
 
 
-def format_generic(indicator_dict, include_types=None, output_format='text', delimiter='\n'):
+def format_generic(indicator_dict, include_types=None, output_format="text", delimiter="\n"):
     """
     Generates a generic output for indicators.
 
@@ -19,38 +19,39 @@ def format_generic(indicator_dict, include_types=None, output_format='text', del
         str: Formatted output string.
     """
     # Optimized for Text format to save memory
-    if output_format == 'text':
+    if output_format == "text":
         filtered_indicators = (
-            ind for ind, det in indicator_dict.items()
-            if not include_types or det.get('type') in include_types
+            ind for ind, det in indicator_dict.items() if not include_types or det.get("type") in include_types
         )
         return delimiter.join(filtered_indicators)
 
     items = []
     for indicator, details in indicator_dict.items():
-        if include_types and details.get('type') not in include_types:
+        if include_types and details.get("type") not in include_types:
             continue
-        items.append({
-            'indicator': indicator,
-            'type': details.get('type'),
-            'risk_score': details.get('risk_score'),
-            'country': details.get('country')
-        })
+        items.append(
+            {
+                "indicator": indicator,
+                "type": details.get("type"),
+                "risk_score": details.get("risk_score"),
+                "country": details.get("country"),
+            }
+        )
 
-    if output_format == 'json':
+    if output_format == "json":
         return json.dumps(items, indent=2)
 
-    elif output_format == 'csv':
+    elif output_format == "csv":
         output = StringIO()
         writer = csv.writer(output)
-        writer.writerow(['indicator', 'type', 'risk_score', 'country'])
+        writer.writerow(["indicator", "type", "risk_score", "country"])
         for item in items:
-            writer.writerow([item['indicator'], item['type'], item['risk_score'], item['country']])
+            writer.writerow([item["indicator"], item["type"], item["risk_score"], item["country"]])
         return output.getvalue()
 
-    else: # text
+    else:  # text
         # Just return the indicators
-        return delimiter.join([item['indicator'] for item in items])
+        return delimiter.join([item["indicator"] for item in items])
 
 
 def format_for_palo_alto(indicator_dict):
@@ -66,13 +67,14 @@ def format_for_palo_alto(indicator_dict):
     """
     raw_items = []
     for indicator, details in indicator_dict.items():
-        if details.get('type') in ['ip', 'cidr']:
+        if details.get("type") in ["ip", "cidr"]:
             raw_items.append(indicator)
 
     # Optimize using CIDR aggregation
     aggregated_items = aggregate_ips(raw_items)
 
     return "\n".join(aggregated_items)
+
 
 def format_for_palo_alto_domain(indicator_dict):
     """
@@ -81,9 +83,10 @@ def format_for_palo_alto_domain(indicator_dict):
     """
     items = []
     for indicator, details in indicator_dict.items():
-        if details.get('type') in ['domain', 'url']:
+        if details.get("type") in ["domain", "url"]:
             items.append(indicator)
     return "\n".join(items)
+
 
 def format_for_fortinet_domain(indicator_dict):
     """
@@ -92,9 +95,10 @@ def format_for_fortinet_domain(indicator_dict):
     """
     items = []
     for indicator, details in indicator_dict.items():
-        if details.get('type') in ['domain', 'url']:
+        if details.get("type") in ["domain", "url"]:
             items.append(indicator)
     return "\n".join(items)
+
 
 def format_for_fortinet(indicator_dict):
     """
@@ -109,13 +113,14 @@ def format_for_fortinet(indicator_dict):
     """
     raw_items = []
     for indicator, details in indicator_dict.items():
-        if details.get('type') in ['ip', 'cidr']:
+        if details.get("type") in ["ip", "cidr"]:
             raw_items.append(indicator)
 
     # Optimize using CIDR aggregation
     aggregated_items = aggregate_ips(raw_items)
 
     return "\n".join(aggregated_items)
+
 
 def format_for_url_list(indicator_dict):
     """
@@ -130,7 +135,6 @@ def format_for_url_list(indicator_dict):
     """
     items = []
     for indicator, details in indicator_dict.items():
-        if details.get('type') in ['url', 'domain']:
+        if details.get("type") in ["url", "domain"]:
             items.append(indicator)
     return "\n".join(items)
-

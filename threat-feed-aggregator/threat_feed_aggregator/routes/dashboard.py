@@ -19,7 +19,8 @@ from .auth import login_required
 
 logger = logging.getLogger(__name__)
 
-@bp_dashboard.route('/')
+
+@bp_dashboard.route("/")
 @login_required
 def index():
     config = read_config()
@@ -38,9 +39,9 @@ def index():
     # Format timestamps
     formatted_stats = {}
     for key, value in stats.items():
-        if isinstance(value, dict) and 'last_updated' in value:
-            formatted_stats[key] = {**value, 'last_updated': format_timestamp(value['last_updated'])}
-        elif key == 'last_updated':
+        if isinstance(value, dict) and "last_updated" in value:
+            formatted_stats[key] = {**value, "last_updated": format_timestamp(value["last_updated"])}
+        elif key == "last_updated":
             formatted_stats[key] = format_timestamp(value)
         else:
             formatted_stats[key] = value
@@ -50,7 +51,7 @@ def index():
 
     from ..scheduler_manager import scheduler
 
-    target_tz = pytz.timezone(config.get('timezone', 'UTC'))
+    target_tz = pytz.timezone(config.get("timezone", "UTC"))
     scheduled_jobs = scheduler.get_jobs()
     jobs_for_template = []
 
@@ -58,9 +59,9 @@ def index():
 
     for job in scheduled_jobs:
         # Safely get next_run_time as it might not exist yet if job is being scheduled
-        jt = getattr(job, 'next_run_time', None)
+        jt = getattr(job, "next_run_time", None)
         next_run = jt.astimezone(target_tz) if jt else None
-        time_until = 'N/A'
+        time_until = "N/A"
 
         if next_run:
             now = datetime.now(target_tz)
@@ -74,26 +75,45 @@ def index():
                 mins = minutes % 60
                 time_until = f"in {hours}h {mins}m"
 
-        jobs_for_template.append({
-            'id': job.id,
-            'name': job.name,
-            'next_run_time': next_run.strftime('%d/%m/%Y %H:%M') if next_run else 'N/A',
-            'time_until': time_until,
-            'interval': f"{job.trigger.interval.total_seconds() / 60} minutes" if isinstance(job.trigger, IntervalTrigger) else 'N/A'
-        })
+        jobs_for_template.append(
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": next_run.strftime("%d/%m/%Y %H:%M") if next_run else "N/A",
+                "time_until": time_until,
+                "interval": f"{job.trigger.interval.total_seconds() / 60} minutes"
+                if isinstance(job.trigger, IntervalTrigger)
+                else "N/A",
+            }
+        )
 
-    return render_template('index.html', config=config, urls=config.get("source_urls", []), stats=formatted_stats, scheduled_jobs=jobs_for_template, total_indicator_count=total_indicator_count, indicator_counts_by_type=indicator_counts_by_type, whitelist=whitelist, blacklist=blacklist, country_stats=country_stats, safe_list=safe_list_sorted, custom_lists=custom_lists)
+    return render_template(
+        "index.html",
+        config=config,
+        urls=config.get("source_urls", []),
+        stats=formatted_stats,
+        scheduled_jobs=jobs_for_template,
+        total_indicator_count=total_indicator_count,
+        indicator_counts_by_type=indicator_counts_by_type,
+        whitelist=whitelist,
+        blacklist=blacklist,
+        country_stats=country_stats,
+        safe_list=safe_list_sorted,
+        custom_lists=custom_lists,
+    )
 
-@bp_dashboard.route('/data/<path:filename>')
+
+@bp_dashboard.route("/data/<path:filename>")
 @login_required
 def download_file(filename):
     from flask import abort, request, send_from_directory
 
     from ..config_manager import DATA_DIR
+
     # Prevent path traversal — only serve basename
     safe_filename = os.path.basename(filename)
-    ALLOWED_EXTENSIONS = ('.txt', '.json', '.csv', '.zip')
+    ALLOWED_EXTENSIONS = (".txt", ".json", ".csv", ".zip")
     if not safe_filename or not safe_filename.endswith(ALLOWED_EXTENSIONS):
         abort(403)
-    as_attachment = request.args.get('view') != '1'
+    as_attachment = request.args.get("view") != "1"
     return send_from_directory(DATA_DIR, safe_filename, as_attachment=as_attachment)

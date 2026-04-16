@@ -49,9 +49,19 @@ OPENAPI_SPEC = {
                 "tags": ["EDL"],
                 "security": [{"ApiKey": []}],
                 "parameters": [
-                    {"name": "types", "in": "query", "schema": {"type": "string"}, "description": "Comma-separated: ip,domain,url,cidr"},
+                    {
+                        "name": "types",
+                        "in": "query",
+                        "schema": {"type": "string"},
+                        "description": "Comma-separated: ip,domain,url,cidr",
+                    },
                     {"name": "format", "in": "query", "schema": {"type": "string", "enum": ["text", "csv", "json"]}},
-                    {"name": "sources", "in": "query", "schema": {"type": "string"}, "description": "Comma-separated source names"},
+                    {
+                        "name": "sources",
+                        "in": "query",
+                        "schema": {"type": "string"},
+                        "description": "Comma-separated source names",
+                    },
                 ],
                 "responses": {"200": {"description": "Filtered EDL"}},
             }

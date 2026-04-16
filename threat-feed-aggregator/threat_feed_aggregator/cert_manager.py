@@ -24,6 +24,7 @@ TRUSTED_BUNDLE_FILE = os.path.join(DATA_DIR, "trusted_bundle.pem")
 if not os.path.exists(CERTS_DIR):
     os.makedirs(CERTS_DIR)
 
+
 def generate_self_signed_cert():
     """Generates a self-signed certificate if one doesn't exist."""
     if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
@@ -38,42 +39,48 @@ def generate_self_signed_cert():
     )
 
     # Generate certificate
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "TR"),
-        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Istanbul"),
-        x509.NameAttribute(NameOID.LOCALITY_NAME, "Istanbul"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Threat Feed Aggregator"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
-    ])
+    subject = issuer = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "TR"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Istanbul"),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, "Istanbul"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Threat Feed Aggregator"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+        ]
+    )
 
-    cert = x509.CertificateBuilder().subject_name(
-        subject
-    ).issuer_name(
-        issuer
-    ).public_key(
-        key.public_key()
-    ).serial_number(
-        x509.random_serial_number()
-    ).not_valid_before(
-        datetime.datetime.now(datetime.UTC)
-    ).not_valid_after(
-        # Valid for 10 years
-        datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=3650)
-    ).add_extension(
-        x509.SubjectAlternativeName([
-            x509.DNSName("localhost"),
-            x509.IPAddress(__import__('ipaddress').ip_address("127.0.0.1")),
-        ]),
-        critical=False,
-    ).sign(key, hashes.SHA256())
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(
+            # Valid for 10 years
+            datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=3650)
+        )
+        .add_extension(
+            x509.SubjectAlternativeName(
+                [
+                    x509.DNSName("localhost"),
+                    x509.IPAddress(__import__("ipaddress").ip_address("127.0.0.1")),
+                ]
+            ),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
 
     # Write private key to file
     with open(KEY_FILE, "wb") as f:
-        f.write(key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption(),
-        ))
+        f.write(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
 
     # Write certificate to file
     with open(CERT_FILE, "wb") as f:
@@ -81,6 +88,7 @@ def generate_self_signed_cert():
 
     print(f"Certificate generated at {CERT_FILE}")
     return CERT_FILE, KEY_FILE
+
 
 def process_pfx_upload(pfx_data, password):
     """
@@ -92,21 +100,20 @@ def process_pfx_upload(pfx_data, password):
         if isinstance(password, str):
             password = password.encode()
 
-        private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
-            pfx_data,
-            password
-        )
+        private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(pfx_data, password)
 
         if not private_key or not certificate:
             raise ValueError("PFX file must contain both a private key and a certificate.")
 
         # Save private key
         with open(KEY_FILE, "wb") as f:
-            f.write(private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ))
+            f.write(
+                private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.TraditionalOpenSSL,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
+            )
 
         # Save certificate (and chain if present)
         with open(CERT_FILE, "wb") as f:
@@ -119,6 +126,7 @@ def process_pfx_upload(pfx_data, password):
     except Exception as e:
         logging.error(f"Error processing PFX: {e}")
         return False, str(e)
+
 
 def process_root_ca_upload(cert_content):
     """
@@ -136,6 +144,7 @@ def process_root_ca_upload(cert_content):
     except Exception as e:
         logging.error(f"Error processing Root CA: {e}")
         return False, str(e)
+
 
 def update_trusted_bundle():
     """
@@ -165,8 +174,10 @@ def update_trusted_bundle():
         logging.error(f"Failed to update trusted bundle: {e}")
         return None
 
+
 def get_cert_paths():
     return CERT_FILE, KEY_FILE
+
 
 def get_ca_bundle_path():
     if os.path.exists(TRUSTED_BUNDLE_FILE):

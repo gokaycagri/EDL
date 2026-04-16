@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 MS_ENDPOINT_URL = "https://endpoints.office.com/endpoints/worldwide?clientrequestid={}"
 
+
 def fetch_microsoft_data():
     """
     Fetches the official Microsoft 365 IP and URL data.
@@ -27,6 +28,7 @@ def fetch_microsoft_data():
         logger.error(f"Failed to fetch Microsoft data: {e}")
         return None
 
+
 def process_microsoft_feeds():
     """
     Fetches data and generates separate EDL files for Exchange, SharePoint, and Teams.
@@ -39,21 +41,21 @@ def process_microsoft_feeds():
     # Categories to extract
     categories = {
         "Exchange": {"ips": [], "urls": []},
-        "Skype": {"ips": [], "urls": []}, # Skype includes Teams
+        "Skype": {"ips": [], "urls": []},  # Skype includes Teams
         "SharePoint": {"ips": [], "urls": []},
-        "Common": {"ips": [], "urls": []}
+        "Common": {"ips": [], "urls": []},
     }
 
     count = 0
     for item in data:
-        service_area = item.get('serviceArea')
+        service_area = item.get("serviceArea")
         if service_area in categories:
             # IPs (v4 and v6)
-            if 'ips' in item:
-                categories[service_area]["ips"].extend(item['ips'])
+            if "ips" in item:
+                categories[service_area]["ips"].extend(item["ips"])
             # URLs
-            if 'urls' in item:
-                categories[service_area]["urls"].extend(item['urls'])
+            if "urls" in item:
+                categories[service_area]["urls"].extend(item["urls"])
             count += 1
 
     generated_files = []
@@ -67,7 +69,7 @@ def process_microsoft_feeds():
             filename = f"ms365_{service.lower()}_ips.txt"
             file_path = os.path.join(DATA_DIR, filename)
 
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 f.write("\n".join(optimized_ips))
             generated_files.append(filename)
 
@@ -78,7 +80,7 @@ def process_microsoft_feeds():
             filename = f"ms365_{service.lower()}_urls.txt"
             file_path = os.path.join(DATA_DIR, filename)
 
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 f.write("\n".join(unique_urls))
             generated_files.append(filename)
 

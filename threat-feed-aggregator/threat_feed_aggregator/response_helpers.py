@@ -50,9 +50,11 @@ def api_error(message, code="UNKNOWN_ERROR", status=400):
     Returns:
         Flask Response with JSON body and status code.
     """
-    return jsonify({
-        "status": "error",
-        "message": message,
-        "code": code,
-        "timestamp": datetime.now(UTC).isoformat(),
-    }), status
+    return jsonify(
+        {
+            "status": "error",
+            "message": message,
+            "code": code,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    ), status

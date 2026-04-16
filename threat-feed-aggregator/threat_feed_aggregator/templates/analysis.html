@@ -321,14 +321,29 @@
         container.find('.filter-chip').remove();
 
         activeFilters.forEach(f => {
-            const chip = `
-                <div class="filter-chip" title="Click to edit">
-                    <span class="key">${f.type}:</span>
-                    <span class="value" onclick="editFilter('${f.type}', '${f.value.replace(/'/g, "\\'")}')" style="cursor:pointer; border-bottom:1px dotted var(--border-color);">${f.value}</span>
-                    <span class="remove" onclick="removeFilter('${f.type}')">&times;</span>
-                </div>
-            `;
-            $(chip).insertBefore(container.find('.dropdown'));
+            const chip = document.createElement('div');
+            chip.className = 'filter-chip';
+            chip.title = 'Click to edit';
+
+            const keySpan = document.createElement('span');
+            keySpan.className = 'key';
+            keySpan.textContent = f.type + ':';
+
+            const valSpan = document.createElement('span');
+            valSpan.className = 'value';
+            valSpan.textContent = f.value;
+            valSpan.style.cssText = 'cursor:pointer; border-bottom:1px dotted var(--border-color);';
+            valSpan.addEventListener('click', () => editFilter(f.type, f.value));
+
+            const removeSpan = document.createElement('span');
+            removeSpan.className = 'remove';
+            removeSpan.textContent = '\u00D7';
+            removeSpan.addEventListener('click', () => removeFilter(f.type));
+
+            chip.appendChild(keySpan);
+            chip.appendChild(valSpan);
+            chip.appendChild(removeSpan);
+            container.find('.dropdown')[0].before(chip);
         });
     }
 

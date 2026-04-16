@@ -5,7 +5,7 @@ import sys
 
 
 def get_base_path():
-    """ Get absolute path to resource, works for dev and for PyInstaller """
+    """Get absolute path to resource, works for dev and for PyInstaller"""
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
@@ -13,14 +13,16 @@ def get_base_path():
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return base_path
 
+
 def get_executable_dir():
-    """ Get the directory where the executable (or script) is located """
-    if getattr(sys, 'frozen', False):
+    """Get the directory where the executable (or script) is located"""
+    if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     else:
         # Return the directory containing this script (threat_feed_aggregator)
         # So that data dir becomes .../threat_feed_aggregator/data
         return os.path.dirname(os.path.abspath(__file__))
+
 
 # Internal resources (templates, default config) are in the code/temp dir
 CODE_BASE_DIR = get_base_path()
@@ -29,7 +31,7 @@ CODE_BASE_DIR = get_base_path()
 USER_DATA_DIR = get_executable_dir()
 
 # Paths
-BASE_DIR = CODE_BASE_DIR # For backward compatibility if needed internally
+BASE_DIR = CODE_BASE_DIR  # For backward compatibility if needed internally
 DATA_DIR = os.path.join(USER_DATA_DIR, "data")
 CONFIG_FILE_DEFAULT = os.path.join(CODE_BASE_DIR, "threat_feed_aggregator", "config", "config.json")
 # We copy config to user dir to allow editing
@@ -43,15 +45,16 @@ if not os.path.exists(DATA_DIR):
 # Initialize User Config if not exists
 if not os.path.exists(CONFIG_FILE) and os.path.exists(CONFIG_FILE_DEFAULT):
     import shutil
+
     try:
         shutil.copy(CONFIG_FILE_DEFAULT, CONFIG_FILE)
     except Exception:
-        pass # Handle case where source might be missing in some builds
+        pass  # Handle case where source might be missing in some builds
 
 import logging
 
 # Configure logging to stdout
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 import threading
@@ -59,6 +62,7 @@ import threading
 _config_cache = None
 _config_cache_mtime = 0
 _config_lock = threading.Lock()
+
 
 def read_config():
     global _config_cache, _config_cache_mtime
@@ -89,18 +93,20 @@ def read_config():
         logger.error(f"[Config] ERROR reading {target_file}: {e}")
         # Emergency fallback logic remains...
         if target_file != CONFIG_FILE_DEFAULT and os.path.exists(CONFIG_FILE_DEFAULT):
-             try:
-                 # logger.warning(f"[Config] Attempting fallback to default config due to corruption.")
-                 with open(CONFIG_FILE_DEFAULT) as f:
-                     return json.load(f)
-             except Exception:
-                 pass
+            try:
+                # logger.warning(f"[Config] Attempting fallback to default config due to corruption.")
+                with open(CONFIG_FILE_DEFAULT) as f:
+                    return json.load(f)
+            except Exception:
+                pass
         return {"source_urls": []}
+
 
 def _validate_config_safe(config):
     """Validate config and log errors. Returns True if valid."""
     try:
         from .config.schema import validate_config
+
         errors = validate_config(config)
         if errors:
             for err in errors:
@@ -140,6 +146,7 @@ def write_config(config):
     except Exception as e:
         logger.error(f"[Config] ERROR writing config: {e}")
 
+
 def read_stats():
     if not os.path.exists(STATS_FILE):
         return {}
@@ -154,7 +161,9 @@ def read_stats():
             pass
     return {}
 
+
 _stats_lock = threading.Lock()
+
 
 def write_stats(stats):
     tmp_path = STATS_FILE + ".tmp"
@@ -164,6 +173,7 @@ def write_stats(stats):
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp_path, STATS_FILE)
+
 
 def update_stats_last_updated(stats=None):
     if stats is None:

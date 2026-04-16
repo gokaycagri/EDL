@@ -19,24 +19,26 @@ PRIVATE_IPV4_NETWORKS = (
     ipaddress.ip_network("192.168.0.0/16"),
 )
 
-def format_timestamp(ts_str, fmt='%d/%m/%Y %H:%M'):
+
+def format_timestamp(ts_str, fmt="%d/%m/%Y %H:%M"):
     """
     Formats an ISO timestamp string using the configured system timezone.
     """
-    if not ts_str or ts_str == 'N/A':
-        return 'N/A'
+    if not ts_str or ts_str == "N/A":
+        return "N/A"
 
     try:
         from .config_manager import read_config
+
         config = read_config()
-        tz_name = config.get('timezone', 'UTC')
+        tz_name = config.get("timezone", "UTC")
         target_tz = pytz.timezone(tz_name)
 
         # Parse ISO string
         if isinstance(ts_str, str):
             dt = datetime.fromisoformat(ts_str)
         else:
-            dt = ts_str # Already a datetime object
+            dt = ts_str  # Already a datetime object
 
         # Convert to target TZ
         if dt.tzinfo is None:
@@ -47,6 +49,7 @@ def format_timestamp(ts_str, fmt='%d/%m/%Y %H:%M'):
     except Exception as e:
         logger.warning(f"Error formatting timestamp {ts_str}: {e}")
         return str(ts_str)
+
 
 def load_safe_list():
     """
@@ -63,15 +66,15 @@ def load_safe_list():
         with open(SAFE_LIST_FILE) as f:
             for line in f:
                 line = line.strip()
-                if not line or line.startswith('#'):
+                if not line or line.startswith("#"):
                     continue
 
                 # Check if it's a CIDR
-                if '/' in line:
+                if "/" in line:
                     try:
                         safe_networks.append(ipaddress.ip_network(line, strict=False))
                     except ValueError:
-                        pass # Not a valid network, maybe a domain with slash? treat as string
+                        pass  # Not a valid network, maybe a domain with slash? treat as string
                         safe_items.add(line)
                 else:
                     safe_items.add(line)
@@ -80,15 +83,18 @@ def load_safe_list():
 
     return safe_items, safe_networks
 
+
 # Load safe list once on module import (or reload periodically if needed)
 SAFE_ITEMS, SAFE_NETWORKS = load_safe_list()
 
 _safe_list_lock = threading.Lock()
 
+
 def reload_safe_list():
     """Reloads the safe list from file into global variables."""
     global SAFE_ITEMS, SAFE_NETWORKS
     SAFE_ITEMS, SAFE_NETWORKS = load_safe_list()
+
 
 def add_to_safe_list(item):
     """Adds an item to the safe list file."""
@@ -100,7 +106,7 @@ def add_to_safe_list(item):
             return False, "Item already in safe list"
 
         try:
-            with open(SAFE_LIST_FILE, 'a') as f:
+            with open(SAFE_LIST_FILE, "a") as f:
                 f.write(f"\n{item}")
 
             reload_safe_list()
@@ -108,6 +114,7 @@ def add_to_safe_list(item):
         except Exception as e:
             logger.error(f"Error writing to safe list file: {e}")
             return False, str(e)
+
 
 def remove_from_safe_list(item_to_remove):
     """Removes an item from the safe list file."""
@@ -119,7 +126,7 @@ def remove_from_safe_list(item_to_remove):
             with open(SAFE_LIST_FILE) as f:
                 lines = f.readlines()
 
-            with open(SAFE_LIST_FILE, 'w') as f:
+            with open(SAFE_LIST_FILE, "w") as f:
                 found = False
                 for line in lines:
                     if line.strip() == item_to_remove:
@@ -137,10 +144,11 @@ def remove_from_safe_list(item_to_remove):
             logger.error(f"Error removing from safe list file: {e}")
             return False, str(e)
 
+
 def _check_global_safelist(indicator):
     """Checks against the hardcoded global safe list (IPs/CIDRs)."""
     try:
-        if '/' in indicator:
+        if "/" in indicator:
             input_obj = ipaddress.ip_network(indicator, strict=False)
             for net in SAFE_NETWORKS:
                 if input_obj.subnet_of(net):
@@ -153,6 +161,7 @@ def _check_global_safelist(indicator):
     except ValueError:
         pass
     return False, None
+
 
 def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None):
     """
@@ -177,7 +186,7 @@ def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None)
 
         # CIDR Match Check
         try:
-            if '/' in indicator:
+            if "/" in indicator:
                 input_obj = ipaddress.ip_network(indicator, strict=False)
                 is_cidr = True
             else:
@@ -198,7 +207,7 @@ def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None)
             else:
                 # Fallback (slower path if nets not precomputed)
                 for w_item in whitelist_db_items:
-                    if '/' in w_item:
+                    if "/" in w_item:
                         try:
                             w_net = ipaddress.ip_network(w_item, strict=False)
                             if is_cidr:
@@ -214,6 +223,7 @@ def is_whitelisted(indicator, whitelist_db_items=None, precomputed_db_nets=None)
 
     return False, None
 
+
 def filter_whitelisted_items(items, whitelist_db_items):
     """
     Filters a list of items against safe list and user whitelist.
@@ -227,8 +237,8 @@ def filter_whitelisted_items(items, whitelist_db_items):
     db_nets = []
     if whitelist_db_items:
         for w in whitelist_db_items:
-            w_str = w['item'] if isinstance(w, dict) else w
-            if '/' in w_str:
+            w_str = w["item"] if isinstance(w, dict) else w
+            if "/" in w_str:
                 try:
                     db_nets.append(ipaddress.ip_network(w_str, strict=False))
                 except Exception:
@@ -246,6 +256,7 @@ def filter_whitelisted_items(items, whitelist_db_items):
         if not whitelisted:
             filtered.append(item)
     return filtered
+
 
 def aggregate_ips(ip_list):
     """
@@ -284,6 +295,7 @@ def aggregate_ips(ip_list):
     result = [str(net) for net in collapsed_v4] + [str(net) for net in collapsed_v6]
     return result
 
+
 def validate_indicator(item):
     """
     Validates if an item is a valid IP address, CIDR, or URL.
@@ -302,26 +314,28 @@ def validate_indicator(item):
     # 2. Check URL / Domain
     # Very basic validation for domains/urls
     from urllib.parse import urlparse
+
     parsed = urlparse(item)
 
     # If it has a scheme (http/https), check if it has a netloc (domain)
-    if parsed.scheme in ('http', 'https'):
-        if parsed.netloc and ' ' not in parsed.netloc:
+    if parsed.scheme in ("http", "https"):
+        if parsed.netloc and " " not in parsed.netloc:
             return True, "url"
 
     # If no scheme, check if it looks like a domain (has a dot, no spaces)
-    if '.' in item and ' ' not in item and not item.startswith('.'):
+    if "." in item and " " not in item and not item.startswith("."):
         # Basic check for common domain characters
         import re
-        if re.match(r'^[a-zA-Z0-9\-\.]+$', item):
+
+        if re.match(r"^[a-zA-Z0-9\-\.]+$", item):
             return True, "domain"
 
         # Check for scheme-less URLs (e.g. example.com/path)
         try:
             parsed_simulated = urlparse(f"http://{item}")
-            if parsed_simulated.netloc and '.' in parsed_simulated.netloc:
+            if parsed_simulated.netloc and "." in parsed_simulated.netloc:
                 # Check if the host part is valid-ish
-                if re.match(r'^[a-zA-Z0-9\-\.]+$', parsed_simulated.netloc):
+                if re.match(r"^[a-zA-Z0-9\-\.]+$", parsed_simulated.netloc):
                     return True, "url"
         except Exception:
             pass
@@ -358,6 +372,7 @@ def is_rfc1918_private_ipv4_indicator(item, item_type=None):
     except ValueError:
         return False
 
+
 def get_proxy_settings():
     """
     Retrieves proxy settings from config and formats them for requests/aiohttp.
@@ -368,16 +383,17 @@ def get_proxy_settings():
     import urllib.parse
 
     from .config_manager import read_config
-    config = read_config()
-    proxy_config = config.get('proxy', {})
 
-    if not proxy_config.get('enabled'):
+    config = read_config()
+    proxy_config = config.get("proxy", {})
+
+    if not proxy_config.get("enabled"):
         return None, None, None
 
-    server = proxy_config.get('server')
-    port = proxy_config.get('port')
-    username = proxy_config.get('username')
-    password = proxy_config.get('password')
+    server = proxy_config.get("server")
+    port = proxy_config.get("port")
+    username = proxy_config.get("username")
+    password = proxy_config.get("password")
 
     if not server or not port:
         return None, None, None
@@ -393,15 +409,11 @@ def get_proxy_settings():
 
     # Build no_proxy from config (with sensible defaults for private ranges)
     default_no_proxy = ["localhost", "127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-    configured_bypass = config.get('proxy_bypass_hosts', [])
+    configured_bypass = config.get("proxy_bypass_hosts", [])
     all_bypass = default_no_proxy + configured_bypass
     no_proxy_str = ",".join(all_bypass)
 
-    proxies = {
-        "http": proxy_url,
-        "https": proxy_url,
-        "no_proxy": no_proxy_str
-    }
+    proxies = {"http": proxy_url, "https": proxy_url, "no_proxy": no_proxy_str}
 
     return proxies, proxy_url, None
 
@@ -418,10 +430,10 @@ def validate_password_strength(password):
     """
     if not password or len(password) < _PASSWORD_MIN_LENGTH:
         return False, f"Password must be at least {_PASSWORD_MIN_LENGTH} characters."
-    if not re.search(r'[A-Z]', password):
+    if not re.search(r"[A-Z]", password):
         return False, "Password must contain at least one uppercase letter."
-    if not re.search(r'[a-z]', password):
+    if not re.search(r"[a-z]", password):
         return False, "Password must contain at least one lowercase letter."
-    if not re.search(r'[0-9]', password):
+    if not re.search(r"[0-9]", password):
         return False, "Password must contain at least one digit."
     return True, ""

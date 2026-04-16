@@ -6,6 +6,7 @@ IMPORTANT: Each regeneration uses a UUID-based unique temp filename to prevent
 race conditions between multiple Gunicorn workers. Each process has its own
 _REGEN_LOCK, so fixed-name .tmp files would collide between workers.
 """
+
 import logging
 import os
 import shutil
@@ -38,30 +39,30 @@ def regenerate_edl_files():
         tmp = {}
         try:
             paths = {
-                "palo_alto_ip":     os.path.join(DATA_DIR, "palo_alto_ip.txt"),
+                "palo_alto_ip": os.path.join(DATA_DIR, "palo_alto_ip.txt"),
                 "palo_alto_domain": os.path.join(DATA_DIR, "palo_alto_domain.txt"),
-                "fortinet_ip":      os.path.join(DATA_DIR, "fortinet_ip.txt"),
-                "fortinet_domain":  os.path.join(DATA_DIR, "fortinet_domain.txt"),
-                "url_list":         os.path.join(DATA_DIR, "url_list.txt"),
+                "fortinet_ip": os.path.join(DATA_DIR, "fortinet_ip.txt"),
+                "fortinet_domain": os.path.join(DATA_DIR, "fortinet_domain.txt"),
+                "url_list": os.path.join(DATA_DIR, "url_list.txt"),
             }
             # UUID suffix ensures concurrent workers don't share .tmp files
             tmp = {k: v + f".{run_id}.tmp" for k, v in paths.items()}
 
             with (
-                open(tmp["palo_alto_ip"],     "w") as pa_ip,
+                open(tmp["palo_alto_ip"], "w") as pa_ip,
                 open(tmp["palo_alto_domain"], "w") as pa_dom,
-                open(tmp["fortinet_ip"],      "w") as fn_ip,
-                open(tmp["fortinet_domain"],  "w") as fn_dom,
-                open(tmp["url_list"],         "w") as url_l,
+                open(tmp["fortinet_ip"], "w") as fn_ip,
+                open(tmp["fortinet_domain"], "w") as fn_dom,
+                open(tmp["url_list"], "w") as url_l,
             ):
-                count          = 0
+                count = 0
                 skipped_private = 0
-                count_ip       = 0
-                count_domain   = 0
-                count_url      = 0
+                count_ip = 0
+                count_domain = 0
+                count_url = 0
 
                 for row in get_all_indicators_iter():
-                    ind   = row["indicator"]
+                    ind = row["indicator"]
                     itype = row["type"]
 
                     if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
@@ -84,7 +85,7 @@ def regenerate_edl_files():
 
                 # API Blacklist items (manual blocks, FortiDeceptor)
                 for item in get_api_blacklist_items():
-                    ind   = item["item"]
+                    ind = item["item"]
                     itype = item["type"]
 
                     if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
@@ -108,16 +109,21 @@ def regenerate_edl_files():
 
             # Legacy compatibility copies
             shutil.copy(paths["palo_alto_ip"], os.path.join(DATA_DIR, "palo_alto_edl.txt"))
-            shutil.copy(paths["fortinet_ip"],  os.path.join(DATA_DIR, "fortinet_edl.txt"))
+            shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
 
             logger.info(
                 "EDL regenerated OK (run=%s) | Total: %s | IP/CIDR: %s | Domain: %s | URL: %s | Skipped-private: %s",
-                run_id, count, count_ip, count_domain, count_url, skipped_private,
+                run_id,
+                count,
+                count_ip,
+                count_domain,
+                count_url,
+                skipped_private,
             )
 
         except Exception as e:
             logger.error("Error regenerating EDL files (run=%s): %s", run_id, e, exc_info=True)
-            for key, tmp_path in tmp.items():
+            for tmp_path in tmp.values():
                 try:
                     os.unlink(tmp_path)
                 except OSError:

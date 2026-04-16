@@ -14,6 +14,7 @@ DOMAIN_PATTERN = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\
 # Simple check for IP candidates (digits and dots or colons)
 IP_CANDIDATE_PATTERN = re.compile(r"^[0-9a-fA-F:./]+$")
 
+
 def identify_indicator_type(indicator):
     """
     Identifies the type of the given indicator (IP, CIDR, Domain, URL, or Unknown).
@@ -26,37 +27,39 @@ def identify_indicator_type(indicator):
     # Optimization: Only try parsing as IP if it looks like one
     if IP_CANDIDATE_PATTERN.match(indicator):
         try:
-            if '/' in indicator:
+            if "/" in indicator:
                 ipaddress.ip_network(indicator, strict=False)
                 return "cidr"
             else:
                 ipaddress.ip_address(indicator)
                 return "ip"
         except ValueError:
-            pass # Not a valid IP/CIDR despite matching basic char pattern
+            pass  # Not a valid IP/CIDR despite matching basic char pattern
 
     # Check for URL
     if URL_PATTERN.match(indicator):
         return "url"
 
     # Check for Schemeless URL (e.g. domain.com/path)
-    if '/' in indicator and not indicator.startswith('/'):
-        parts = indicator.split('/', 1)
+    if "/" in indicator and not indicator.startswith("/"):
+        parts = indicator.split("/", 1)
         # Check if the domain part is valid
         if DOMAIN_PATTERN.match(parts[0]):
             return "url"
 
     # Check for Domain
     if DOMAIN_PATTERN.match(indicator):
-         return "domain"
+        return "domain"
 
     return "unknown"
+
 
 def parse_text(raw_data):
     """
     Parses plain text data, with one indicator per line.
     """
-    return [line.strip() for line in raw_data.splitlines() if line.strip() and not line.strip().startswith('#')]
+    return [line.strip() for line in raw_data.splitlines() if line.strip() and not line.strip().startswith("#")]
+
 
 def parse_json(raw_data, key=None):
     """
@@ -69,7 +72,7 @@ def parse_json(raw_data, key=None):
         if isinstance(data, list):
             if key:
                 # Handle nested keys
-                keys = key.split('.')
+                keys = key.split(".")
                 results = []
                 for item in data:
                     if not isinstance(item, dict):
@@ -93,6 +96,7 @@ def parse_json(raw_data, key=None):
         return []
     return []
 
+
 def parse_csv(raw_data, column=0):
     """
     Parses CSV data. Expects the indicator to be in a specific column.
@@ -104,6 +108,7 @@ def parse_csv(raw_data, column=0):
     except (csv.Error, IndexError):
         return []
 
+
 def normalize_indicator(indicator, itype=None):
     """
     Standardizes indicators for de-duplication.
@@ -111,20 +116,21 @@ def normalize_indicator(indicator, itype=None):
     if not itype:
         itype = identify_indicator_type(indicator)
 
-    if itype == 'domain':
+    if itype == "domain":
         return indicator.lower(), itype
-    elif itype == 'cidr':
+    elif itype == "cidr":
         try:
             return str(ipaddress.ip_network(indicator, strict=False)), itype
         except (ValueError, TypeError):
             pass
-    elif itype == 'ip':
+    elif itype == "ip":
         try:
             return str(ipaddress.ip_address(indicator)), itype
         except (ValueError, TypeError):
             pass
 
     return indicator, itype
+
 
 def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
     """
@@ -137,7 +143,7 @@ def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
 
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
+        if not stripped or stripped.startswith("#"):
             continue
 
         normalized, itype = normalize_indicator(stripped)
@@ -148,9 +154,11 @@ def parse_mixed_text(raw_data, source_name="Unknown", **kwargs):
 
     return parsed_items
 
+
 def parse_json_with_type(raw_data, key=None, **kwargs):
     items = parse_json(raw_data, key)
     return [normalize_indicator(item) for item in items]
+
 
 def parse_csv_with_type(raw_data, column=0, **kwargs):
     try:
@@ -160,15 +168,16 @@ def parse_csv_with_type(raw_data, column=0, **kwargs):
     items = parse_csv(raw_data, column)
     return [normalize_indicator(item) for item in items]
 
+
 def get_parser(format_type):
     """
     Factory to get the parsing function based on format.
     The returned function always accepts (raw_data, **kwargs) and returns [(indicator, type), ...].
     """
     parsers = {
-        'text': parse_mixed_text, # Default text parser to mixed as it's safer
-        'json': parse_json_with_type,
-        'csv': parse_csv_with_type,
-        'mixed': parse_mixed_text
+        "text": parse_mixed_text,  # Default text parser to mixed as it's safer
+        "json": parse_json_with_type,
+        "csv": parse_csv_with_type,
+        "mixed": parse_mixed_text,
     }
     return parsers.get(format_type, parse_mixed_text)

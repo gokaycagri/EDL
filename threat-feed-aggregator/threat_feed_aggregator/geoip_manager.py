@@ -5,7 +5,7 @@ import os
 import geoip2.database
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO) # Set to INFO for production
+logger.setLevel(logging.INFO)  # Set to INFO for production
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -13,6 +13,7 @@ GEOIP_DB_PATH = os.path.join(DATA_DIR, "GeoLite2-Country.mmdb")
 
 # Global reader instance to avoid repeated file opens
 _geoip_reader = None
+
 
 def get_reader():
     global _geoip_reader
@@ -23,6 +24,7 @@ def get_reader():
             except Exception as e:
                 logger.error(f"Error opening GeoIP DB: {e}")
     return _geoip_reader
+
 
 @lru_cache(maxsize=10000)
 def get_country_code(ip_address):

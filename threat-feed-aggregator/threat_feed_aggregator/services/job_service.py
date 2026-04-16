@@ -4,6 +4,7 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+
 class JobService:
     _instance = None
     _lock = threading.Lock()
@@ -46,7 +47,7 @@ class JobService:
             self._current_job_status[source_name] = {
                 "status": status,
                 "details": details,
-                "timestamp": datetime.now(UTC).isoformat()
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
     def clear_job_status(self, source_name):
@@ -62,6 +63,7 @@ class JobService:
     def get_all_job_statuses(self):
         with self._status_lock:
             return self._current_job_status.copy()
+
 
 # Singleton Instance
 job_service = JobService()

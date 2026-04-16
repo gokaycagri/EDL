@@ -1,6 +1,7 @@
 """
 Feed processing — async fetch, parse, filter, enrich, and save threat feed data.
 """
+
 import asyncio
 from datetime import UTC, datetime
 import logging
@@ -89,7 +90,9 @@ class FeedAggregator:
         total_batches = (len(items) + batch_size - 1) // batch_size
 
         logger.info(f"[{source_name}] Starting DB upsert for {len(items)} items in {total_batches} batches.")
-        job_service.update_job_status(source_name, "Saving", f"Writing {len(items)} items (0/{total_batches} batches)...")
+        job_service.update_job_status(
+            source_name, "Saving", f"Writing {len(items)} items (0/{total_batches} batches)..."
+        )
 
         for i in range(0, len(items), batch_size):
             batch = items[i : i + batch_size]
@@ -106,10 +109,14 @@ class FeedAggregator:
                     break
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        logger.warning(f"[{source_name}] Error writing batch {current_batch_num} (Attempt {attempt+1}): {e}. Retrying...")
+                        logger.warning(
+                            f"[{source_name}] Error writing batch {current_batch_num} (Attempt {attempt + 1}): {e}. Retrying..."
+                        )
                         time.sleep(0.5 * (attempt + 1))
                     else:
-                        logger.error(f"[{source_name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}")
+                        logger.error(
+                            f"[{source_name}] Failed to write batch {current_batch_num} after {max_retries} attempts: {e}"
+                        )
 
     async def process_source(self, source_config, recalculate=True, session=None):
         name = source_config["name"]
@@ -141,12 +148,16 @@ class FeedAggregator:
                     job_service.update_job_status(name, "Scoring", "Recalculating risk scores...")
                     try:
                         full_config = read_config()
-                        confidence_map = {s["name"]: s.get("confidence", 50) for s in full_config.get("source_urls", [])}
+                        confidence_map = {
+                            s["name"]: s.get("confidence", 50) for s in full_config.get("source_urls", [])
+                        }
                     except Exception:
                         confidence_map = {name: source_config.get("confidence", 50)}
                     await loop.run_in_executor(None, recalculate_scores, confidence_map, self.db_conn, name)
 
-                await loop.run_in_executor(None, log_job_end, job_id, "success", count, f"Fetch time: {duration:.2f}s", self.db_conn)
+                await loop.run_in_executor(
+                    None, log_job_end, job_id, "success", count, f"Fetch time: {duration:.2f}s", self.db_conn
+                )
                 job_service.update_job_status(name, "Completed", f"Processed {count} items.")
 
                 return {
@@ -159,7 +170,12 @@ class FeedAggregator:
                 msg = "No data fetched"
                 await loop.run_in_executor(None, log_job_end, job_id, "warning", 0, msg, self.db_conn)
                 job_service.update_job_status(name, "Completed", "No data fetched (Source might be offline).")
-                return {"name": name, "count": 0, "fetch_time": f"{duration:.2f} seconds", "last_updated": datetime.now(UTC).isoformat()}
+                return {
+                    "name": name,
+                    "count": 0,
+                    "fetch_time": f"{duration:.2f} seconds",
+                    "last_updated": datetime.now(UTC).isoformat(),
+                }
 
         except Exception as e:
             logger.error(f"Error processing {name}: {e}")

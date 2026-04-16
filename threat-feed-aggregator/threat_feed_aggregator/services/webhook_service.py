@@ -1,6 +1,7 @@
 """
 Webhook notification service — fire-and-forget HTTP POST to configured webhook URLs.
 """
+
 from datetime import UTC, datetime
 import logging
 import threading

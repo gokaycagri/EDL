@@ -1,6 +1,7 @@
 """
 Feed health monitoring — tracks consecutive failures per source and auto-disables after threshold.
 """
+
 from datetime import UTC, datetime
 import logging
 import threading
@@ -16,11 +17,14 @@ _health_lock = threading.Lock()
 def _get_health(config, source_name):
     """Get health entry for a source, initializing if needed."""
     health = config.setdefault("source_health", {})
-    return health.setdefault(source_name, {
-        "consecutive_failures": 0,
-        "last_error": None,
-        "disabled_at": None,
-    })
+    return health.setdefault(
+        source_name,
+        {
+            "consecutive_failures": 0,
+            "last_error": None,
+            "disabled_at": None,
+        },
+    )
 
 
 def is_source_disabled(source_name):

@@ -49,23 +49,14 @@ class InvestigationService:
         thc_data = {}
         try:
             target_url = "https://ip.thc.org/api/v1/lookup"
-            payload = {
-                "ip_address": ip_address,
-                "limit": 100
-            }
-            headers = {
-                "Content-Type": "application/json",
-                "User-Agent": USER_AGENT
-            }
-            response = requests.post(target_url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT_DEFAULT, proxies=proxies)
+            payload = {"ip_address": ip_address, "limit": 100}
+            headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
+            response = requests.post(
+                target_url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT_DEFAULT, proxies=proxies
+            )
             if response.status_code == 200:
                 thc_data = response.json()
         except Exception as e:
             logger.warning(f"THC lookup failed: {e}")
 
-        return {
-            'success': True,
-            'geo': ip_api_data,
-            'data': thc_data,
-            'whois_data': whois_data_str
-        }
+        return {"success": True, "geo": ip_api_data, "data": thc_data, "whois_data": whois_data_str}

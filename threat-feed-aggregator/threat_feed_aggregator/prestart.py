@@ -3,15 +3,16 @@ import os
 import sys
 
 # Add project root to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from threat_feed_aggregator.cert_manager import generate_self_signed_cert
 from threat_feed_aggregator.database.schema import init_db
 from threat_feed_aggregator.repositories.user_repo import set_admin_password
 
 # Configure minimal logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 def prestart():
     logger.info("Running pre-start checks...")
@@ -26,7 +27,7 @@ def prestart():
 
     # 2. Create/Update Default Admin User
     try:
-        admin_pass = os.getenv('ADMIN_PASSWORD', '123456')
+        admin_pass = os.getenv("ADMIN_PASSWORD", "123456")
         success, msg = set_admin_password(admin_pass)
         if success:
             logger.info(f"Admin User Check: {msg}")
@@ -36,7 +37,7 @@ def prestart():
         logger.error(f"Error during admin user setup: {e}")
 
     # 2.5 Run Migration SQL if exists
-    migration_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'migration.sql')
+    migration_path = os.path.join(os.path.dirname(__file__), "..", "data", "migration.sql")
     if False and os.path.exists(migration_path):
         logger.info(f"Found migration file at {migration_path}. Importing data in batches...")
         # ... (rest of commented out logic)
@@ -49,6 +50,7 @@ def prestart():
     except Exception as e:
         logger.error(f"Failed to verify/create certificates: {e}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     prestart()

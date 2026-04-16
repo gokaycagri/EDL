@@ -40,6 +40,7 @@ bp_itai = Blueprint("itai", __name__)
 
 # --- Trace ID Middleware ---
 
+
 def register_itai_middleware(app):
     """Register ITAI middleware hooks on the Flask app.
 
@@ -81,9 +82,16 @@ def register_itai_middleware(app):
             if payload is not None:
                 username = payload.get("preferred_username") or payload.get("sub", "itai_user")
                 jwt_permissions = payload.get("permissions")
-                permissions = jwt_permissions if isinstance(jwt_permissions, dict) else {
-                    "dashboard": "rw", "system": "rw", "tools": "rw", "analysis": "rw",
-                }
+                permissions = (
+                    jwt_permissions
+                    if isinstance(jwt_permissions, dict)
+                    else {
+                        "dashboard": "rw",
+                        "system": "rw",
+                        "tools": "rw",
+                        "analysis": "rw",
+                    }
+                )
                 session.clear()
                 session["logged_in"] = True
                 session["username"] = username
@@ -107,6 +115,7 @@ def register_itai_middleware(app):
 
 
 # --- JWT Helpers (HS256 only, minimal) ---
+
 
 def _b64decode(data: str) -> bytes:
     """Decode URL-safe base64 with padding."""
@@ -138,9 +147,7 @@ def _verify_hs256_token(token: str, secret: str) -> dict | None:
 
         # Verify signature
         signing_input = f"{parts[0]}.{parts[1]}".encode()
-        expected_sig = hmac.new(
-            secret.encode(), signing_input, hashlib.sha256
-        ).digest()
+        expected_sig = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
 
         if not hmac.compare_digest(signature, expected_sig):
             return None
@@ -163,6 +170,7 @@ def _verify_hs256_token(token: str, secret: str) -> dict | None:
 
 
 # --- SSO Endpoint ---
+
 
 @bp_itai.route("/auth/sso", methods=["POST"])
 def sso_login():
@@ -215,6 +223,7 @@ def sso_login():
 
 
 # --- Utility ---
+
 
 def get_trace_id() -> str | None:
     """Get current trace ID from context (for use in logging)."""
