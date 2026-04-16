@@ -460,7 +460,8 @@ function toggleTerminalFullscreen() {
 }
 
 function clearTerminal() {
-    if (confirm('Clear all live logs from memory?')) {
+    swalConfirmAction('Clear all live logs from memory?').then(function(confirmed) {
+        if (!confirmed) return;
         fetch('/api/live_logs/clear', {
             method: 'POST',
             headers: { 'X-CSRFToken': getCsrfToken() }
@@ -472,11 +473,12 @@ function clearTerminal() {
             updateLogs();
         })
         .catch(function(err) { console.error('Failed to clear logs:', err); });
-    }
+    });
 }
 
 function clearHistory() {
-    if (confirm('Clear history?')) {
+    swalConfirmAction('Clear history?').then(function(confirmed) {
+        if (!confirmed) return;
         fetch('/api/history/clear', {
             method: 'POST',
             headers: {
@@ -500,7 +502,7 @@ function clearHistory() {
             console.error('Clear history error:', err);
             Swal.fire('Error', 'Network error: ' + err.message, 'error');
         });
-    }
+    });
 }
 
 // === Service Whitelist Updates ===

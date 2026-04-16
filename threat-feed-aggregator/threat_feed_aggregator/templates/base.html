@@ -180,6 +180,44 @@
             form.submit();
         }
 
+        // === Swal Confirm — replaces native confirm() for iframe compatibility ===
+        function swalConfirmSubmit(formEl, message) {
+            Swal.fire({
+                title: 'Confirm',
+                text: message || 'Are you sure?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Yes',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    // Remove the onsubmit guard so resubmit goes through
+                    formEl.onsubmit = null;
+                    formEl.submit();
+                }
+            });
+            return false; // Always prevent native submit
+        }
+
+        function swalConfirmAction(message) {
+            return new Promise(function(resolve) {
+                Swal.fire({
+                    title: 'Confirm',
+                    text: message || 'Are you sure?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    confirmButtonText: 'Yes',
+                    cancelButtonText: 'Cancel',
+                    reverseButtons: true
+                }).then(function(result) {
+                    resolve(result.isConfirmed);
+                });
+            });
+        }
+
         // === Flash Messages ===
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}

@@ -101,7 +101,7 @@
                                         <td><span class="badge bg-soft-info">{{ source.confidence }}%</span></td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-link btn-sm text-primary p-0 me-2" onclick='showEditSourceModal({{ loop.index0 }}, {{ source|tojson }})' {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-edit"></i></button>
-                                            <form action="{{ url_for('system.remove_source', index=loop.index0) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove source?')">
+                                            <form action="{{ url_for('system.remove_source', index=loop.index0) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove source?')">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                             </form>
@@ -230,10 +230,10 @@
                                                     <td class="ps-3 fw-bold text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
                                                     <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
                                                     <td class="text-end pe-3">
-                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline">
+                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')">
                                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                             <input type="hidden" name="mapping_id" value="{{ map.id }}">
-                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                                         </form>
                                                     </td>
                                                 </tr>
@@ -302,9 +302,9 @@
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm p-0 me-2" onclick='showProfileModal({{ profile|tojson }})' {{ 'disabled' if sys_perm == 'r' or profile.id == 1 }}><i class="fas fa-edit"></i></button>
                                                     {% if profile.id > 3 %}
-                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline">
+                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                                     </form>
                                                     {% endif %}
                                                 </td>
@@ -334,7 +334,7 @@
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm text-warning p-0 me-2" onclick="showChangePasswordModal('{{ user.username }}')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-key"></i></button>
                                                     {% if user.username != 'admin' %}
-                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
+                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
                                                     {% endif %}
                                                 </td>
                                             </tr>
@@ -412,12 +412,12 @@
                                 </form>
                             </div>
                             <hr class="my-4">
-                            <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data" onsubmit="return swalConfirmSubmit(this, 'WARNING: This will overwrite ALL current data and configuration. Continue?')">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <label class="form-label-custom text-danger fw-bold">Restore System State</label>
                                 <div class="input-group">
                                     <input type="file" class="form-control" name="backup_file" accept=".zip" required>
-                                    <button class="btn btn-danger px-4" type="submit" onclick="return confirm('WARNING: This will overwrite ALL current data and configuration. Continue?')">Restore</button>
+                                    <button class="btn btn-danger px-4" type="submit">Restore</button>
                                 </div>
                                 <div class="form-text mt-2 small text-muted">Upload a previously downloaded .zip backup file.</div>
                             </form>
