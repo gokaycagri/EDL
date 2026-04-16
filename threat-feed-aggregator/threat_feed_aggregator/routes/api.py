@@ -751,6 +751,10 @@ def restore_system():
 
             return redirect(url_for("dashboard.index"))
 
+        except ValueError as ve:
+            logger.warning(f"Restore validation error: {ve}")
+            flash(str(ve), "danger")
+            return redirect(url_for("dashboard.index"))
         except Exception as e:
             logger.error(f"Error restoring backup: {e}", exc_info=True)
             flash("Error restoring backup. Check server logs for details.", "danger")

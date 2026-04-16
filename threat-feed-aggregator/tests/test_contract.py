@@ -448,13 +448,15 @@ class TestDeceptorContract:
 
     @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
     @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
-    def test_unblock_validates_ip(self, mock_auth, mock_config, client):
+    def test_unblock_skips_invalid_ip(self, mock_auth, mock_config, client):
+        """Deceptor unblock returns 200 and skips invalid IPs (no retry from FortiDeceptor)."""
         resp = client.post(
             "/api/deceptor/unblock",
             json={"whunblockdata": "not-an-ip"},
             headers=api_key_headers(),
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert "not-an-ip" in resp.json["skipped_invalid"]
 
 
 # ============================================================

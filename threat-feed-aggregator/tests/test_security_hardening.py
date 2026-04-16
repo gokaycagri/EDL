@@ -183,26 +183,29 @@ class TestDeceptorUnblockValidation:
 
     @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
     @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
-    def test_invalid_ip_returns_400(self, mock_auth, mock_config, client):
+    def test_invalid_ip_skipped_gracefully(self, mock_auth, mock_config, client):
+        """Deceptor unblock always returns 200 — invalid IPs are skipped, not rejected."""
         resp = client.post(
             "/api/deceptor/unblock",
             json={"whunblockdata": "not-a-valid-ip!!!"},
             headers=api_key_headers(),
         )
-        assert resp.status_code == 400
-        assert "Invalid" in resp.json["message"]
+        assert resp.status_code == 200
+        assert "not-a-valid-ip!!!" in resp.json["skipped_invalid"]
 
     @patch("threat_feed_aggregator.routes.api.remove_api_blacklist_item", return_value=False)
     @patch("threat_feed_aggregator.routes.api.validate_indicator", return_value=(True, "ip"))
     @patch("threat_feed_aggregator.config_manager.read_config", return_value=MOCK_CONFIG)
     @patch("threat_feed_aggregator.routes.auth.read_config", return_value=MOCK_CONFIG)
-    def test_valid_ip_not_found_returns_404(self, mock_auth, mock_config, mock_validate, mock_remove, client):
+    def test_valid_ip_not_found_returns_200(self, mock_auth, mock_config, mock_validate, mock_remove, client):
+        """Deceptor unblock returns 200 even when IP is not in blacklist (no retry)."""
         resp = client.post(
             "/api/deceptor/unblock",
             json={"whunblockdata": "1.2.3.4"},
             headers=api_key_headers(),
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json["removed"] == 0
 
 
 class TestDeceptorBlockValidation:

@@ -34,7 +34,7 @@ def db_with_data(tmp_path):
         ("2.2.2.2", "CN", "ip"),
         ("evil.com", None, "domain"),
         ("bad-url.com/malware", None, "url"),
-        ("10.0.0.0/8", None, "cidr"),
+        ("203.0.113.0/24", None, "cidr"),
     ]
     upsert_indicators_bulk(indicators, source_name="TestSource")
     yield db_path
