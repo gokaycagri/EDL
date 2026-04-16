@@ -91,6 +91,13 @@ app.config["SESSION_PERMANENT"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = session_timeout * 60
 app.config["SESSION_USE_SIGNER"] = True
 
+# Quay/OpenShift/HTTPS proxy ortamında CSRF session token kaybolmasını önler.
+# HTTPS arkasında çalışıyorsa (Quay, OpenShift ingress) Secure flag zorunlu.
+_is_https = os.environ.get("FORCE_HTTPS", "true").lower() in ("1", "true", "yes")
+app.config["SESSION_COOKIE_SECURE"] = _is_https
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
 Session(app)
 csrf.init_app(app)
 
