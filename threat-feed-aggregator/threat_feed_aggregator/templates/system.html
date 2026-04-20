@@ -101,7 +101,7 @@
                                         <td><span class="badge bg-soft-info">{{ source.confidence }}%</span></td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-link btn-sm text-primary p-0 me-2" onclick='showEditSourceModal({{ loop.index0 }}, {{ source|tojson }})' {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-edit"></i></button>
-                                            <form action="{{ url_for('system.remove_source', index=loop.index0) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove source?')">
+                                            <form action="{{ url_for('system.remove_source', index=loop.index0) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove source?')">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                             </form>
@@ -230,10 +230,10 @@
                                                     <td class="ps-3 fw-bold text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
                                                     <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
                                                     <td class="text-end pe-3">
-                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline">
+                                                        <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')">
                                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                             <input type="hidden" name="mapping_id" value="{{ map.id }}">
-                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                            <button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                                         </form>
                                                     </td>
                                                 </tr>
@@ -302,9 +302,9 @@
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm p-0 me-2" onclick='showProfileModal({{ profile|tojson }})' {{ 'disabled' if sys_perm == 'r' or profile.id == 1 }}><i class="fas fa-edit"></i></button>
                                                     {% if profile.id > 3 %}
-                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline">
+                                                    <form action="{{ url_for('system.delete_profile') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
+                                                        <input type="hidden" name="profile_id" value="{{ profile.id }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash"></i></button>
                                                     </form>
                                                     {% endif %}
                                                 </td>
@@ -334,7 +334,7 @@
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm text-warning p-0 me-2" onclick="showChangePasswordModal('{{ user.username }}')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-key"></i></button>
                                                     {% if user.username != 'admin' %}
-                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" onclick="return confirm('Delete?')" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
+                                                    <form action="{{ url_for('system.delete_user') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ user.username }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0" {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-trash-alt"></i></button></form>
                                                     {% endif %}
                                                 </td>
                                             </tr>
@@ -412,12 +412,12 @@
                                 </form>
                             </div>
                             <hr class="my-4">
-                            <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ url_for('api.restore_system') }}" method="POST" enctype="multipart/form-data" onsubmit="return swalConfirmSubmit(this, 'WARNING: This will overwrite ALL current data and configuration. Continue?')">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <label class="form-label-custom text-danger fw-bold">Restore System State</label>
                                 <div class="input-group">
                                     <input type="file" class="form-control" name="backup_file" accept=".zip" required>
-                                    <button class="btn btn-danger px-4" type="submit" onclick="return confirm('WARNING: This will overwrite ALL current data and configuration. Continue?')">Restore</button>
+                                    <button class="btn btn-danger px-4" type="submit">Restore</button>
                                 </div>
                                 <div class="form-text mt-2 small text-muted">Upload a previously downloaded .zip backup file.</div>
                             </form>
@@ -844,10 +844,10 @@
         });
     }
 
-    function checkLdapServerStatus() { fetch('/system/ldap/status').then(r => r.json()).then(d => { const b = document.getElementById('ldapServerStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : (d.status === 'offline' ? 'bg-danger' : 'bg-secondary')); b.innerHTML = d.status.toUpperCase(); }); }
-    function checkDnsStatus() { fetch('/system/dns/status').then(r => r.json()).then(d => { const b = document.getElementById('dnsStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
-    function checkProxyStatus() { fetch('/system/proxy/status').then(r => r.json()).then(d => { const b = document.getElementById('proxyStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.innerHTML = d.status.toUpperCase(); }); }
-    function testLdapLogin() { const u = document.getElementById('ldapTestUser').value; const p = document.getElementById('ldapTestPass').value; const r = document.getElementById('ldapTestResult'); r.className = 'form-text mt-2 text-muted'; r.innerHTML = 'Testing...'; r.classList.remove('d-none'); fetch('/system/ldap/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify({ username: u, password: p }) }).then(res => res.json()).then(d => { r.className = 'form-text mt-2 ' + (d.status === 'success' ? 'text-success' : 'text-danger'); r.innerHTML = d.message; }); }
+    function checkLdapServerStatus() { fetch('/system/ldap/status').then(r => r.json()).then(d => { const b = document.getElementById('ldapServerStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : (d.status === 'offline' ? 'bg-danger' : 'bg-secondary')); b.textContent = d.status.toUpperCase(); }); }
+    function checkDnsStatus() { fetch('/system/dns/status').then(r => r.json()).then(d => { const b = document.getElementById('dnsStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.textContent = d.status.toUpperCase(); }); }
+    function checkProxyStatus() { fetch('/system/proxy/status').then(r => r.json()).then(d => { const b = document.getElementById('proxyStatus'); b.className = 'badge rounded-pill badge-authority ' + (d.status === 'online' ? 'bg-success' : 'bg-secondary'); b.textContent = d.status.toUpperCase(); }); }
+    function testLdapLogin() { const u = document.getElementById('ldapTestUser').value; const p = document.getElementById('ldapTestPass').value; const r = document.getElementById('ldapTestResult'); r.className = 'form-text mt-2 text-muted'; r.textContent = 'Testing...'; r.classList.remove('d-none'); fetch('/system/ldap/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify({ username: u, password: p }) }).then(res => res.json()).then(d => { r.className = 'form-text mt-2 ' + (d.status === 'success' ? 'text-success' : 'text-danger'); r.textContent = d.message; }); }
     function testProxySettings() { const f = document.getElementById('proxyForm'); const data = { enabled: f.querySelector('[name="proxy_enabled"]').checked, server: f.querySelector('[name="proxy_server"]').value, port: f.querySelector('[name="proxy_port"]').value, username: f.querySelector('[name="proxy_username"]').value, password: f.querySelector('[name="proxy_password"]').value }; Swal.fire({ title: 'Testing...', didOpen: () => { Swal.showLoading(); } }); fetch('/system/proxy/test', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }, body: JSON.stringify(data) }).then(r => r.json()).then(d => { Swal.fire(d.status === 'success' ? 'Success' : 'Failed', d.message, d.status); }); }
     function addHostnameRow() { const c = document.getElementById('serverHostnamesList'); const n = document.createElement('div'); n.className = 'input-group input-group-sm mb-2 hostname-row'; n.innerHTML = `<input type="text" class="form-control" name="ldap_server[]" required><button class="btn btn-outline-danger" type="button" onclick="removeHostnameRow(this)"><i class="fas fa-times"></i></button>`; c.appendChild(n); }
     function removeHostnameRow(btn) { if (document.querySelectorAll('.hostname-row').length > 1) btn.closest('.hostname-row').remove(); }

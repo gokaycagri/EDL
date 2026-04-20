@@ -172,7 +172,7 @@
                                             <div class="list-group-item px-0 py-2">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <strong class="text-truncate" title="{{ list.name }}">{{ list.name }}</strong>
-                                                    <form action="{{ url_for('system.remove_custom_list_route') }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this list?');">
+                                                    <form action="{{ url_for('system.remove_custom_list_route') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete this list?')">
                                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                         <input type="hidden" name="list_id" value="{{ list.id }}">
                                                         <button type="submit" class="btn btn-link text-danger p-0" title="Delete"><i class="fas fa-trash-alt"></i></button>
@@ -305,7 +305,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 180px;"><table class="table table-sm mb-0 align-middle">
-                        <tbody class="small">{% if whitelist %}{% for item in whitelist[:5] %}<tr><td class="ps-3 py-2"><code class="text-success">{{ item.item }}</code></td><td class="text-end pe-3"><button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button><form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0"><i class="fas fa-times-circle"></i></button></form></td></tr>{% endfor %}{% else %}<tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-shield-alt empty-state-icon text-success"></i><div class="empty-state-text">No safe list entries yet</div><button class="btn btn-xs btn-outline-success empty-state-cta" onclick="showAddWhitelistModal()"><i class="fas fa-plus me-1"></i>Add First Entry</button></div></td></tr>{% endif %}</tbody>
+                        <tbody class="small">{% if whitelist %}{% for item in whitelist[:5] %}<tr><td class="ps-3 py-2"><code class="text-success">{{ item.item }}</code></td><td class="text-end pe-3"><button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button><form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0"><i class="fas fa-times-circle"></i></button></form></td></tr>{% endfor %}{% else %}<tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-shield-alt empty-state-icon text-success"></i><div class="empty-state-text">No safe list entries yet</div><button class="btn btn-xs btn-outline-success empty-state-cta" onclick="showAddWhitelistModal()"><i class="fas fa-plus me-1"></i>Add First Entry</button></div></td></tr>{% endif %}</tbody>
                     </table></div>
                 </div>
             </div>
@@ -341,7 +341,7 @@
                                     </td>
                                     <td class="text-end pe-3">
                                         <button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditBlockListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.comment }}')"><i class="fas fa-pencil-alt"></i></button>
-                                        <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove?')">
+                                        <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-link btn-sm text-secondary p-0"><i class="fas fa-times-circle"></i></button>
                                         </form>
@@ -361,7 +361,7 @@
                     <h6 class="fw-bold mb-0"><i class="fas fa-eraser me-2 text-warning"></i>Bulk Indicator Delete</h6>
                 </div>
                 <div class="card-body">
-                    <form action="{{ url_for('system.bulk_delete_indicators_route') }}" method="POST" onsubmit="return confirm('Delete selected indicators from database?');">
+                    <form action="{{ url_for('system.bulk_delete_indicators_route') }}" method="POST" onsubmit="return swalConfirmSubmit(this, 'Delete selected indicators from database?')">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <label class="form-label-custom small fw-bold">Indicators (one per line, or comma-separated)</label>
                         <textarea name="items" class="form-control form-control-sm" rows="4" placeholder="10.1.2.3&#10;172.16.10.0/24&#10;example-bad-domain.com" required></textarea>
@@ -400,7 +400,7 @@
                                         <td class="ps-4 py-2"><code class="text-success">{{ item.item }}</code><br><small class="text-muted">{{ item.description }}</small></td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-sm btn-outline-primary me-1" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button>
-                                            <form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove?')">
+                                            <form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
                                             </form>
@@ -451,7 +451,7 @@
                                         </td>
                                         <td class="text-end pe-4">
                                             <button class="btn btn-sm btn-outline-primary me-1" onclick="showEditBlockListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.comment }}')"><i class="fas fa-pencil-alt"></i></button>
-                                            <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return confirm('Remove?')">
+                                            <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
                                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                 <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-trash"></i></button>
                                             </form>

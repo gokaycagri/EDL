@@ -209,9 +209,7 @@ def get_dns_dedup_status():
                 logger.warning(f"Could not read dedup stats: {e}")
 
         # Get cache entry count
-        from ..db_manager import (
-            db_readonly,
-        )
+        from ..database.connection import db_readonly
 
         try:
             with db_readonly() as db:

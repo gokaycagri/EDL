@@ -561,7 +561,7 @@ def active_sources_api():
         return api_response({"sources": sources})
     except Exception as e:
         logger.error(f"active_sources_api error: {e}")
-        return api_error("Failed to fetch active sources", 500)
+        return api_error("Failed to fetch active sources", "DB_ERROR", 500)
 
 
 @bp_api.route("/source_stats")

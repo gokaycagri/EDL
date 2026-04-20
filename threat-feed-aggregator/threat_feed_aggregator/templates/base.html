@@ -121,7 +121,7 @@
             {% block content %}{% endblock %}
             {% if request.endpoint != 'auth.login' %}
             <div class="app-footer">
-                Threat Feed Aggregator v{{ config.get('VERSION', '1.20.0') }} &middot; Enterprise RBAC Edition
+                Threat Feed Aggregator v{{ version }} &middot; Enterprise RBAC Edition
             </div>
             {% endif %}
         </div>
@@ -149,35 +149,45 @@
     <script src="{{ url_for('static', filename='vendor/js/jquery.dataTables.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/js/dataTables.bootstrap5.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/js/sweetalert2.all.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/source_manager.js') }}"></script>
     <script>
-        // === Global: submitForm with CSRF ===
-        function submitForm(action, data) {
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = action;
-            form.style.display = 'none';
 
-            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-            if (csrfToken) {
-                const csrfInput = document.createElement('input');
-                csrfInput.type = 'hidden';
-                csrfInput.name = 'csrf_token';
-                csrfInput.value = csrfToken;
-                form.appendChild(csrfInput);
-            }
-
-            for (const key in data) {
-                if (data.hasOwnProperty(key)) {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = key;
-                    input.value = data[key];
-                    form.appendChild(input);
+        // === Swal Confirm — replaces native confirm() for iframe compatibility ===
+        function swalConfirmSubmit(formEl, message) {
+            Swal.fire({
+                title: 'Confirm',
+                text: message || 'Are you sure?',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Yes',
+                cancelButtonText: 'Cancel',
+                reverseButtons: true
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    // Remove the onsubmit guard so resubmit goes through
+                    formEl.onsubmit = null;
+                    formEl.submit();
                 }
-            }
+            });
+            return false; // Always prevent native submit
+        }
 
-            document.body.appendChild(form);
-            form.submit();
+        function swalConfirmAction(message) {
+            return new Promise(function(resolve) {
+                Swal.fire({
+                    title: 'Confirm',
+                    text: message || 'Are you sure?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    confirmButtonText: 'Yes',
+                    cancelButtonText: 'Cancel',
+                    reverseButtons: true
+                }).then(function(result) {
+                    resolve(result.isConfirmed);
+                });
+            });
         }
 
         // === Flash Messages ===
@@ -386,7 +396,6 @@
         window.addNotification = addNotification;
         window.updateSeverityRibbon = updateSeverityRibbon;
     </script>
-    <script src="{{ url_for('static', filename='js/source_manager.js') }}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>
