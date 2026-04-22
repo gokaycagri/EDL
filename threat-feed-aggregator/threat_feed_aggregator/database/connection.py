@@ -65,6 +65,15 @@ class PostgresCursorWrapper:
         self.cursor = cursor
         self.lastrowid = None  # Postgres uses RETURNING id, handled via fetchone if needed
 
+    # Tables that use a non-'id' primary key — RETURNING id would fail for these
+    _NO_RETURNING_TABLES = {
+        "users",
+        "indicators",
+        "indicator_sources",
+        "indicator_tags",
+        "dns_resolution_cache",
+    }
+
     def execute(self, query, params=None):
         # 1. Convert Placeholder '?' -> '%s'
         query_pg = query.replace("?", "%s")
@@ -75,11 +84,23 @@ class PostgresCursorWrapper:
             if "ON CONFLICT" not in query_pg.upper():
                 query_pg += " ON CONFLICT DO NOTHING"
 
-        # 3. For INSERT statements without RETURNING, append RETURNING id to populate lastrowid
-        #    Skip for ON CONFLICT (upserts) — target table may not have an 'id' column.
+        # 3. For INSERT statements without RETURNING, append RETURNING id to populate lastrowid.
+        #    Skip for ON CONFLICT (upserts) and tables whose PK is not named 'id'.
         is_insert = query_pg.strip().upper().startswith("INSERT")
         has_conflict = "ON CONFLICT" in query_pg.upper()
-        needs_returning = is_insert and "RETURNING" not in query_pg.upper() and not has_conflict
+        # Detect target table name from "INSERT INTO <table>" pattern
+        target_table = ""
+        if is_insert:
+            import re as _re
+            m = _re.search(r"INSERT\s+(?:OR\s+\w+\s+)?INTO\s+(\w+)", query_pg, _re.IGNORECASE)
+            if m:
+                target_table = m.group(1).lower()
+        needs_returning = (
+            is_insert
+            and "RETURNING" not in query_pg.upper()
+            and not has_conflict
+            and target_table not in self._NO_RETURNING_TABLES
+        )
         if needs_returning:
             query_pg += " RETURNING id"
 
