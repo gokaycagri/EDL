@@ -1031,6 +1031,236 @@ def deceptor_block():
         return jsonify({"status": "error", "message": "Internal server error"}), 500
 
 
+# --- Trend Micro DDEI Integration ---
+
+
+@bp_api.route("/ddei/submit", methods=["POST"])
+@api_key_required
+def ddei_submit():
+    """
+    Trend Micro Deep Discovery Email Inspector (DDEI) entegrasyon endpoint'i.
+
+    DDEI, zararlı IP ve URL tespiti yaptığında bu endpoint'e HTTP POST gönderir.
+    Kimlik doğrulama için X-API-Key header'ı kullanılır (System → API Clients).
+
+    Desteklenen payload formatları:
+
+    1. JSON Bulk (önerilen):
+    {
+        "ips":  ["1.2.3.4", "5.6.7.8"],
+        "urls": ["http://malicious.com/path", "evil.example.com"],
+        "source": "DDEI-Hostname",       // opsiyonel, varsayılan "TrendMicro_DDEI"
+        "expires_days": 30               // opsiyonel, varsayılan sistem ayarı
+    }
+
+    2. JSON Tekil indicator:
+    {
+        "type": "ip" | "url" | "domain",
+        "value": "1.2.3.4",
+        "source": "DDEI"
+    }
+
+    3. Düz metin (newline veya virgülle ayrılmış):
+    Content-Type: text/plain
+    1.2.3.4
+    5.6.7.8
+    http://evil.com/payload
+    """
+    import re as _re
+
+    logger.info(f"DDEI Submit endpoint reached. Client IP: {request.remote_addr}")
+
+    try:
+        from ..services.audit_service import log_action
+        from ..utils import validate_indicator
+
+        config = read_config()
+        default_lifetime_days = config.get("indicator_lifetime_days", 30)
+
+        # ------------------------------------------------------------------
+        # 1. Parse payload — destekle: JSON bulk, JSON tekil, plain-text
+        # ------------------------------------------------------------------
+        content_type = request.content_type or ""
+        raw_body = request.get_data(as_text=True)
+
+        ip_candidates = []
+        url_candidates = []
+        source_label = "TrendMicro_DDEI"
+        expires_days = default_lifetime_days
+
+        if "application/json" in content_type or raw_body.lstrip().startswith("{"):
+            data = request.get_json(silent=True) or {}
+
+            source_label = data.get("source", source_label)
+            expires_days = int(data.get("expires_days", expires_days))
+
+            # Bulk format: {"ips": [...], "urls": [...]}
+            if "ips" in data or "urls" in data:
+                ip_candidates = [str(v).strip() for v in data.get("ips", []) if str(v).strip()]
+                url_candidates = [str(v).strip() for v in data.get("urls", []) if str(v).strip()]
+
+            # Tekil format: {"type": "ip", "value": "..."}
+            elif "value" in data:
+                raw_val = str(data.get("value", "")).strip()
+                ind_type = data.get("type", "").lower()
+                if ind_type == "ip":
+                    ip_candidates.append(raw_val)
+                elif ind_type in ("url", "domain"):
+                    url_candidates.append(raw_val)
+                else:
+                    # Tip belirtilmemişse validate ile sınıflandır
+                    ip_candidates.append(raw_val)
+
+            # "indicators" array formatı da kabul edilir
+            elif "indicators" in data:
+                for item in data.get("indicators", []):
+                    if isinstance(item, dict):
+                        val = str(item.get("value", "")).strip()
+                        t = item.get("type", "").lower()
+                    else:
+                        val = str(item).strip()
+                        t = ""
+                    if not val:
+                        continue
+                    if t in ("url", "domain"):
+                        url_candidates.append(val)
+                    else:
+                        ip_candidates.append(val)
+
+        else:
+            # Düz metin — her satır/virgül bir indicator
+            all_items = _re.split(r"[\s,;]+", raw_body)
+            for item in all_items:
+                item = item.strip()
+                if not item:
+                    continue
+                # URL/domain ayrımı: http içeriyorsa url, nokta varsa domain, aksi IP
+                if item.startswith("http://") or item.startswith("https://"):
+                    url_candidates.append(item)
+                elif _re.match(r"^\d{1,3}(\.\d{1,3}){3}(/\d+)?$", item):
+                    ip_candidates.append(item)
+                else:
+                    url_candidates.append(item)
+
+        if not ip_candidates and not url_candidates:
+            logger.warning(f"DDEI Submit: No indicators found in payload. Body length: {len(raw_body)}")
+            return jsonify({"status": "error", "message": "No indicators found in payload"}), 400
+
+        logger.info(
+            f"DDEI Submit: Parsed {len(ip_candidates)} IP(s), {len(url_candidates)} URL/domain(s) "
+            f"from source '{source_label}'"
+        )
+
+        # ------------------------------------------------------------------
+        # 2. Expiry hesapla
+        # ------------------------------------------------------------------
+        expires_at = (datetime.now(UTC) + timedelta(days=expires_days)).isoformat()
+        comment = f"TrendMicro DDEI (source: {source_label}, expires: {expires_days}d)"
+
+        # ------------------------------------------------------------------
+        # 3. IP'leri işle
+        # ------------------------------------------------------------------
+        added_ips = 0
+        rejected_ips = []
+        bulk_ip_indicators = []
+
+        for ip in ip_candidates:
+            is_valid, _ = validate_indicator(ip)
+            if is_valid:
+                success, _ = add_api_blacklist_item(
+                    ip,
+                    item_type="ip",
+                    comment=comment,
+                    expires_at=expires_at,
+                    source=source_label,
+                )
+                if success:
+                    added_ips += 1
+                    bulk_ip_indicators.append((ip, "Unknown", "ip"))
+            else:
+                logger.warning(f"DDEI Submit: Skipping invalid IP: {ip}")
+                rejected_ips.append(ip)
+
+        # ------------------------------------------------------------------
+        # 4. URL / Domain'leri işle
+        # ------------------------------------------------------------------
+        added_urls = 0
+        rejected_urls = []
+        bulk_url_indicators = []
+
+        for url in url_candidates:
+            is_valid, inferred_type = validate_indicator(url)
+            if is_valid:
+                item_type = inferred_type if inferred_type in ("url", "domain") else "url"
+                success, _ = add_api_blacklist_item(
+                    url,
+                    item_type=item_type,
+                    comment=comment,
+                    expires_at=expires_at,
+                    source=source_label,
+                )
+                if success:
+                    added_urls += 1
+                    bulk_url_indicators.append((url, "Unknown", item_type))
+            else:
+                logger.warning(f"DDEI Submit: Skipping invalid URL/domain: {url}")
+                rejected_urls.append(url)
+
+        # ------------------------------------------------------------------
+        # 5. Bulk upsert (indicators tablosuna da işle)
+        # ------------------------------------------------------------------
+        all_bulk = bulk_ip_indicators + bulk_url_indicators
+        if all_bulk:
+            try:
+                upsert_indicators_bulk(all_bulk, source_name=source_label)
+            except Exception as db_err:
+                logger.error(f"DDEI Submit: Failed to upsert to indicators table: {db_err}")
+
+        # ------------------------------------------------------------------
+        # 6. EDL dosyalarını yenile
+        # ------------------------------------------------------------------
+        total_added = added_ips + added_urls
+        if total_added > 0:
+            regenerate_edl_files()
+
+        # ------------------------------------------------------------------
+        # 7. Audit log
+        # ------------------------------------------------------------------
+        log_action(
+            username="ddei_api",
+            action="ddei_submit",
+            ip_address=request.remote_addr,
+            details=(
+                f"source={source_label} | added_ips={added_ips} | added_urls={added_urls} "
+                f"| rejected={len(rejected_ips) + len(rejected_urls)}"
+            ),
+        )
+
+        logger.info(
+            f"DDEI Submit complete: added {added_ips} IPs + {added_urls} URLs, "
+            f"rejected {len(rejected_ips)} IPs + {len(rejected_urls)} URLs"
+        )
+
+        return jsonify(
+            {
+                "status": "success",
+                "message": f"Processed {len(ip_candidates)} IPs and {len(url_candidates)} URLs.",
+                "added": {"ips": added_ips, "urls": added_urls, "total": total_added},
+                "rejected": {
+                    "ips": rejected_ips,
+                    "urls": rejected_urls,
+                    "total": len(rejected_ips) + len(rejected_urls),
+                },
+                "expires_at": expires_at,
+                "source": source_label,
+            }
+        ), 200
+
+    except Exception as e:
+        logger.error(f"DDEI Submit API Error: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+
 # --- JSON API Endpoints for ITAI Adapter ---
 
 
