@@ -89,6 +89,63 @@ def api_key_required(f):
     return decorated_function
 
 
+def basic_auth_required(f):
+    """
+    HTTP Basic Authentication decorator.
+    Validates username:password against EDL local user accounts.
+
+    Trend Micro DDEI ve benzeri cihazlar API key yerine
+    Basic Auth (kullanıcı adı + şifre) gönderdiğinde bu decorator kullanılır.
+
+    DDEI'ye şu şekilde tanımlanır:
+      URL:      https://edl.mfa.gov.tr/api/ddei/submit
+      Username: <EDL local kullanıcı adı>
+      Password: <EDL local kullanıcı şifresi>
+    """
+    import base64
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Zaten web oturumu varsa geçir
+        if session.get("logged_in"):
+            return f(*args, **kwargs)
+
+        client_ip = request.remote_addr
+        auth_header = request.headers.get("Authorization", "")
+
+        # Basic Auth header kontrolü: "Basic base64(user:pass)"
+        if not auth_header.lower().startswith("basic "):
+            logger.warning(f"DDEI Basic Auth: Missing/invalid Authorization header. IP: {client_ip}")
+            response = api_error("Unauthorized: Basic Auth required", "AUTH_MISSING", 401)
+            response.headers["WWW-Authenticate"] = 'Basic realm="EDL API"'
+            return response
+
+        try:
+            credentials = base64.b64decode(auth_header[6:]).decode("utf-8", errors="ignore")
+            username, _, password = credentials.partition(":")
+        except Exception:
+            logger.warning(f"DDEI Basic Auth: Failed to decode credentials. IP: {client_ip}")
+            return api_error("Unauthorized: Malformed credentials", "AUTH_MALFORMED", 401)
+
+        if not username or not password:
+            logger.warning(f"DDEI Basic Auth: Empty username or password. IP: {client_ip}")
+            return api_error("Unauthorized: Username and password required", "AUTH_EMPTY", 401)
+
+        # EDL local kullanıcıları ile doğrula
+        from ..auth_manager import check_credentials
+
+        success, _msg, _info = check_credentials(username, password)
+        if not success:
+            logger.warning(f"DDEI Basic Auth: Invalid credentials for '{username}'. IP: {client_ip}")
+            return api_error("Unauthorized: Invalid username or password", "AUTH_INVALID", 401)
+
+        logger.info(f"DDEI Basic Auth: Authenticated as '{username}'. IP: {client_ip}")
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+
 @bp_auth.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":

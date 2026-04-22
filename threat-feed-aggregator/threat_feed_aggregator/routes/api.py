@@ -41,7 +41,7 @@ from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..services.job_service import job_service
 from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
 from . import bp_api
-from .auth import api_key_required, login_required
+from .auth import api_key_required, basic_auth_required, login_required
 
 logger = logging.getLogger(__name__)
 
@@ -1035,7 +1035,7 @@ def deceptor_block():
 
 
 @bp_api.route("/ddei/submit", methods=["POST"])
-@api_key_required
+@basic_auth_required
 def ddei_submit():
     """
     Trend Micro Deep Discovery Email Inspector (DDEI) entegrasyon endpoint'i.
