@@ -1,7 +1,7 @@
 # Threat Feed Aggregator
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-1.26.12-blue?style=for-the-badge" alt="Version 1.26.12">
+  <img src="https://img.shields.io/badge/Version-2.2.0-blue?style=for-the-badge" alt="Version 2.2.0">
   <img src="https://img.shields.io/badge/Python-3.13+-green?style=for-the-badge&logo=python" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/Flask-3.0-lightgrey?style=for-the-badge&logo=flask" alt="Flask 3.0">
   <img src="https://img.shields.io/badge/Docker-Ready-cyan?style=for-the-badge&logo=docker" alt="Docker Ready">
@@ -25,6 +25,7 @@
 ### Intelligence Engine
 - **DNS Deduplication V2:** Background batch resolution — automatically removes domains pointing to already-blocked IPs.
 - **Generic EDL Builder:** Custom lists with selectable types (IP/Domain/URL) and formats (Text/CSV/JSON) via GUI or API.
+- **API Mode Feed Fetching:** Consume any paginated REST API (e.g. SGB/USOM) as a threat source — no hardcoded provider logic required. Configurable response path (dot notation), headers, page parameter, and max pages.
 - **Authenticated Feeds:** HTTP Basic Authentication support for premium/restricted sources.
 - **CIDR Aggregation:** Merges contiguous IP addresses and overlapping subnets into optimal CIDR blocks.
 - **Smart Scoring:** Risk scores (0-100) based on source confidence and indicator overlap across feeds.
@@ -46,6 +47,7 @@
 - **Secure Infrastructure:** System-wide proxy, custom Root CAs, SSL certificate management.
 - **Multi-Client API:** Per-client API keys for SOAR/SIEM with IP allowlist enforcement.
 - **FortiDeceptor Integration:** Automated block/unblock via webhook API.
+- **Trend Micro DDEI Integration:** `/api/ddei/submit` endpoint with HTTP Basic Auth for ingesting DDEI-detected threat indicators in bulk or single format.
 
 ### Investigation Tools
 - **Deep Lookup:** IP investigation with WHOIS, Geo-location (IP-API), and Reverse DNS (THC).
@@ -206,6 +208,36 @@ threat_feed_aggregator/
 ---
 
 ## Changelog
+
+### [v2.2.0] - 2026-05-15
+
+#### 🌐 API Mode Feed Fetching
+- **New `fetch_type: api` source option:** Any paginated REST API can now be used as a threat source without writing provider-specific code.
+- **Dot-notation response path:** Extract nested indicator arrays from complex JSON responses (e.g. `data.items.url`).
+- **Configurable pagination:** Set `api_page_param`, `api_page_start`, and `api_max_pages` to fully control page iteration. Stops automatically when a page returns an empty result.
+- **Per-source API headers:** Custom HTTP headers (e.g. `Authorization: Bearer <token>`) per source, stored in config.
+- **Proxy & SSL-bypass aware:** Inherits global proxy and SSL bypass settings — no extra config needed for corporate environments.
+- **UI toggle in Add/Edit Source modal:** "API Mode" section with response path, headers, and pagination controls.
+
+#### 🔗 Trend Micro DDEI Integration
+- **`POST /api/ddei/submit` endpoint:** Accepts DDEI webhook payloads and ingests them as threat indicators.
+- **HTTP Basic Auth:** Authenticates requests against local EDL user accounts (username + password).
+- **Flexible payload formats:** JSON bulk (`{ips:[...], urls:[...]}`), JSON single (`{type, value}`), indicators array (`{indicators:[...]}`), and plain-text (newline/comma delimited).
+- **Auto EDL refresh:** Triggers background EDL file regeneration after successful ingestion.
+- **Audit log integration:** All DDEI submissions are recorded under the `ddei_api` user.
+
+#### 🐛 Bug Fixes
+- **PostgreSQL RETURNING id:** Fixed `INSERT INTO users ... RETURNING id` failure on PostgreSQL — cursor now correctly handles rowcount check before fetching.
+- **Scheduler startup:** Fixed `init_scheduler` missing method — uses `scheduler.start()` + `update_scheduled_jobs()` directly.
+- **API error response:** Corrected argument order in `api_error()` calls (status code was being passed as message).
+- **XSS in testSource:** HTML-escaped feed preview content in SweetAlert2 modal.
+- **RBAC coverage:** Added `@permission_required` to 12 write routes that were missing access control.
+- **Password change:** `change_password` now validates against the current user's account, not just admin.
+- **JS deduplication:** Removed duplicate modal functions from `dashboard.js`; all source management now goes through `source_manager.js`.
+- **innerHTML → textContent:** Prevented XSS in LDAP/DNS/proxy status display elements.
+
+#### 🔒 Security
+- **CSRF cookie hardening for OpenShift/HTTPS:** Added `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_HTTPONLY`, and `SESSION_COOKIE_SAMESITE=Lax` when running behind an HTTPS ingress (`FORCE_HTTPS` env var). Fixes "CSRF session token is missing" on login behind proxies.
 
 ### [v1.26.12] - 2026-04-14
 

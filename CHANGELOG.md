@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.2.0] - 2026-05-15
+
+### Added
+- **API Mode Feed Fetching:** New `fetch_type: api` option for threat sources enables consuming any paginated REST API (e.g. SGB/USOM zararlı bağlantılar) without provider-specific code.
+  - Dot-notation `api_response_path` for extracting nested indicator arrays from complex JSON structures.
+  - Configurable pagination: `api_page_param`, `api_page_start`, `api_max_pages`; stops automatically on empty response.
+  - Per-source custom HTTP headers (`api_headers`) stored in config for Authorization or custom tokens.
+  - Inherits global proxy and SSL-bypass settings automatically.
+  - Full UI support in Add/Edit Source modal: "API Mode" toggle reveals response path, headers, and pagination controls.
+- **Trend Micro DDEI Integration:** `POST /api/ddei/submit` endpoint for ingesting DDEI-detected indicators.
+  - HTTP Basic Authentication using local EDL user accounts.
+  - Flexible payload: JSON bulk `{ips, urls}`, JSON single `{type, value}`, indicators array `{indicators:[...]}`, plain-text (newline/comma).
+  - Automatically triggers background EDL regeneration on successful ingestion.
+  - All submissions recorded in audit log under `ddei_api` user.
+
+### Fixed
+- **PostgreSQL RETURNING id:** `INSERT INTO users` with `RETURNING id` no longer fails; cursor correctly handles result fetch before rowcount check.
+- **Scheduler startup:** Removed call to non-existent `init_scheduler()`; scheduler now starts via `scheduler.start()` + `update_scheduled_jobs()`.
+- **API error response:** Corrected `api_error()` argument order — status code was being passed as the error message.
+- **XSS in testSource:** Feed preview content is now HTML-escaped before rendering in SweetAlert2 modal.
+- **RBAC coverage:** Added `@permission_required` to 12 write routes that were missing access control enforcement.
+- **Password change:** `change_password` validates against the requesting user's account, not always admin.
+- **JS deduplication:** Removed duplicate modal helper functions from `dashboard.js`; all source management flows through `source_manager.js`.
+- **innerHTML → textContent:** Replaced `innerHTML` with `textContent` for LDAP/DNS/proxy status display to prevent XSS.
+
+### Security
+- **CSRF cookie hardening:** `SESSION_COOKIE_SECURE=True`, `SESSION_COOKIE_HTTPONLY=True`, `SESSION_COOKIE_SAMESITE=Lax` applied when `FORCE_HTTPS` env var is set. Resolves "CSRF session token is missing" errors when running behind OpenShift/ingress HTTPS proxy.
+
+---
+
 ## [1.26.1] - 2026-04-01
 
 ### Added
