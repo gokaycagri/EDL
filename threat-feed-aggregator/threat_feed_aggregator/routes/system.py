@@ -487,6 +487,13 @@ def add_source():
     schedule_interval_minutes = request.form.get("schedule_interval_minutes", type=int)
     confidence = request.form.get("confidence", default=50, type=int)
     retention_days = request.form.get("retention_days", type=int)
+    fetch_type = request.form.get("fetch_type", "http")
+    api_headers_raw = request.form.get("api_headers", "")
+    api_response_path = request.form.get("api_response_path", "")
+    api_pagination_enabled = request.form.get("api_pagination_enabled") == "true"
+    api_page_param = request.form.get("api_page_param", "")
+    api_page_start = request.form.get("api_page_start", type=int, default=0)
+    api_max_pages = request.form.get("api_max_pages", type=int, default=50)
 
     if name and url:
         config = read_config()
@@ -511,6 +518,22 @@ def add_source():
             new_source["schedule_interval_minutes"] = schedule_interval_minutes
         if retention_days:
             new_source["retention_days"] = retention_days
+        if fetch_type == "api":
+            new_source["fetch_type"] = "api"
+            if api_response_path:
+                new_source["api_response_path"] = api_response_path
+            new_source["api_pagination_enabled"] = api_pagination_enabled
+            if api_page_param:
+                new_source["api_page_param"] = api_page_param
+            new_source["api_page_start"] = api_page_start
+            new_source["api_max_pages"] = api_max_pages
+            if api_headers_raw.strip():
+                import json as _json
+                try:
+                    new_source["api_headers"] = _json.loads(api_headers_raw)
+                except Exception:
+                    flash("API Headers must be valid JSON (e.g. {\"Authorization\": \"Bearer TOKEN\"})", "danger")
+                    return redirect(url_for("dashboard.index"))
 
         config["source_urls"].append(new_source)
         write_config(config)
@@ -536,6 +559,13 @@ def update_source(index):
     schedule_interval_minutes = request.form.get("schedule_interval_minutes", type=int)
     confidence = request.form.get("confidence", default=50, type=int)
     retention_days = request.form.get("retention_days", type=int)
+    fetch_type = request.form.get("fetch_type", "http")
+    api_headers_raw = request.form.get("api_headers", "")
+    api_response_path = request.form.get("api_response_path", "")
+    api_pagination_enabled = request.form.get("api_pagination_enabled") == "true"
+    api_page_param = request.form.get("api_page_param", "")
+    api_page_start = request.form.get("api_page_start", type=int, default=0)
+    api_max_pages = request.form.get("api_max_pages", type=int, default=50)
 
     if name and url:
         config = read_config()
@@ -551,6 +581,22 @@ def update_source(index):
                 updated_source["schedule_interval_minutes"] = schedule_interval_minutes
             if retention_days:
                 updated_source["retention_days"] = retention_days
+            if fetch_type == "api":
+                updated_source["fetch_type"] = "api"
+                if api_response_path:
+                    updated_source["api_response_path"] = api_response_path
+                updated_source["api_pagination_enabled"] = api_pagination_enabled
+                if api_page_param:
+                    updated_source["api_page_param"] = api_page_param
+                updated_source["api_page_start"] = api_page_start
+                updated_source["api_max_pages"] = api_max_pages
+                if api_headers_raw.strip():
+                    import json as _json
+                    try:
+                        updated_source["api_headers"] = _json.loads(api_headers_raw)
+                    except Exception:
+                        flash("API Headers must be valid JSON (e.g. {\"Authorization\": \"Bearer TOKEN\"})", "danger")
+                        return redirect(url_for("dashboard.index"))
 
             config["source_urls"][index] = updated_source
             write_config(config)

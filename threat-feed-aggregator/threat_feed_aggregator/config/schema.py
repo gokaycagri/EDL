@@ -23,6 +23,14 @@ class SourceConfig(BaseModel):
     auth_pass: str | None = None
     schedule_interval_minutes: int | None = None
     retention_days: int | None = None
+    # API fetch mode (generic — works for any REST API source)
+    fetch_type: str = "http"
+    api_headers: dict[str, str] | None = None
+    api_response_path: str | None = None
+    api_pagination_enabled: bool = False
+    api_page_param: str | None = None
+    api_page_start: int = 0
+    api_max_pages: int = 50
 
     @field_validator("confidence")
     @classmethod
@@ -37,6 +45,14 @@ class SourceConfig(BaseModel):
         allowed = ("text", "json", "csv", "taxii")
         if v not in allowed:
             raise ValueError(f"format must be one of {allowed}")
+        return v
+
+    @field_validator("fetch_type")
+    @classmethod
+    def valid_fetch_type(cls, v):
+        allowed = ("http", "api")
+        if v not in allowed:
+            raise ValueError(f"fetch_type must be one of {allowed}")
         return v
 
 

@@ -26,6 +26,41 @@ from .utils import is_rfc1918_private_ipv4_indicator, is_whitelisted
 logger = logging.getLogger(__name__)
 
 
+def _extract_items(data, response_path: str | None, key_or_column: str | None) -> list[str]:
+    """Extract a flat list of indicator strings from a JSON response.
+
+    response_path: dot-notation path to the list inside the response, e.g. "models" or "data.items".
+                   If None/empty, data itself is expected to be a list.
+    key_or_column: field name to extract from each list element when elements are dicts.
+                   If None, str(element) is used.
+    """
+    node = data
+    if response_path:
+        for key in response_path.split("."):
+            if isinstance(node, dict):
+                node = node.get(key)
+            else:
+                node = None
+            if node is None:
+                return []
+
+    if not isinstance(node, list):
+        return []
+
+    results = []
+    for item in node:
+        if isinstance(item, dict) and key_or_column:
+            keys = key_or_column.split(".")
+            val = item
+            for k in keys:
+                val = val.get(k) if isinstance(val, dict) else None
+            if val:
+                results.append(str(val))
+        elif not isinstance(item, dict):
+            results.append(str(item))
+    return results
+
+
 class FeedAggregator:
     """Encapsulates logic for fetching, parsing, and storing threat feed data (Async)."""
 
@@ -33,16 +68,87 @@ class FeedAggregator:
         self.db_conn = db_conn
 
     async def fetch_data(self, source_config, session=None):
-        url = source_config["url"]
         start_time = time.time()
 
-        auth = None
-        if source_config.get("auth_user") and source_config.get("auth_pass"):
-            auth = BasicAuth(source_config["auth_user"], source_config["auth_pass"])
+        if source_config.get("fetch_type") == "api":
+            raw_data = await self._fetch_api_paginated(source_config, session=session)
+        else:
+            url = source_config["url"]
+            auth = None
+            if source_config.get("auth_user") and source_config.get("auth_pass"):
+                auth = BasicAuth(source_config["auth_user"], source_config["auth_pass"])
+            raw_data = await fetch_data_from_url_async(url, session=session, auth=auth)
 
-        raw_data = await fetch_data_from_url_async(url, session=session, auth=auth)
         duration = time.time() - start_time
         return raw_data, [], duration
+
+    async def _fetch_api_paginated(self, source_config, session=None):
+        """Generic REST API fetcher with optional pagination support."""
+        import base64 as _base64
+
+        import aiohttp as _aiohttp
+
+        from .config_manager import read_config as _read_config
+        from .utils import get_proxy_settings as _get_proxy_settings
+
+        url = source_config["url"]
+
+        headers = dict(source_config.get("api_headers") or {})
+        if source_config.get("auth_user") and source_config.get("auth_pass"):
+            credentials = f"{source_config['auth_user']}:{source_config['auth_pass']}"
+            encoded = _base64.b64encode(credentials.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded}"
+
+        response_path = source_config.get("api_response_path")
+        pagination_enabled = source_config.get("api_pagination_enabled", False)
+        page_param = source_config.get("api_page_param")
+        page_start = source_config.get("api_page_start", 0)
+        max_pages = source_config.get("api_max_pages", 50)
+        key_or_column = source_config.get("key_or_column")
+
+        _, proxy_url, _ = _get_proxy_settings()
+        config = _read_config()
+        bypass_hosts = config.get("ssl_bypass_hosts", [])
+        ssl_param = False if any(h in url for h in bypass_hosts) else None
+        timeout = _aiohttp.ClientTimeout(total=30)
+
+        all_items: list[str] = []
+
+        async def _do_request(s, params):
+            async with s.get(url, headers=headers, params=params, timeout=timeout, proxy=proxy_url, ssl=ssl_param) as resp:
+                resp.raise_for_status()
+                return await resp.json(content_type=None)
+
+        async def _fetch_with_session(s):
+            if not pagination_enabled or not page_param:
+                data = await _do_request(s, {})
+                return _extract_items(data, response_path, key_or_column)
+
+            collected = []
+            for page_num in range(page_start, page_start + max_pages):
+                data = await _do_request(s, {page_param: page_num})
+                items = _extract_items(data, response_path, key_or_column)
+                if not items:
+                    break
+                collected.extend(items)
+                logger.debug("API fetch page %d: %d items", page_num, len(items))
+            return collected
+
+        try:
+            if session:
+                all_items = await _fetch_with_session(session)
+            else:
+                resolver = _aiohttp.ThreadedResolver()
+                connector = _aiohttp.TCPConnector(resolver=resolver, ssl=ssl_param)
+                async with _aiohttp.ClientSession(connector=connector) as new_session:
+                    all_items = await _fetch_with_session(new_session)
+        except Exception as e:
+            logger.error("API fetch failed for %s: %s", url, e)
+            return None
+
+        if not all_items:
+            return None
+        return "\n".join(all_items)
 
     def parse_data(self, raw_data, source_config):
         data_format = source_config.get("format", "text")
