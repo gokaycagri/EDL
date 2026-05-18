@@ -31,11 +31,23 @@ echo "Running pre-start initialization..."
 python -m threat_feed_aggregator.prestart
 
 # Run the application with Gunicorn (Production WSGI)
-echo "Starting Threat Feed Aggregator with Gunicorn (HTTP Mode)..."
+echo "Starting Threat Feed Aggregator with Gunicorn..."
 
-# Balanced configuration: 2 workers allow GUI responsiveness during heavy tasks
-# No certfile/keyfile flags = HTTP mode
-exec gunicorn --worker-class=gthread --workers=2 --threads=4 --bind 0.0.0.0:8080 \
-    --access-logfile - \
-    --timeout 300 \
-    threat_feed_aggregator.app:app
+CERT_FILE="/app/threat_feed_aggregator/certs/cert.pem"
+KEY_FILE="/app/threat_feed_aggregator/certs/key.pem"
+
+# Single worker + multiple threads: avoids APScheduler duplication and DB deadlocks
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+    echo "SSL certificates found — starting in HTTPS mode."
+    exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
+        --certfile="$CERT_FILE" --keyfile="$KEY_FILE" \
+        --access-logfile - \
+        --timeout 300 \
+        threat_feed_aggregator.app:app
+else
+    echo "No SSL certificates found — starting in HTTP mode."
+    exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
+        --access-logfile - \
+        --timeout 300 \
+        threat_feed_aggregator.app:app
+fi

@@ -75,11 +75,15 @@ def init_db(conn=None):
                 if "type" not in columns:
                     db.execute("ALTER TABLE whitelist ADD COLUMN type TEXT NOT NULL DEFAULT 'ip'")
             else:
-                # Postgres Column Checks (Attempt add and ignore error)
+                # Postgres: check via information_schema to avoid IF NOT EXISTS crash on older psycopg2
                 try:
-                    db.execute("ALTER TABLE whitelist ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'ip'")
-                except Exception:
-                    pass
+                    row = db.execute(
+                        "SELECT 1 FROM information_schema.columns WHERE table_name='whitelist' AND column_name='type'"
+                    ).fetchone()
+                    if not row:
+                        db.execute("ALTER TABLE whitelist ADD COLUMN type TEXT DEFAULT 'ip'")
+                except Exception as _e:
+                    logger.warning("whitelist type column migration: %s", _e)
 
             # API Blacklist Table
             db.execute(f"""
@@ -100,10 +104,15 @@ def init_db(conn=None):
                 if "expires_at" not in columns:
                     db.execute("ALTER TABLE api_blacklist ADD COLUMN expires_at TEXT")
             else:
+                # Postgres: check via information_schema to avoid IF NOT EXISTS crash on older psycopg2
                 try:
-                    db.execute("ALTER TABLE api_blacklist ADD COLUMN IF NOT EXISTS expires_at TEXT")
-                except Exception:
-                    pass
+                    row = db.execute(
+                        "SELECT 1 FROM information_schema.columns WHERE table_name='api_blacklist' AND column_name='expires_at'"
+                    ).fetchone()
+                    if not row:
+                        db.execute("ALTER TABLE api_blacklist ADD COLUMN expires_at TEXT")
+                except Exception as _e:
+                    logger.warning("api_blacklist expires_at column migration: %s", _e)
 
             # Users Table
             db.execute("""
@@ -114,7 +123,6 @@ def init_db(conn=None):
                     mfa_secret TEXT
                 )
             """)
-
             # Job History Table
             db.execute(f"""
                 CREATE TABLE IF NOT EXISTS job_history (
@@ -127,7 +135,6 @@ def init_db(conn=None):
                     message TEXT
                 )
             """)
-
             # Stats History Table
             db.execute(f"""
                 CREATE TABLE IF NOT EXISTS stats_history (
@@ -139,7 +146,6 @@ def init_db(conn=None):
                     url_count INTEGER
                 )
             """)
-
             # Custom EDL Lists
             db.execute(f"""
                 CREATE TABLE IF NOT EXISTS custom_lists (
@@ -152,7 +158,6 @@ def init_db(conn=None):
                     created_at TEXT NOT NULL
                 )
             """)
-
             # Admin Profiles
             db.execute(f"""
                 CREATE TABLE IF NOT EXISTS admin_profiles (
@@ -162,7 +167,6 @@ def init_db(conn=None):
                     permissions TEXT NOT NULL
                 )
             """)
-
             # LDAP Group Mappings
             db.execute(f"""
                 CREATE TABLE IF NOT EXISTS ldap_group_mappings (
@@ -172,7 +176,6 @@ def init_db(conn=None):
                     FOREIGN KEY(profile_id) REFERENCES admin_profiles(id) ON DELETE CASCADE
                 )
             """)
-
             # DNS Resolution Cache
             db.execute("""
                 CREATE TABLE IF NOT EXISTS dns_resolution_cache (
@@ -193,7 +196,6 @@ def init_db(conn=None):
                     ip_address TEXT
                 )
             """)
-
             # Indicator Tags
             db.execute("""
                 CREATE TABLE IF NOT EXISTS indicator_tags (
@@ -203,6 +205,35 @@ def init_db(conn=None):
                     FOREIGN KEY(indicator) REFERENCES indicators(indicator) ON DELETE CASCADE
                 )
             """)
+            # SGB Metadata (Siber Güvenlik Başkanlığı enrichment fields)
+            # Postgres: use information_schema check to avoid CREATE TABLE IF NOT EXISTS crash on older psycopg2
+            if DB_TYPE == "postgres":
+                try:
+                    row = db.execute(
+                        "SELECT 1 FROM information_schema.tables WHERE table_name='sgb_metadata' AND table_schema='public'"
+                    ).fetchone()
+                    if not row:
+                        db.execute("""
+                            CREATE TABLE sgb_metadata (
+                                indicator        TEXT PRIMARY KEY,
+                                sgb_desc         TEXT,
+                                sgb_source       TEXT,
+                                sgb_date         TEXT,
+                                sgb_criticality  INTEGER
+                            )
+                        """)
+                except Exception as _e:
+                    logger.warning("sgb_metadata table creation: %s", _e)
+            else:
+                db.execute("""
+                    CREATE TABLE IF NOT EXISTS sgb_metadata (
+                        indicator        TEXT PRIMARY KEY,
+                        sgb_desc         TEXT,
+                        sgb_source       TEXT,
+                        sgb_date         TEXT,
+                        sgb_criticality  INTEGER
+                    )
+                """)
 
             logger.info("All tables checked.")
 
@@ -275,6 +306,10 @@ def create_indexes_safely(conn=None):
 
             # Indexes for DNS Cache
             db.execute("CREATE INDEX IF NOT EXISTS idx_dns_cache_last_resolved ON dns_resolution_cache(last_resolved)")
+
+            # Indexes for SGB Metadata
+            db.execute("CREATE INDEX IF NOT EXISTS idx_sgb_criticality ON sgb_metadata(sgb_criticality)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_sgb_desc ON sgb_metadata(sgb_desc)")
 
             logger.info("Background index creation completed.")
         except Exception as e:

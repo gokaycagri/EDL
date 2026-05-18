@@ -27,6 +27,7 @@ from .repositories.indicator_repo import (
     save_historical_stats,
     update_dns_cache_batch,
     upsert_indicators_bulk,
+    upsert_sgb_metadata,
 )
 from .repositories.job_repo import (
     clear_job_history,
@@ -92,6 +93,7 @@ __all__ = [
     "save_historical_stats",
     "update_dns_cache_batch",
     "upsert_indicators_bulk",
+    "upsert_sgb_metadata",
     # whitelist_repo
     "add_api_blacklist_item",
     "add_whitelist_item",

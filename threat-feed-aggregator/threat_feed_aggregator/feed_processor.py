@@ -17,6 +17,7 @@ from .db_manager import (
     log_job_start,
     recalculate_scores,
     upsert_indicators_bulk,
+    upsert_sgb_metadata,
 )
 from .geoip_manager import get_country_code
 from .parsers import get_parser
@@ -66,11 +67,14 @@ class FeedAggregator:
 
     def __init__(self, db_conn=None):
         self.db_conn = db_conn
+        self._sgb_metadata: dict[str, dict] = {}
 
     async def fetch_data(self, source_config, session=None):
         start_time = time.time()
 
-        if source_config.get("fetch_type") == "api":
+        if source_config.get("format") == "sgb":
+            raw_data = await self._fetch_sgb_paginated(source_config, session=session)
+        elif source_config.get("fetch_type") == "api":
             raw_data = await self._fetch_api_paginated(source_config, session=session)
         else:
             url = source_config["url"]
@@ -81,6 +85,78 @@ class FeedAggregator:
 
         duration = time.time() - start_time
         return raw_data, [], duration
+
+    async def _fetch_sgb_paginated(self, source_config, session=None):
+        """SGB (Siber Güvenlik Başkanlığı) dedicated fetcher.
+
+        Fetches paginated SGB API and returns tab-separated 'url<TAB>type' lines.
+        Uses the 'pageCount' field from the first response to avoid over-fetching.
+        """
+        import aiohttp as _aiohttp
+
+        from .config_manager import read_config as _read_config
+        from .utils import get_proxy_settings as _get_proxy_settings
+
+        url = source_config.get("url", "https://siberguvenlik.gov.tr/api/address/index")
+        page_start = source_config.get("api_page_start", 0)
+        max_pages = source_config.get("api_max_pages", 25000)
+
+        _, proxy_url, _ = _get_proxy_settings()
+        config = _read_config()
+        bypass_hosts = config.get("ssl_bypass_hosts", [])
+        ssl_param = False if any(h in url for h in bypass_hosts) else None
+        timeout = _aiohttp.ClientTimeout(total=60)
+
+        all_lines: list[str] = []
+        self._sgb_metadata.clear()
+
+        async def _fetch_all(s):
+            page_count_limit = None
+            for page_num in range(page_start, page_start + max_pages):
+                if page_count_limit is not None and page_num >= page_count_limit:
+                    break
+                async with s.get(
+                    url, params={"page": page_num}, timeout=timeout, proxy=proxy_url, ssl=ssl_param
+                ) as resp:
+                    resp.raise_for_status()
+                    data = await resp.json(content_type=None)
+
+                # Learn total pages from first response
+                if page_count_limit is None and "pageCount" in data:
+                    page_count_limit = data["pageCount"]
+                    logger.info("SGB: total pages = %d", page_count_limit)
+
+                models = data.get("models", [])
+                if not models:
+                    break
+                for item in models:
+                    item_url = item.get("url")
+                    item_type = item.get("type", "")
+                    if item_url:
+                        all_lines.append(f"{item_url}\t{item_type}")
+                        self._sgb_metadata[item_url] = {
+                            "sgb_desc": item.get("desc"),
+                            "sgb_source": item.get("source"),
+                            "sgb_date": item.get("date"),
+                            "sgb_criticality": item.get("criticality_level"),
+                        }
+                logger.debug("SGB page %d: %d items (total so far: %d)", page_num, len(models), len(all_lines))
+
+        try:
+            if session:
+                await _fetch_all(session)
+            else:
+                resolver = _aiohttp.ThreadedResolver()
+                connector = _aiohttp.TCPConnector(resolver=resolver, ssl=ssl_param)
+                async with _aiohttp.ClientSession(connector=connector) as new_session:
+                    await _fetch_all(new_session)
+        except Exception as e:
+            logger.error("SGB fetch failed for %s: %s", url, e)
+            return None
+
+        if not all_lines:
+            return None
+        return "\n".join(all_lines)
 
     async def _fetch_api_paginated(self, source_config, session=None):
         """Generic REST API fetcher with optional pagination support."""
@@ -247,6 +323,16 @@ class FeedAggregator:
 
                 if enriched_items:
                     await loop.run_in_executor(None, self.save_batch, enriched_items, name)
+
+                # Save SGB metadata sidecar (only for sgb format sources)
+                if source_config.get("format") == "sgb" and self._sgb_metadata:
+                    sgb_meta_for_save = {}
+                    for norm_ind, _itype in filtered_items:
+                        meta = self._sgb_metadata.get(norm_ind) or self._sgb_metadata.get(norm_ind.lower())
+                        if meta:
+                            sgb_meta_for_save[norm_ind] = meta
+                    if sgb_meta_for_save:
+                        await loop.run_in_executor(None, upsert_sgb_metadata, sgb_meta_for_save)
 
                 count = len(enriched_items)
 

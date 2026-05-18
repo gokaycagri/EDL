@@ -496,6 +496,21 @@ def add_source():
     api_max_pages = request.form.get("api_max_pages", type=int, default=50)
 
     if name and url:
+        url = url.strip()
+
+        # SGB (Siber Güvenlik Başkanlığı) auto-preset:
+        # Tetikleyici: kullanıcı "sgb" formatı seçmiş VEYA siberguvenlik.gov.tr URL'i girmiş
+        if data_format == "sgb" or "siberguvenlik.gov.tr" in url:
+            url = "https://siberguvenlik.gov.tr/api/address/index"
+            fetch_type = "api"
+            data_format = "sgb"
+            api_response_path = "models"
+            key_or_column = "url"
+            api_pagination_enabled = True
+            api_page_param = "page"
+            api_page_start = 0
+            api_max_pages = 25000
+
         config = read_config()
 
         # Check for duplicate URL
@@ -568,6 +583,20 @@ def update_source(index):
     api_max_pages = request.form.get("api_max_pages", type=int, default=50)
 
     if name and url:
+        url = url.strip()
+
+        # SGB (Siber Güvenlik Başkanlığı) auto-preset
+        if data_format == "sgb" or "siberguvenlik.gov.tr" in url:
+            url = "https://siberguvenlik.gov.tr/api/address/index"
+            fetch_type = "api"
+            data_format = "sgb"
+            api_response_path = "models"
+            key_or_column = "url"
+            api_pagination_enabled = True
+            api_page_param = "page"
+            api_page_start = 0
+            api_max_pages = 25000
+
         config = read_config()
         if 0 <= index < len(config["source_urls"]):
             updated_source = {"name": name, "url": url, "format": data_format, "confidence": confidence}

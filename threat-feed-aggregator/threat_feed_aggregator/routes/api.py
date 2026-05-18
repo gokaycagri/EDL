@@ -812,6 +812,21 @@ def api_test_feed():
 
         source_config = {"name": name, "url": url, "format": data_format, "key_or_column": key_or_column}
 
+        # SGB: auto-configure and limit to 1 page so test completes quickly
+        if data_format == "sgb" or (url and "siberguvenlik.gov.tr" in url):
+            source_config["format"] = "sgb"
+            source_config["url"] = "https://siberguvenlik.gov.tr/api/address/index"
+            source_config["api_page_start"] = 0
+            source_config["api_max_pages"] = 1  # Only first page for test — ~20 sample items
+        # For generic API feeds, pass pagination settings through from the request
+        elif data.get("fetch_type") == "api":
+            source_config["fetch_type"] = "api"
+            source_config["api_response_path"] = data.get("api_response_path", "")
+            source_config["api_pagination_enabled"] = data.get("api_pagination_enabled", False)
+            source_config["api_page_param"] = data.get("api_page_param", "page")
+            source_config["api_page_start"] = data.get("api_page_start", 0)
+            source_config["api_max_pages"] = min(data.get("api_max_pages", 1), 2)  # Cap at 2 pages for test
+
         success, message, sample = test_feed_source(source_config)
 
         if success:

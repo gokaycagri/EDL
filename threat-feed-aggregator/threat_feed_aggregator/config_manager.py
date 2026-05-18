@@ -166,7 +166,7 @@ _stats_lock = threading.Lock()
 
 
 def write_stats(stats):
-    tmp_path = STATS_FILE + ".tmp"
+    tmp_path = f"{STATS_FILE}.{os.getpid()}.tmp"
     with _stats_lock:
         with open(tmp_path, "w") as f:
             json.dump(stats, f, indent=4)

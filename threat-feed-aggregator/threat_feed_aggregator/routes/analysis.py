@@ -36,10 +36,19 @@ def filter_options():
         return api_response({"items": options})
 
     if column == "tag":
-        common_tags = ["Botnet", "C2", "Malware", "Phishing", "Fraud", "Abuse", "Reputation", "Tor", "Proxy"]
+        common_tags = ["Botnet", "C2", "Malware", "Phishing", "Fraud", "Abuse", "Reputation", "Tor", "Proxy", "SGB"]
         if search:
             common_tags = [t for t in common_tags if search.lower() in t.lower()]
         return api_response({"items": common_tags})
+
+    if column == "sgb_desc":
+        return api_response({"items": ["PH", "BP", "MW", "C2"]})
+
+    if column == "sgb_source":
+        return api_response({"items": ["IH", "SB"]})
+
+    if column == "sgb_criticality":
+        return api_response({"items": ["1", "2", "3", "4"]})
 
     # Dynamic DB columns
     results = get_filter_options(column, search)
@@ -59,9 +68,11 @@ def data():
     order_column_index = request.args.get("order[0][column]", default=3, type=int)
     order_dir = request.args.get("order[0][dir]", default="desc")
 
-    # Map index to column name
-    columns_map = ["indicator", "type", "country", "risk_score", "level", "source_count", "tags", "last_seen"]
+    # Map index to column name (index 0 = expand control, non-orderable)
+    columns_map = ["", "indicator", "type", "country", "risk_score", "level", "source_count", "tags", "last_seen"]
     order_col = columns_map[order_column_index] if order_column_index < len(columns_map) else "risk_score"
+    if not order_col:
+        order_col = "risk_score"
 
     # Extract Filters from 'custom_filters' JSON
     filters = {}
@@ -124,7 +135,10 @@ def export_indicators():
     def generate_csv():
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["indicator", "type", "country", "risk_score", "source_count", "last_seen"])
+        writer.writerow(
+            ["indicator", "type", "country", "risk_score", "source_count", "last_seen",
+             "sgb_desc", "sgb_source", "sgb_date", "sgb_criticality"]
+        )
         yield buf.getvalue()
         buf.seek(0)
         buf.truncate(0)
@@ -137,6 +151,10 @@ def export_indicators():
                     row.get("risk_score"),
                     row.get("source_count"),
                     row.get("last_seen"),
+                    row.get("sgb_desc"),
+                    row.get("sgb_source"),
+                    row.get("sgb_date"),
+                    row.get("sgb_criticality"),
                 ]
             )
             yield buf.getvalue()

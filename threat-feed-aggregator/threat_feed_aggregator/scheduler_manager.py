@@ -57,6 +57,8 @@ def update_scheduled_jobs():
 
     try:
         # Clear only relevant jobs instead of all to avoid disrupting other master processes
+        from apscheduler.jobstores.base import JobLookupError
+
         for job in scheduler.get_jobs():
             if job.id.startswith("feed_fetch_") or job.id in [
                 "update_ms365",
@@ -64,7 +66,10 @@ def update_scheduled_jobs():
                 "update_azure",
                 "dns_deduplication_job",
             ]:
-                scheduler.remove_job(job.id)
+                try:
+                    scheduler.remove_job(job.id)
+                except JobLookupError:
+                    pass
 
         for source_name, source_config in configured_sources.items():
             interval_minutes = source_config.get("schedule_interval_minutes")

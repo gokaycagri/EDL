@@ -77,6 +77,35 @@
         display: inline-block;
         width: auto;
     }
+
+    /* SGB Child Row Expand */
+    td.dt-control {
+        cursor: pointer;
+        text-align: center;
+        width: 22px;
+    }
+    td.dt-control::before {
+        content: '▶';
+        font-size: 0.65rem;
+        color: var(--text-muted);
+    }
+    tr.dt-hasChild td.dt-control::before {
+        content: '▼';
+        color: var(--accent-primary, #4f8ef7);
+    }
+    .sgb-detail-panel {
+        background: var(--surface-2);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 12px 16px;
+        font-size: 0.8rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+    }
+    .sgb-detail-panel .sgb-item { display: flex; flex-direction: column; }
+    .sgb-detail-panel .sgb-label { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 2px; }
+    .sgb-detail-panel .sgb-value { color: var(--text-primary); font-weight: 500; }
 </style>
 {% endblock %}
 
@@ -105,6 +134,11 @@
                         <option value="level">Risk Level</option>
                         <option value="country">Country Code</option>
                         <option value="risk_score">Risk Score (Threshold)</option>
+                        <optgroup label="SGB Intelligence">
+                            <option value="sgb_desc">SGB Kategori (PH/BP/MW/C2)</option>
+                            <option value="sgb_source">SGB Kaynak (IH/SB)</option>
+                            <option value="sgb_criticality">SGB Kritiklik (1-4)</option>
+                        </optgroup>
                     </select>
 
                     <label id="valueLabel">Value</label>
@@ -139,6 +173,7 @@
                 <table id="analysisTable" class="table table-hover align-middle w-100">
                     <thead>
                         <tr class="small text-uppercase" style="color: var(--text-muted);">
+                            <th></th>
                             <th>Indicator</th>
                             <th>Type</th>
                             <th>Country</th>
@@ -163,6 +198,18 @@
     let activeFilters = [];
     let table;
 
+    function formatSgbChildRow(data) {
+        const critLabels = { 1: 'Düşük', 2: 'Orta', 3: 'Yüksek', 4: 'Kritik' };
+        const descLabels = { 'PH': 'Phishing', 'BP': 'Botnet/C2', 'MW': 'Malware', 'C2': 'C2' };
+        const srcLabels  = { 'IH': 'İhbar', 'SB': 'SGB Kaynağı' };
+        return `<div class="sgb-detail-panel">
+            <div class="sgb-item"><span class="sgb-label">Kategori</span><span class="sgb-value">${data.sgb_desc ? (descLabels[data.sgb_desc] || data.sgb_desc) : '-'} ${data.sgb_desc ? '<small style="color:var(--text-muted);">('+data.sgb_desc+')</small>' : ''}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Kaynak</span><span class="sgb-value">${data.sgb_source ? (srcLabels[data.sgb_source] || data.sgb_source) : '-'}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Eklenme Tarihi</span><span class="sgb-value">${data.sgb_date || '-'}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Kritiklik</span><span class="sgb-value">${data.sgb_criticality ? data.sgb_criticality + ' — ' + (critLabels[data.sgb_criticality] || '') : '-'}</span></div>
+        </div>`;
+    }
+
     $(document).ready(function() {
         table = $('#analysisTable').DataTable({
             processing: true,
@@ -170,17 +217,6 @@
             ajax: {
                 url: "{{ url_for('analysis.data') }}",
                 data: function(d) {
-                    // Inject active filters into the request
-                    // We map them to specific column searches expected by backend logic or custom params
-                    // Column Map: 1:Type, 2:Country, 4:Level
-                    // For Source/Tag/RiskScore, we need to pass them as custom params or map to dummy columns?
-                    // The backend code I wrote supports `filters` dict if passed via logic,
-                    // BUT `routes/analysis.py` extracts them from `columns[i][search][value]`.
-
-                    // To support Source and Tag, I need to update routes/analysis.py to look for them.
-                    // Or I can overload the 'search' parameter, but that's messy.
-
-                    // Best way: Pass 'custom_filters' as a JSON string in the request
                     let filterDict = {};
                     activeFilters.forEach(f => {
                         filterDict[f.type] = f.value;
@@ -189,6 +225,9 @@
                 }
             },
             columns: [
+                { data: null, orderable: false, className: '', defaultContent: '', render: function(data) {
+                    return data.sgb_desc || data.sgb_source || data.sgb_criticality ? '<span class="dt-control"></span>' : '';
+                }},
                 { data: 'indicator', render: function(data) { return `<span class="fw-bold" style="color: var(--text-primary);">${data}</span>`; }},
                 { data: 'type', render: function(data) {
                     let color = 'secondary';
@@ -210,13 +249,15 @@
                 { data: 'tags', render: function(data) {
                     return data.map(tag => {
                         let color = 'secondary';
-                        if(tag.includes('Malware') || tag.includes('Botnet')) color = 'danger'; else if(tag.includes('Phishing')) color = 'warning';
+                        if(tag.includes('Malware') || tag.includes('Botnet')) color = 'danger';
+                        else if(tag.includes('Phishing')) color = 'warning';
+                        else if(tag === 'SGB') color = 'info';
                         return `<span class="badge bg-soft-${color} text-${color} me-1" style="font-size:0.65rem;">${tag}</span>`;
                     }).join('');
                 }},
                 { data: 'last_seen', render: function(data) { return data ? data.replace('T', ' ').substring(0, 16) : '-'; }}
             ],
-            order: [[3, 'desc']],
+            order: [[4, 'desc']],
             createdRow: function(row, data) {
                 if (data.risk_score >= 90) row.classList.add('risk-critical');
                 else if (data.risk_score >= 70) row.classList.add('risk-high');
@@ -227,6 +268,19 @@
             lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
             pagingType: "full_numbers",
             dom: '<"d-flex justify-content-between align-items-center mb-3"f>rt<"d-flex justify-content-between align-items-center mt-3"lip>'
+        });
+
+        // Child row expand/collapse for SGB metadata
+        $('#analysisTable tbody').on('click', 'td:first-child span.dt-control', function() {
+            const tr = $(this).closest('tr');
+            const row = table.row(tr);
+            if (row.child.isShown()) {
+                row.child.hide();
+                tr.removeClass('dt-hasChild');
+            } else {
+                row.child(formatSgbChildRow(row.data())).show();
+                tr.addClass('dt-hasChild');
+            }
         });
 
         // Filter Logic

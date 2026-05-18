@@ -1,7 +1,7 @@
 # Threat Feed Aggregator
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.2.0-blue?style=for-the-badge" alt="Version 2.2.0">
+  <img src="https://img.shields.io/badge/Version-2.3.0-blue?style=for-the-badge" alt="Version 2.3.0">
   <img src="https://img.shields.io/badge/Python-3.13+-green?style=for-the-badge&logo=python" alt="Python 3.13+">
   <img src="https://img.shields.io/badge/Flask-3.0-lightgrey?style=for-the-badge&logo=flask" alt="Flask 3.0">
   <img src="https://img.shields.io/badge/Docker-Ready-cyan?style=for-the-badge&logo=docker" alt="Docker Ready">
@@ -26,6 +26,7 @@
 - **DNS Deduplication V2:** Background batch resolution — automatically removes domains pointing to already-blocked IPs.
 - **Generic EDL Builder:** Custom lists with selectable types (IP/Domain/URL) and formats (Text/CSV/JSON) via GUI or API.
 - **API Mode Feed Fetching:** Consume any paginated REST API (e.g. SGB/USOM) as a threat source — no hardcoded provider logic required. Configurable response path (dot notation), headers, page parameter, and max pages.
+- **SGB (Siber Güvenlik Başkanlığı) Integration:** Dedicated `sgb` feed format with automatic pagination, native type tagging, and rich metadata enrichment (description, source, date, criticality) stored in `sgb_metadata` table.
 - **Authenticated Feeds:** HTTP Basic Authentication support for premium/restricted sources.
 - **CIDR Aggregation:** Merges contiguous IP addresses and overlapping subnets into optimal CIDR blocks.
 - **Smart Scoring:** Risk scores (0-100) based on source confidence and indicator overlap across feeds.

@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.3.0] - 2026-05-18
+
+### Added
+- **SGB (Siber Güvenlik Başkanlığı) Entegrasyonu:** Yeni `format: sgb` kaynak tipi ile SGB API'si sayfalama desteğiyle otomatik olarak çekiliyor.
+  - Dedicated `_fetch_sgb_paginated()` fetcher: `pageCount` alanını ilk yanıttan okuyarak gereksiz sayfa isteklerini önler.
+  - `parse_sgb()` parser: tab-ayrılmış `indicator<TAB>type` formatını işler; SGB'nin kendi tip etiketleri (`domain/ip/url`) doğrudan kullanılır.
+  - `sgb_metadata` tablosu: her indikatör için `sgb_desc`, `sgb_source`, `sgb_date`, `sgb_criticality` alanları saklanır.
+  - `upsert_sgb_metadata()` fonksiyonu: hem SQLite (`INSERT OR REPLACE`) hem PostgreSQL (`ON CONFLICT DO UPDATE`) destekli.
+  - Threat Analysis sayfasında SGB metadata sütunları (Açıklama, Kaynak, Tarih, Kritiklik) ve filtre desteği.
+  - Kaynak ekleme/düzenleme modalında SGB format seçeneği.
+
+### Changed
+- **Gunicorn / entrypoint.sh:** `workers=2` → `workers=1 --threads=8`. Tek worker + çok thread modeline geçildi; APScheduler job duplikasyonu ve DB deadlock sorunları önlendi. SSL sertifikası varsa otomatik HTTPS, yoksa HTTP modunda başlar.
+- **DB Migration (PostgreSQL):** `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` yerine `information_schema.columns` kontrolü ile güvenli migration. Eski psycopg2 sürümlerinde oluşan `IF NOT EXISTS` crash'i giderildi.
+- **indicator_repo:** `get_filtered_indicators()` sorgusu `sgb_metadata` tablosuna `LEFT JOIN` yapacak şekilde genişletildi; SGB filtrelerine göre `count_query` da otomatik JOIN alıyor.
+- **Autocomplete:** `sgb_desc`, `sgb_source`, `sgb_criticality` alanları için Analysis sayfasında autocomplete desteği eklendi.
+
+### Fixed
+- **Test Source (SGB):** Format `sgb` veya URL `siberguvenlik.gov.tr` içeriyorsa test sırasında otomatik olarak `api_max_pages=1` ile kısıtlanıyor; test anında tüm sayfalık veri çekilmiyordu.
+
+---
+
 ## [2.2.0] - 2026-05-15
 
 ### Added

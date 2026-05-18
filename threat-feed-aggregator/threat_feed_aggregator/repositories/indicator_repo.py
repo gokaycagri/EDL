@@ -397,7 +397,11 @@ def get_indicators_paginated(
     start=0, length=10, search_value=None, filters=None, order_col="risk_score", order_dir="desc", conn=None
 ):
     with db_readonly() as db:
-        base_query = "SELECT DISTINCT i.indicator, i.type, i.country, i.risk_score, i.source_count, i.last_seen FROM indicators i"
+        base_query = (
+            "SELECT DISTINCT i.indicator, i.type, i.country, i.risk_score, i.source_count, i.last_seen, "
+            "sgb.sgb_desc, sgb.sgb_source, sgb.sgb_date, sgb.sgb_criticality "
+            "FROM indicators i LEFT JOIN sgb_metadata sgb ON i.indicator = sgb.indicator"
+        )
         count_query = "SELECT COUNT(DISTINCT i.indicator) FROM indicators i"
         joins, conds, params = [], [], []
 
@@ -459,11 +463,26 @@ def get_indicators_paginated(
                     else:
                         conds.append("s.source_name LIKE ?")
                         params.append(f"%{val}%")
+                elif col == "sgb_desc":
+                    conds.append("sgb.sgb_desc = ?")
+                    params.append(val.upper())
+                elif col == "sgb_source":
+                    conds.append("sgb.sgb_source = ?")
+                    params.append(val.upper())
+                elif col == "sgb_criticality":
+                    try:
+                        conds.append("sgb.sgb_criticality = ?")
+                        params.append(int(val))
+                    except (ValueError, TypeError):
+                        pass
 
         if joins:
             j = " " + " ".join(joins)
             base_query += j
             count_query += j
+        # If any SGB filter is active, count_query also needs the LEFT JOIN
+        if any(c.startswith("sgb.") for c in conds) and "LEFT JOIN sgb_metadata" not in count_query:
+            count_query += " LEFT JOIN sgb_metadata sgb ON i.indicator = sgb.indicator"
         if conds:
             w = " WHERE " + " AND ".join(conds)
             base_query += w
@@ -513,7 +532,57 @@ def get_filter_options(column, search_term=None, limit=20, conn=None):
                     "SELECT DISTINCT type FROM indicators WHERE type LIKE ? ORDER BY type LIMIT ?", (p, limit)
                 ).fetchall()
             ]
+        if column in ("sgb_desc", "sgb_source"):
+            return [
+                row[0]
+                for row in db.execute(
+                    f"SELECT DISTINCT {column} FROM sgb_metadata WHERE {column} LIKE ? LIMIT ?", (p, limit)
+                ).fetchall()
+                if row[0]
+            ]
+        if column == "sgb_criticality":
+            return [
+                str(row[0])
+                for row in db.execute(
+                    "SELECT DISTINCT sgb_criticality FROM sgb_metadata WHERE sgb_criticality IS NOT NULL ORDER BY sgb_criticality"
+                ).fetchall()
+            ]
         return []
+
+
+def upsert_sgb_metadata(metadata_map: dict, conn=None):
+    """Upsert SGB-specific metadata for indicators."""
+    if not metadata_map:
+        return
+    rows = [
+        (ind, m.get("sgb_desc"), m.get("sgb_source"), m.get("sgb_date"), m.get("sgb_criticality"))
+        for ind, m in metadata_map.items()
+        if m
+    ]
+    if not rows:
+        return
+    with db_transaction(conn) as db:
+        if DB_TYPE == "postgres":
+            db.executemany(
+                """
+                INSERT INTO sgb_metadata (indicator, sgb_desc, sgb_source, sgb_date, sgb_criticality)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (indicator) DO UPDATE SET
+                    sgb_desc=EXCLUDED.sgb_desc, sgb_source=EXCLUDED.sgb_source,
+                    sgb_date=EXCLUDED.sgb_date, sgb_criticality=EXCLUDED.sgb_criticality
+                """,
+                rows,
+            )
+        else:
+            db.executemany(
+                """
+                INSERT OR REPLACE INTO sgb_metadata
+                    (indicator, sgb_desc, sgb_source, sgb_date, sgb_criticality)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+    logger.info("Saved SGB metadata for %d indicators.", len(rows))
 
 
 def update_dns_cache_batch(results, conn=None):

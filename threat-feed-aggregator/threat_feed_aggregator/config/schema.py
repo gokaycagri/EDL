@@ -42,7 +42,7 @@ class SourceConfig(BaseModel):
     @field_validator("format")
     @classmethod
     def valid_format(cls, v):
-        allowed = ("text", "json", "csv", "taxii")
+        allowed = ("text", "json", "csv", "taxii", "sgb")
         if v not in allowed:
             raise ValueError(f"format must be one of {allowed}")
         return v

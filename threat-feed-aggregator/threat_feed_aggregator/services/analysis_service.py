@@ -16,6 +16,8 @@ TAG_MAPPINGS = {
     "blocklist": ["Blocklist"],
     "tor": ["Anonymizer"],
     "proxy": ["Proxy"],
+    "sgb": ["SGB"],
+    "siberguvenlik": ["SGB"],
 }
 
 
@@ -83,6 +85,10 @@ def get_analysis_data(draw, start, length, search_value, filters, order_col, ord
                 "last_seen": item["last_seen"],
                 "sources": display_sources,
                 "tags": tags,
+                "sgb_desc": item.get("sgb_desc"),
+                "sgb_source": item.get("sgb_source"),
+                "sgb_date": item.get("sgb_date"),
+                "sgb_criticality": item.get("sgb_criticality"),
             }
         )
 
