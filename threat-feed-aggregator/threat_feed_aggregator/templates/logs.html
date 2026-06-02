@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}System Event Log{% endblock %}
+
+{% block extra_head %}
+<style>
+    .badge-action {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .log-table td {
+        vertical-align: middle;
+        font-size: 0.82rem;
+    }
+    .log-table th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--text-muted);
+        font-weight: 600;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .filter-card {
+        background: var(--surface-1);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1rem;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-muted);
+    }
+    .empty-state i {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        display: block;
+        opacity: 0.4;
+    }
+    .pagination-info {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h5 class="mb-0 fw-bold"><i class="fas fa-shield-alt me-2 text-cyan"></i>System Event Log</h5>
+            <small class="text-muted">Security-relevant actions recorded for compliance and forensics</small>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="form-check form-switch mb-0 me-2" title="Auto-refresh every 30 seconds">
+                <input class="form-check-input" type="checkbox" id="autoRefreshToggle">
+                <label class="form-check-label small text-muted" for="autoRefreshToggle">Auto-refresh</label>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary" id="btnExportCsv">
+                <i class="fas fa-download me-1"></i>Export CSV
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-card mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-6 col-md-3">
+                <label class="form-label small mb-1">Action</label>
+                <select class="form-select form-select-sm" id="filterAction">
+                    <option value="">All Actions</option>
+                    <option value="login">login</option>
+                    <option value="login_failed">login_failed</option>
+                    <option value="source_add">source_add</option>
+                    <option value="source_edit">source_edit</option>
+                    <option value="source_delete">source_delete</option>
+                    <option value="whitelist_add">whitelist_add</option>
+                    <option value="whitelist_remove">whitelist_remove</option>
+                    <option value="whitelist_import">whitelist_import</option>
+                    <option value="indicator_add">indicator_add</option>
+                    <option value="indicator_delete">indicator_delete</option>
+                    <option value="config_change">config_change</option>
+                    <option value="password_change">password_change</option>
+                    <option value="user_create">user_create</option>
+                    <option value="user_delete">user_delete</option>
+                    <option value="backup_download">backup_download</option>
+                    <option value="backup_api">backup_api</option>
+                    <option value="restore_api">restore_api</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small mb-1">Username</label>
+                <input type="text" class="form-control form-control-sm" id="filterUsername" placeholder="any user">
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small mb-1">Date From</label>
+                <input type="date" class="form-control form-control-sm" id="filterDateFrom">
+            </div>
+            <div class="col-sm-6 col-md-2">
+                <label class="form-label small mb-1">Date To</label>
+                <input type="date" class="form-control form-control-sm" id="filterDateTo">
+            </div>
+            <div class="col-sm-12 col-md-3 d-flex gap-2">
+                <button class="btn btn-sm btn-primary flex-fill" id="btnApply">
+                    <i class="fas fa-filter me-1"></i>Apply
+                </button>
+                <button class="btn btn-sm btn-outline-secondary flex-fill" id="btnClear">
+                    <i class="fas fa-times me-1"></i>Clear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card" style="background:var(--surface-1); border:1px solid var(--border-color);">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 log-table" id="logTable">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Timestamp</th>
+                            <th>Username</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>Details</th>
+                            <th class="pe-3">Client IP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logBody">
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                Loading…
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer d-flex align-items-center justify-content-between py-2 px-3" style="border-top:1px solid var(--border-color); background:var(--surface-2);">
+            <span class="pagination-info" id="paginationInfo">—</span>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" id="btnPrev" disabled>
+                    <i class="fas fa-chevron-left"></i> Prev
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="btnNext" disabled>
+                    Next <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const PAGE_SIZE = 50;
+    let currentOffset = 0;
+    let totalCount = 0;
+    let autoRefreshTimer = null;
+
+    const badgeClass = {
+        login:            "bg-primary",
+        login_failed:     "bg-danger",
+        source_add:       "bg-warning text-dark",
+        source_edit:      "bg-warning text-dark",
+        source_delete:    "bg-warning text-dark",
+        whitelist_add:    "bg-info text-dark",
+        whitelist_remove: "bg-info text-dark",
+        whitelist_import: "bg-info text-dark",
+        indicator_add:    "bg-success",
+        indicator_delete: "bg-danger",
+        config_change:    "bg-secondary",
+        password_change:  "bg-warning text-dark",
+        user_create:      "bg-success",
+        user_delete:      "bg-danger",
+        backup_download:  "bg-secondary",
+        backup_api:       "bg-secondary",
+        restore_api:      "bg-secondary",
+    };
+
+    function escHtml(s) {
+        if (!s) return "—";
+        return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    function getFilters() {
+        return {
+            action:    document.getElementById("filterAction").value,
+            username:  document.getElementById("filterUsername").value.trim(),
+            date_from: document.getElementById("filterDateFrom").value,
+            date_to:   document.getElementById("filterDateTo").value,
+        };
+    }
+
+    function buildQuery(extra = {}) {
+        const f = { ...getFilters(), limit: PAGE_SIZE, offset: currentOffset, ...extra };
+        const params = new URLSearchParams();
+        Object.entries(f).forEach(([k, v]) => { if (v !== "" && v !== undefined) params.set(k, v); });
+        return params.toString();
+    }
+
+    async function fetchLogs() {
+        const body = document.getElementById("logBody");
+        body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>';
+
+        try {
+            const resp = await fetch(`/api/audit_log?${buildQuery()}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const json = await resp.json();
+            const { entries, total, offset, limit } = json.data;
+            totalCount = total;
+            currentOffset = offset;
+            renderTable(entries);
+            renderPagination(offset, limit, total);
+        } catch (err) {
+            body.innerHTML = `<tr><td colspan="6" class="empty-state text-danger"><i class="fas fa-exclamation-triangle"></i><br>${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function renderTable(entries) {
+        const body = document.getElementById("logBody");
+        if (!entries || entries.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-clipboard-list"></i><br>No audit events found.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = entries.map(e => {
+            const cls = badgeClass[e.action] || "bg-secondary";
+            const ts = e.timestamp ? e.timestamp.replace("T", " ").substring(0, 19) : "—";
+            return `<tr>
+                <td class="ps-3 font-mono" style="white-space:nowrap;font-size:0.78rem;">${escHtml(ts)}</td>
+                <td>${escHtml(e.username)}</td>
+                <td><span class="badge badge-action ${cls}">${escHtml(e.action)}</span></td>
+                <td>${escHtml(e.target)}</td>
+                <td>${escHtml(e.details)}</td>
+                <td class="pe-3 font-mono" style="font-size:0.78rem;">${escHtml(e.ip_address)}</td>
+            </tr>`;
+        }).join("");
+    }
+
+    function renderPagination(offset, limit, total) {
+        const from = total === 0 ? 0 : offset + 1;
+        const to = Math.min(offset + limit, total);
+        document.getElementById("paginationInfo").textContent = `Showing ${from}–${to} of ${total} events`;
+        document.getElementById("btnPrev").disabled = offset === 0;
+        document.getElementById("btnNext").disabled = (offset + limit) >= total;
+    }
+
+    document.getElementById("btnApply").addEventListener("click", () => {
+        currentOffset = 0;
+        fetchLogs();
+    });
+
+    document.getElementById("btnClear").addEventListener("click", () => {
+        document.getElementById("filterAction").value = "";
+        document.getElementById("filterUsername").value = "";
+        document.getElementById("filterDateFrom").value = "";
+        document.getElementById("filterDateTo").value = "";
+        currentOffset = 0;
+        fetchLogs();
+    });
+
+    document.getElementById("btnPrev").addEventListener("click", () => {
+        currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
+        fetchLogs();
+    });
+
+    document.getElementById("btnNext").addEventListener("click", () => {
+        currentOffset += PAGE_SIZE;
+        fetchLogs();
+    });
+
+    document.getElementById("autoRefreshToggle").addEventListener("change", function () {
+        if (this.checked) {
+            autoRefreshTimer = setInterval(fetchLogs, 30000);
+        } else {
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = null;
+        }
+    });
+
+    document.getElementById("btnExportCsv").addEventListener("click", async () => {
+        const f = getFilters();
+        const params = new URLSearchParams({ limit: 10000, offset: 0 });
+        Object.entries(f).forEach(([k, v]) => { if (v) params.set(k, v); });
+        try {
+            const resp = await fetch(`/api/audit_log?${params}`);
+            const json = await resp.json();
+            const entries = json.data.entries;
+            const header = ["timestamp", "username", "action", "target", "details", "ip_address"];
+            const rows = [header, ...entries.map(e => header.map(h => JSON.stringify(e[h] ?? "")))];
+            const csv = rows.map(r => r.join(",")).join("\r\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `audit_log_${new Date().toISOString().substring(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert("Export failed: " + err.message);
+        }
+    });
+
+    // Initial load
+    fetchLogs();
+})();
+</script>
+{% endblock %}

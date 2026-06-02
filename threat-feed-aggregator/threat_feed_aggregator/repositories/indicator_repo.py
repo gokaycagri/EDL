@@ -402,7 +402,7 @@ def get_indicators_paginated(
             "sgb.sgb_desc, sgb.sgb_source, sgb.sgb_date, sgb.sgb_criticality "
             "FROM indicators i LEFT JOIN sgb_metadata sgb ON i.indicator = sgb.indicator"
         )
-        count_query = "SELECT COUNT(DISTINCT i.indicator) FROM indicators i"
+        count_query = "SELECT COUNT(DISTINCT i.indicator) FROM indicators i LEFT JOIN sgb_metadata sgb ON i.indicator = sgb.indicator"
         joins, conds, params = [], [], []
 
         if search_value:
@@ -480,9 +480,6 @@ def get_indicators_paginated(
             j = " " + " ".join(joins)
             base_query += j
             count_query += j
-        # If any SGB filter is active, count_query also needs the LEFT JOIN
-        if any(c.startswith("sgb.") for c in conds) and "LEFT JOIN sgb_metadata" not in count_query:
-            count_query += " LEFT JOIN sgb_metadata sgb ON i.indicator = sgb.indicator"
         if conds:
             w = " WHERE " + " AND ".join(conds)
             base_query += w
@@ -533,10 +530,11 @@ def get_filter_options(column, search_term=None, limit=20, conn=None):
                 ).fetchall()
             ]
         if column in ("sgb_desc", "sgb_source"):
+            col_sql = "sgb_desc" if column == "sgb_desc" else "sgb_source"
             return [
                 row[0]
                 for row in db.execute(
-                    f"SELECT DISTINCT {column} FROM sgb_metadata WHERE {column} LIKE ? LIMIT ?", (p, limit)
+                    f"SELECT DISTINCT {col_sql} FROM sgb_metadata WHERE {col_sql} LIKE ? LIMIT ?", (p, limit)
                 ).fetchall()
                 if row[0]
             ]

@@ -112,14 +112,25 @@ class FeedAggregator:
 
         async def _fetch_all(s):
             page_count_limit = None
+            consecutive_errors = 0
             for page_num in range(page_start, page_start + max_pages):
                 if page_count_limit is not None and page_num >= page_count_limit:
                     break
-                async with s.get(
-                    url, params={"page": page_num}, timeout=timeout, proxy=proxy_url, ssl=ssl_param
-                ) as resp:
-                    resp.raise_for_status()
-                    data = await resp.json(content_type=None)
+                try:
+                    async with s.get(
+                        url, params={"page": page_num}, timeout=timeout, proxy=proxy_url, ssl=ssl_param
+                    ) as resp:
+                        resp.raise_for_status()
+                        data = await resp.json(content_type=None)
+                except Exception as page_err:
+                    consecutive_errors += 1
+                    logger.warning("SGB: page %d fetch error (%s) — %d consecutive", page_num, page_err, consecutive_errors)
+                    if consecutive_errors >= 5:
+                        logger.error("SGB: aborting after %d consecutive page errors at page %d", consecutive_errors, page_num)
+                        break
+                    await asyncio.sleep(1)
+                    continue
+                consecutive_errors = 0
 
                 # Learn total pages from first response
                 if page_count_limit is None and "pageCount" in data:
@@ -151,8 +162,11 @@ class FeedAggregator:
                 async with _aiohttp.ClientSession(connector=connector) as new_session:
                     await _fetch_all(new_session)
         except Exception as e:
-            logger.error("SGB fetch failed for %s: %s", url, e)
-            return None
+            logger.error("SGB fetch failed for %s: %s", url, e, exc_info=True)
+            if all_lines:
+                logger.warning("SGB: returning %d partially fetched indicators despite error", len(all_lines))
+            else:
+                return None
 
         if not all_lines:
             return None
@@ -331,6 +345,8 @@ class FeedAggregator:
                         meta = self._sgb_metadata.get(norm_ind) or self._sgb_metadata.get(norm_ind.lower())
                         if meta:
                             sgb_meta_for_save[norm_ind] = meta
+                        else:
+                            logger.debug("SGB: no metadata for normalized indicator %r", norm_ind)
                     if sgb_meta_for_save:
                         await loop.run_in_executor(None, upsert_sgb_metadata, sgb_meta_for_save)
 
@@ -369,10 +385,16 @@ class FeedAggregator:
                     "last_updated": datetime.now(UTC).isoformat(),
                 }
 
-        except Exception as e:
-            logger.error(f"Error processing {name}: {e}")
-            await loop.run_in_executor(None, log_job_end, job_id, "failure", 0, str(e), self.db_conn)
-            job_service.update_job_status(name, "Failed", str(e))
+        except BaseException as e:
+            # Catches Exception AND asyncio.CancelledError / KeyboardInterrupt / SystemExit
+            # so job_history is always closed even on container shutdown.
+            err_msg = f"{type(e).__name__}: {e}"
+            logger.error(f"Error processing {name}: {err_msg}")
+            try:
+                await loop.run_in_executor(None, log_job_end, job_id, "failure", 0, err_msg, self.db_conn)
+            except Exception:
+                pass  # best-effort — don't mask the original exception
+            job_service.update_job_status(name, "Failed", err_msg)
             raise
 
 

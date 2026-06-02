@@ -72,6 +72,7 @@ class PostgresCursorWrapper:
         "indicator_sources",
         "indicator_tags",
         "dns_resolution_cache",
+        "sgb_metadata",  # PK is 'indicator', not 'id'
     }
 
     def execute(self, query, params=None):

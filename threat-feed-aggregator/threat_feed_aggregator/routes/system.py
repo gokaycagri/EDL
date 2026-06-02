@@ -34,6 +34,7 @@ from ..db_manager import (
     verify_local_user,
 )
 from ..response_helpers import api_error, api_response
+from ..services.audit_service import log_action
 from . import bp_system
 from .auth import login_required
 
@@ -301,6 +302,7 @@ def delete_user():
         success, message = delete_local_user(username)
         if success:
             flash(f"User {username} deleted successfully.", "success")
+            log_action(session.get("username", "system"), "user_delete", target=username, ip_address=request.remote_addr)
         else:
             flash(f"Error deleting user: {message}", "danger")
 
@@ -325,6 +327,7 @@ def change_user_password():
         success, message = update_local_user_password(username, password)
         if success:
             flash(f"Password for {username} updated successfully.", "success")
+            log_action(session.get("username", "system"), "password_change", target=username, ip_address=request.remote_addr)
         else:
             flash(f"Error updating password: {message}", "danger")
 
@@ -420,6 +423,7 @@ def import_whitelist():
     if added_items:
         delete_whitelisted_indicators(added_items)
         flash(f"Successfully imported {count} items to Safe List. ({errors} skipped/invalid)", "success")
+        log_action(session.get("username", "system"), "whitelist_import", details=f"{count} items from {file.filename}", ip_address=request.remote_addr)
     else:
         flash(f"No valid items imported. ({errors} skipped/invalid)", "warning")
 
@@ -554,6 +558,7 @@ def add_source():
         from ..scheduler_manager import update_scheduled_jobs
 
         update_scheduled_jobs()
+        log_action(session.get("username", "system"), "source_add", target=name, ip_address=request.remote_addr)
 
     return redirect(url_for("dashboard.index"))
 
@@ -631,6 +636,7 @@ def update_source(index):
             from ..scheduler_manager import update_scheduled_jobs
 
             update_scheduled_jobs()
+            log_action(session.get("username", "system"), "source_edit", target=name, ip_address=request.remote_addr)
 
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
             thread.start()
@@ -645,12 +651,14 @@ def remove_source(index):
     # Note: In app.py this was /remove/<int:index>
     config = read_config()
     if 0 <= index < len(config["source_urls"]):
+        removed_name = config["source_urls"][index].get("name", str(index))
         config["source_urls"].pop(index)
         write_config(config)
 
         from ..scheduler_manager import update_scheduled_jobs
 
         update_scheduled_jobs()
+        log_action(session.get("username", "system"), "source_delete", target=removed_name, ip_address=request.remote_addr)
 
     return redirect(url_for("dashboard.index"))
 
@@ -676,6 +684,7 @@ def update_settings():
         config["base_url"] = base_url
 
     write_config(config)
+    log_action(session.get("username", "system"), "config_change", details="global_settings", ip_address=request.remote_addr)
     flash("Global settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -809,6 +818,7 @@ def update_ldap():
         }
 
     write_config(config)
+    log_action(session.get("username", "system"), "config_change", details="ldap", ip_address=request.remote_addr)
     flash("LDAP settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -955,6 +965,7 @@ def update_proxy():
     config["proxy"] = {"enabled": enabled, "server": server, "port": port, "username": username, "password": password}
 
     write_config(config)
+    log_action(session.get("username", "system"), "config_change", details="proxy", ip_address=request.remote_addr)
     flash("Proxy settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -1190,6 +1201,7 @@ def add_whitelist():
         else:
             flash(f"Success: {item} added to safe list.", "success")
             delete_whitelisted_indicators([item])
+            log_action(session.get("username", "system"), "whitelist_add", target=item, ip_address=request.remote_addr)
 
     return redirect(url_for("dashboard.index"))
 
@@ -1200,6 +1212,7 @@ def add_whitelist():
 def remove_whitelist(item_id):
     # Note: In app.py this was /remove_whitelist/<int:item_id>
     remove_whitelist_item(item_id)
+    log_action(session.get("username", "system"), "whitelist_remove", target=str(item_id), ip_address=request.remote_addr)
     return redirect(url_for("dashboard.index"))
 
 

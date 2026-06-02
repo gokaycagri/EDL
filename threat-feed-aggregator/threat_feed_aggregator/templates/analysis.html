@@ -198,14 +198,22 @@
     let activeFilters = [];
     let table;
 
+    function escHtml(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function formatSgbChildRow(data) {
         const critLabels = { 1: 'Düşük', 2: 'Orta', 3: 'Yüksek', 4: 'Kritik' };
         const descLabels = { 'PH': 'Phishing', 'BP': 'Botnet/C2', 'MW': 'Malware', 'C2': 'C2' };
         const srcLabels  = { 'IH': 'İhbar', 'SB': 'SGB Kaynağı' };
+        const safeDesc   = data.sgb_desc ? escHtml(data.sgb_desc) : null;
+        const safeSrc    = data.sgb_source ? escHtml(data.sgb_source) : null;
+        const safeDate   = data.sgb_date ? escHtml(data.sgb_date) : null;
         return `<div class="sgb-detail-panel">
-            <div class="sgb-item"><span class="sgb-label">Kategori</span><span class="sgb-value">${data.sgb_desc ? (descLabels[data.sgb_desc] || data.sgb_desc) : '-'} ${data.sgb_desc ? '<small style="color:var(--text-muted);">('+data.sgb_desc+')</small>' : ''}</span></div>
-            <div class="sgb-item"><span class="sgb-label">Kaynak</span><span class="sgb-value">${data.sgb_source ? (srcLabels[data.sgb_source] || data.sgb_source) : '-'}</span></div>
-            <div class="sgb-item"><span class="sgb-label">Eklenme Tarihi</span><span class="sgb-value">${data.sgb_date || '-'}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Kategori</span><span class="sgb-value">${safeDesc ? (descLabels[data.sgb_desc] || safeDesc) : '-'} ${safeDesc ? '<small style="color:var(--text-muted);">('+safeDesc+')</small>' : ''}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Kaynak</span><span class="sgb-value">${safeSrc ? (srcLabels[data.sgb_source] || safeSrc) : '-'}</span></div>
+            <div class="sgb-item"><span class="sgb-label">Eklenme Tarihi</span><span class="sgb-value">${safeDate || '-'}</span></div>
             <div class="sgb-item"><span class="sgb-label">Kritiklik</span><span class="sgb-value">${data.sgb_criticality ? data.sgb_criticality + ' — ' + (critLabels[data.sgb_criticality] || '') : '-'}</span></div>
         </div>`;
     }

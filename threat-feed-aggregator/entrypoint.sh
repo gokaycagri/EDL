@@ -39,6 +39,7 @@ KEY_FILE="/app/threat_feed_aggregator/certs/key.pem"
 # Single worker + multiple threads: avoids APScheduler duplication and DB deadlocks
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     echo "SSL certificates found — starting in HTTPS mode."
+    export FORCE_HTTPS=true
     exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
         --certfile="$CERT_FILE" --keyfile="$KEY_FILE" \
         --access-logfile - \
@@ -46,6 +47,7 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
         threat_feed_aggregator.app:app
 else
     echo "No SSL certificates found — starting in HTTP mode."
+    export FORCE_HTTPS=false
     exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
         --access-logfile - \
         --timeout 300 \

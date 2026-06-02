@@ -1033,6 +1033,10 @@ def deceptor_block():
                 upsert_indicators_bulk(successful_indicators, source_name="FortiDeceptor")
             except Exception as db_err:
                 logger.error(f"Failed to upsert Deceptor indicators to main DB: {db_err}")
+            from ..services.audit_service import log_action
+            log_action(session.get("username", "system"), "indicator_add",
+                       target=f"{added_count} indicator(s)", details="FortiDeceptor block",
+                       ip_address=request.remote_addr)
 
         # Regenerate EDL files in background thread so firewalls pick up new blocks quickly
         regenerate_edl_files()
@@ -1510,6 +1514,10 @@ def deceptor_unblock():
 
         if removed_count > 0:
             regenerate_edl_files()
+            from ..services.audit_service import log_action
+            log_action(session.get("username", "system"), "indicator_delete",
+                       target=f"{removed_count} indicator(s)", details="FortiDeceptor unblock",
+                       ip_address=request.remote_addr)
 
         # Always return 200 so FortiDeceptor doesn't retry for already-removed entries
         return jsonify(
@@ -1524,3 +1532,21 @@ def deceptor_unblock():
     except Exception as e:
         logger.error(f"FortiDeceptor UNBLOCK API Error: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+
+@bp_api.route("/audit_log")
+@login_required
+def audit_log_api():
+    """Return paginated audit log entries with optional filtering."""
+    from ..services.audit_service import get_audit_log, get_audit_log_count
+
+    limit = request.args.get("limit", 100, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    username = request.args.get("username") or None
+    action = request.args.get("action") or None
+    date_from = request.args.get("date_from") or None
+    date_to = request.args.get("date_to") or None
+
+    entries = get_audit_log(limit=limit, offset=offset, username=username, action=action, date_from=date_from, date_to=date_to)
+    total = get_audit_log_count(username=username, action=action, date_from=date_from, date_to=date_to)
+    return api_response({"entries": entries, "total": total, "limit": limit, "offset": offset})

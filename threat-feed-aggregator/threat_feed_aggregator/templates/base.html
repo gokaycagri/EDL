@@ -51,6 +51,7 @@
             <a href="{{ url_for('tools.investigate') }}" class="nav-link {{ 'active' if request.endpoint == 'tools.investigate' }}"><i class="fas fa-search-location"></i> IP Investigation</a>
             <a href="{{ url_for('tools.dns_deduplication') }}" class="nav-link {{ 'active' if request.endpoint == 'tools.dns_deduplication' }}"><i class="fas fa-project-diagram"></i> DNS Dedup</a>
             <a href="{{ url_for('system.index') }}" class="nav-link {{ 'active' if request.endpoint == 'system.index' }}"><i class="fas fa-cog"></i> System Settings</a>
+            <a href="{{ url_for('logs.index') }}" class="nav-link {{ 'active' if request.endpoint == 'logs.index' }}"><i class="fas fa-clipboard-list"></i> Event Log</a>
         </div>
         <div class="sidebar-footer">
             <div class="d-flex align-items-center mb-3">

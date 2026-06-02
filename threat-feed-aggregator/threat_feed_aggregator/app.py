@@ -90,13 +90,17 @@ session_timeout = int(os.environ.get("SESSION_TIMEOUT_MINUTES", 60))
 app.config["SESSION_PERMANENT"] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = session_timeout * 60
 app.config["SESSION_USE_SIGNER"] = True
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
-# Quay/OpenShift/HTTPS proxy ortamında CSRF session token kaybolmasını önler.
 # HTTPS arkasında çalışıyorsa (Quay, OpenShift ingress) Secure flag zorunlu.
 _is_https = os.environ.get("FORCE_HTTPS", "true").lower() in ("1", "true", "yes")
 app.config["SESSION_COOKIE_SECURE"] = _is_https
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# CSRF token süre sınırını kaldır — token süresi dolunca "CSRF session token missing"
+# hatası bazen login formunda ortaya çıkıyordu (varsayılan 3600s).
+app.config["WTF_CSRF_TIME_LIMIT"] = None
 
 Session(app)
 csrf.init_app(app)
@@ -105,6 +109,7 @@ from .routes.analysis import bp_analysis
 from .routes.api import bp_api
 from .routes.auth import bp_auth
 from .routes.dashboard import bp_dashboard
+from .routes.logs import bp_logs
 from .routes.system import bp_system
 from .routes.tools import bp_tools
 
@@ -114,6 +119,7 @@ app.register_blueprint(bp_auth, url_prefix="/auth")
 app.register_blueprint(bp_system, url_prefix="/system")
 app.register_blueprint(bp_tools, url_prefix="/tools")
 app.register_blueprint(bp_analysis, url_prefix="/analysis")
+app.register_blueprint(bp_logs)
 
 # ITAI Hub integration middleware (active only when ITAI_MODE=true)
 from .middleware.itai import bp_itai, register_itai_middleware
@@ -139,6 +145,19 @@ for endpoint in [
     view = app.view_functions.get(f"api.{endpoint}")
     if view:
         csrf.exempt(view)
+
+
+from flask_wtf.csrf import CSRFError
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    """CSRF doğrulama başarısız — login sayfasına yönlendir ve kullanıcıyı bilgilendir."""
+    from flask import flash, redirect, request, url_for
+
+    logger.warning("CSRF validation failed for %s %s from %s: %s", request.method, request.path, request.remote_addr, e.description)
+    flash("Oturumunuz sona erdi veya geçersiz bir istek algılandı. Lütfen tekrar deneyin.", "warning")
+    return redirect(url_for("auth.login"))
 
 
 @app.route("/health")
