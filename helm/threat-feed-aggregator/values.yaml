@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: threat-feed-aggregator
-  tag: "1.26.6"
+  tag: "2.4.0"
   pullPolicy: IfNotPresent
 
 service:

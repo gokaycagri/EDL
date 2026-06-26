@@ -92,8 +92,14 @@ app.config["PERMANENT_SESSION_LIFETIME"] = session_timeout * 60
 app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
-# HTTPS arkasında çalışıyorsa (Quay, OpenShift ingress) Secure flag zorunlu.
-_is_https = os.environ.get("FORCE_HTTPS", "true").lower() in ("1", "true", "yes")
+# SESSION_COOKIE_SECURE: kullanıcı HTTPS üzerinden geliyorsa True olmalı.
+# FORCE_HTTP_MODE=true → platform (OpenShift/ingress) TLS sonlandırıyor, pod HTTP çalışıyor
+# ama son kullanıcı yine de HTTPS'te → Secure flag gerekli.
+# FORCE_HTTPS=true → pod doğrudan TLS → yine Secure flag gerekli.
+# Her iki durumda da cookie Secure olmalı; sadece tamamen HTTP ortamda False.
+_force_http_mode = os.environ.get("FORCE_HTTP_MODE", "false").lower() in ("1", "true", "yes")
+_force_https = os.environ.get("FORCE_HTTPS", "true").lower() in ("1", "true", "yes")
+_is_https = _force_https or _force_http_mode
 app.config["SESSION_COOKIE_SECURE"] = _is_https
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"

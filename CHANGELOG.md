@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.4.0] - 2026-06-26
+
+### Added
+- **Canlı Log SSE Takibi (Server-Sent Events):** Terminal ekranı için REST polling yerine EventSource API ile `/api/live_logs/stream` üzerinden gerçek zamanlı log akışı sağlandı. Log satırları 500 satır ile sınırlandırılarak tarayıcı şişmesi önlendi. Bağlantı kopmalarında otomatik olarak 10 saniyelik polling moduna geri dönülür.
+- **Event Log Sayfası & Audit Log:** Kullanıcı eylemlerini (login, kaynak ekleme/düzenleme, whitelist/blacklist işlemleri) kayıt altına alan sistem entegrasyonu ve Event Log UI arayüzü (/logs/) eklendi.
+- **Uzantı Uyumlu Custom EDL Linkleri:** Özel oluşturulmuş dinamik listelerin (Custom EDL) URL kopyalama butonlarında formatlarına göre (`.txt`, `.csv`, `.json`) uygun uzantılı URL'ler sunulması sağlandı.
+- **FORCE_HTTP_MODE Desteği:** Platform düzeyinde (OpenShift Ingress/Route, Load Balancer) TLS sonlandırması yapılan ortamlar için `FORCE_HTTP_MODE=true` parametresi eklendi. Bu sayede container içi HTTPS zorlaması kaldırılarak platform health check uyumsuzlukları giderildi.
+
+### Improved
+- **Session Cookie Güvenliği:** TLS'in harici sonlandırıldığı HTTP ortamlarında `Secure` çerez flag'lerinin tutarlı şekilde set edilmesi sağlandı.
+- **Docker Offline Health Check:** `Dockerfile.offline` healthcheck komutu curl tabanlı hale getirildi; önce HTTP, ardından güvensiz HTTPS (`-k`) deneyerek TLS uyuşmazlığından kaynaklı pod restart döngüleri önlendi.
+- **Gunicorn Workers & Performance:** APScheduler işlerinin çift tetiklenmesi ve DB deadlock durumlarını önlemek için tek worker çoklu thread konfigürasyonu 16 thread'e çıkarıldı.
+
+### Fixed
+- **Open-Redirect Zafiyet Koruması:** Giriş yaptıktan sonraki yönlendirmelerde (`?next=`) dış alan adlarına yönlendirmeyi engelleyen ve yalnızca güvenli göreceli (relative) adresleri kabul eden `_safe_next_url` kontrolü eklendi. 2FA/MFA doğrulama adımlarında da yönlendirme parametresinin güvenli taşınması sağlandı.
+
+---
+
 ## [2.3.0] - 2026-05-18
 
 ### Added

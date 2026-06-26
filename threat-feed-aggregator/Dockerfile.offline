@@ -1,11 +1,11 @@
-FROM quay.mfa.gov.tr/admin/threat-feed-aggregator:1.26.7
+FROM quay.mfa.gov.tr/admin/threat-feed-aggregator:1.26.18
 USER root
 COPY . .
 RUN chgrp -R 0 /app && chmod -R g=u /app && chmod +x /app/entrypoint.sh
 
-# Metadata seviyesindeki Healthcheck'i ezmek için ekledik
+# HTTP-first healthcheck: FORCE_HTTP_MODE=true ortamında HTTPS beklenmez.
+# curl önce HTTP dener, başarısız olursa HTTPS dener (self-signed için -k).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD python3 -c "import sys,ssl,urllib.request; ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE; [urllib.request.urlopen('https://localhost:8080/health',context=ctx,timeout=5), sys.exit(0)]" 2>/dev/null || \
-      python3 -c "import sys,urllib.request; urllib.request.urlopen('http://localhost:8080/health',timeout=5); sys.exit(0)" 2>/dev/null || exit 1
+  CMD curl -sf http://localhost:8080/health || curl -sfk https://localhost:8080/health || exit 1
 
 USER 1001

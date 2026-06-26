@@ -6,15 +6,20 @@
 // Track previous stat values for flash animation
 var prevStats = { total: null, ip: null, domain: null, feeds: null };
 
+// SSE connection handle — kept module-level so clearTerminal can reset it
+var _sseSource = null;
+
+// ETag for source_stats — skip update when server data is unchanged
+var _sourceStatsETag = null;
+
 document.addEventListener('DOMContentLoaded', function() {
-    updateLogs();
     updateHistory();
     updateSourceStats();
     updateScheduledJobs();
     initMap();
-    setInterval(updateLogs, 3000);
+    initLiveLogSSE();           // SSE replaces the 3 s polling interval
     setInterval(updateHistory, 10000);
-    setInterval(updateSourceStats, 10000);
+    setInterval(updateSourceStats, 30000);  // reduced from 10 s — ETag avoids wasted renders
     setInterval(updateScheduledJobs, 30000);
 
     // Populate Sources for Custom/Generic EDL — fetch from DB to ensure only active sources are shown
@@ -113,9 +118,17 @@ function flashStatValue(elementId, newValue) {
 
 // === Source Stats ===
 function updateSourceStats() {
-    fetch('/api/source_stats')
-        .then(function(r) { return r.json(); })
+    var headers = {};
+    if (_sourceStatsETag) headers['If-None-Match'] = _sourceStatsETag;
+
+    fetch('/api/source_stats', { headers: headers })
+        .then(function(r) {
+            if (r.status === 304) return null;  // Nothing changed — skip DOM work
+            _sourceStatsETag = r.headers.get('ETag') || null;
+            return r.json();
+        })
         .then(function(resp) {
+            if (!resp) return;
             var data = resp.data || resp;
             var sources = data.sources || {};
             var totals = data.totals || {};
@@ -139,24 +152,17 @@ function updateSourceStats() {
                 window.updateSeverityRibbon(totals.total, totals.feeds, degraded);
             }
 
-            // 3. Update Source Table
+            // 3. Update Source Table — O(1) lookup via data-source attribute
             for (var sourceName in sources) {
                 var stat = sources[sourceName];
                 if (typeof stat !== 'object') continue;
 
-                var rows = document.querySelectorAll('tr');
-                rows.forEach(function(row) {
-                    var nameEl = row.querySelector('strong');
-                    if (nameEl && nameEl.textContent === sourceName) {
-                        var badge = row.querySelector('.badge');
-                        if (badge) badge.textContent = stat.count || 0;
-
-                        var cells = row.querySelectorAll('td');
-                        if (cells.length >= 3) {
-                            cells[2].textContent = stat.last_updated || 'N/A';
-                        }
-                    }
-                });
+                var row = document.querySelector('tr[data-source="' + CSS.escape(sourceName) + '"]');
+                if (!row) continue;
+                var badge = row.querySelector('.badge');
+                if (badge) badge.textContent = stat.count || 0;
+                var cells = row.querySelectorAll('td');
+                if (cells.length >= 3) cells[2].textContent = stat.last_updated || 'N/A';
             }
 
             // 4. Update Country Stats Table & Map
@@ -328,7 +334,141 @@ function viewAllHistory() {
         .catch(function() { Swal.fire('Error', 'Failed to load full history', 'error'); });
 }
 
-// === Live Logs with Level Counts ===
+// === Live Logs via SSE ===
+
+/**
+ * Render a single log line into the log window div.
+ * Shared by both SSE push path and legacy polling fallback.
+ */
+function appendLogLine(logWindow, line) {
+    var div = document.createElement('div');
+    div.className = 'log-line mb-1';
+
+    var accessLogMatch = line.match(/(?:(?:\d{1,3}\.){3}\d{1,3}) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH) (.*?) HTTP\/[0-9.]+" (\d{3}) -/);
+
+    if (accessLogMatch) {
+        var timestamp = accessLogMatch[1].split(' ')[1];
+        var method    = accessLogMatch[2];
+        var path      = accessLogMatch[3];
+        var status    = accessLogMatch[4];
+        var ipMatch   = line.match(/((?:\d{1,3}\.){3}\d{1,3})/);
+        var ip        = ipMatch ? ipMatch[0] : 'Unknown';
+
+        var methodColor = '#60a5fa';
+        if (method === 'POST') methodColor = '#fcd34d';
+        else if (method === 'DELETE') methodColor = '#ff2d55';
+
+        var statusColor = '#34d399';
+        if (status.startsWith('3')) statusColor = '#94a3b8';
+        else if (status.startsWith('4') || status.startsWith('5')) statusColor = '#ff2d55';
+
+        var tsSpan = document.createElement('span');
+        tsSpan.style.cssText = 'color:#64748b; font-size:0.8em;';
+        tsSpan.textContent = '[' + timestamp + ']';
+
+        var ipSpan = document.createElement('span');
+        ipSpan.style.cssText = 'color:#94a3b8; font-size:0.8em; margin-left:5px;';
+        ipSpan.textContent = ip;
+
+        var methodSpan = document.createElement('span');
+        methodSpan.style.cssText = 'color:' + methodColor + '; font-weight:bold; margin-left:5px;';
+        methodSpan.textContent = method;
+
+        var pathSpan = document.createElement('span');
+        pathSpan.style.cssText = 'color:#e2e8f0; margin-left:5px;';
+        pathSpan.textContent = path;
+
+        var statusSpan = document.createElement('span');
+        statusSpan.style.cssText = 'color:' + statusColor + '; font-weight:bold; float:right;';
+        statusSpan.textContent = status;
+
+        div.appendChild(tsSpan);
+        div.appendChild(ipSpan);
+        div.appendChild(methodSpan);
+        div.appendChild(pathSpan);
+        div.appendChild(statusSpan);
+    } else {
+        div.textContent = line;
+        if (line.includes('ERROR')) div.style.color = '#ff2d55';
+        else if (line.includes('WARNING')) div.style.color = '#ff6b35';
+        else if (line.includes('SUCCESS') || line.includes('Completed') || line.includes('Written batch')) div.style.color = '#34d399';
+    }
+
+    logWindow.appendChild(div);
+
+    // Prune oldest entries to prevent unbounded DOM growth (keep ≤ 500 lines)
+    if (logWindow.children.length > 500) {
+        logWindow.removeChild(logWindow.firstChild);
+    }
+}
+
+/**
+ * Open an SSE connection to /api/live_logs/stream.
+ * Falls back to 10 s polling if the browser or server doesn't support SSE.
+ */
+function initLiveLogSSE() {
+    // 1. Initial paint: load existing logs once via REST
+    updateLogs();
+
+    if (!window.EventSource) {
+        // Browser doesn't support SSE — keep polling
+        setInterval(updateLogs, 10000);
+        return;
+    }
+
+    if (_sseSource) { _sseSource.close(); }
+    _sseSource = new EventSource('/api/live_logs/stream');
+
+    _sseSource.onmessage = function(event) {
+        var parsed;
+        try { parsed = JSON.parse(event.data); } catch (e) { return; }
+        var items = parsed.items || [];
+        if (items.length === 0) return;
+
+        var logWindow = document.getElementById('logWindow');
+        if (!logWindow) return;
+
+        var hidePollsEl = document.getElementById('hidePolls');
+        var hidePolls   = hidePollsEl ? hidePollsEl.checked : true;
+        var wasAtBottom = logWindow.scrollHeight - logWindow.clientHeight <= logWindow.scrollTop + 50;
+
+        var infoEl  = document.getElementById('logCountInfo');
+        var warnEl  = document.getElementById('logCountWarn');
+        var errorEl = document.getElementById('logCountError');
+        var infoCount  = parseInt((infoEl  || {}).textContent) || 0;
+        var warnCount  = parseInt((warnEl  || {}).textContent) || 0;
+        var errorCount = parseInt((errorEl || {}).textContent) || 0;
+
+        items.forEach(function(line) {
+            if (line.includes('INFO'))    infoCount++;
+            if (line.includes('WARNING')) warnCount++;
+            if (line.includes('ERROR'))   errorCount++;
+
+            if (hidePolls && (
+                line.includes('GET /api/') || line.includes('POST /api/') ||
+                line.includes('GET /status') || line.includes('GET /static/') ||
+                line.includes('GET /login') || line.includes('GET / HTTP/1.1')
+            )) return;
+
+            appendLogLine(logWindow, line);
+        });
+
+        if (infoEl)  infoEl.textContent  = infoCount;
+        if (warnEl)  warnEl.textContent  = warnCount;
+        if (errorEl) errorEl.textContent = errorCount;
+
+        if (wasAtBottom) logWindow.scrollTop = logWindow.scrollHeight;
+    };
+
+    _sseSource.onerror = function() {
+        console.warn('[EDL] SSE disconnected — falling back to 10 s polling');
+        _sseSource.close();
+        _sseSource = null;
+        setInterval(updateLogs, 10000);
+    };
+}
+
+// === Live Logs — legacy REST poll (used for initial load & SSE fallback) ===
 function updateLogs() {
     var hidePollsEl = document.getElementById('hidePolls');
     var hidePolls = hidePollsEl ? hidePollsEl.checked : true;
@@ -366,61 +506,7 @@ function updateLogs() {
 
                 if (hidePolls && (line.includes('GET /api/') || line.includes('POST /api/') || line.includes('GET /status') || line.includes('GET /static/') || line.includes('GET /login') || line.includes('GET / HTTP/1.1'))) return;
 
-                var div = document.createElement('div');
-                div.className = 'log-line mb-1';
-
-                // Advanced Formatting for Access Logs
-                var accessLogMatch = line.match(/(?:(?:\d{1,3}\.){3}\d{1,3}) - - \[(.*?)\] "(GET|POST|PUT|DELETE|PATCH) (.*?) HTTP\/[0-9.]+" (\d{3}) -/);
-
-                if (accessLogMatch) {
-                    var timestamp = accessLogMatch[1].split(' ')[1];
-                    var method = accessLogMatch[2];
-                    var path = accessLogMatch[3];
-                    var status = accessLogMatch[4];
-                    var ipMatch = line.match(/((?:\d{1,3}\.){3}\d{1,3})/);
-                    var ip = ipMatch ? ipMatch[0] : 'Unknown';
-
-                    var methodColor = '#60a5fa';
-                    if (method === 'POST') methodColor = '#fcd34d';
-                    else if (method === 'DELETE') methodColor = '#ff2d55';
-
-                    var statusColor = '#34d399';
-                    if (status.startsWith('3')) statusColor = '#94a3b8';
-                    else if (status.startsWith('4') || status.startsWith('5')) statusColor = '#ff2d55';
-
-                    var tsSpan = document.createElement('span');
-                    tsSpan.style.cssText = 'color:#64748b; font-size:0.8em;';
-                    tsSpan.textContent = '[' + timestamp + ']';
-
-                    var ipSpan = document.createElement('span');
-                    ipSpan.style.cssText = 'color:#94a3b8; font-size:0.8em; margin-left:5px;';
-                    ipSpan.textContent = ip;
-
-                    var methodSpan = document.createElement('span');
-                    methodSpan.style.cssText = 'color:' + methodColor + '; font-weight:bold; margin-left:5px;';
-                    methodSpan.textContent = method;
-
-                    var pathSpan = document.createElement('span');
-                    pathSpan.style.cssText = 'color:#e2e8f0; margin-left:5px;';
-                    pathSpan.textContent = path;
-
-                    var statusSpan = document.createElement('span');
-                    statusSpan.style.cssText = 'color:' + statusColor + '; font-weight:bold; float:right;';
-                    statusSpan.textContent = status;
-
-                    div.appendChild(tsSpan);
-                    div.appendChild(ipSpan);
-                    div.appendChild(methodSpan);
-                    div.appendChild(pathSpan);
-                    div.appendChild(statusSpan);
-                } else {
-                    div.textContent = line;
-                    if (line.includes('ERROR')) div.style.color = '#ff2d55';
-                    else if (line.includes('WARNING')) div.style.color = '#ff6b35';
-                    else if (line.includes('SUCCESS') || line.includes('Completed') || line.includes('Written batch')) div.style.color = '#34d399';
-                }
-
-                logWindow.appendChild(div);
+                appendLogLine(logWindow, line);
             });
 
             if (wasAtBottom) logWindow.scrollTop = logWindow.scrollHeight;
@@ -470,7 +556,8 @@ function clearTerminal() {
         .then(function() {
             var logWindow = document.getElementById('logWindow');
             if (logWindow) logWindow.textContent = '';
-            updateLogs();
+            // Re-open SSE so the cursor resets to the empty buffer
+            initLiveLogSSE();
         })
         .catch(function(err) { console.error('Failed to clear logs:', err); });
     });
@@ -887,6 +974,8 @@ function submitForm(action, data) {
 }
 
 // === Global Exports ===
+window.initLiveLogSSE = initLiveLogSSE;
+window.appendLogLine = appendLogLine;
 window.updateSourceStats = updateSourceStats;
 window.runAggregator = runAggregator;
 window.updateHistory = updateHistory;

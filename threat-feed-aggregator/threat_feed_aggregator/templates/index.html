@@ -93,7 +93,7 @@
                             <tbody class="small">
                                 {% for source in urls %}
                                 {% set source_stat = stats.get(source.name, {}) %}
-                                <tr>
+                                <tr data-source="{{ source.name }}">
                                     <td class="ps-4 py-3"><strong>{{ source.name }}</strong><br><small class="text-muted">{{ source.url }}</small></td>
                                     <td><span class="badge bg-primary px-2">{{ source_stat.get('count', 0) }}</span></td>
                                     <td>{{ source_stat.get('last_updated', 'N/A') }}</td>
@@ -179,7 +179,7 @@
                                                     </form>
                                                 </div>
                                                 <div class="input-group input-group-sm">
-                                                    <input type="text" class="form-control" style="font-size: 0.7rem;" value="{{ (config.get('base_url') or request.url_root).rstrip('/') }}/api/edl/custom/{{ list.token }}" readonly id="list_url_{{ list.id }}">
+                                                    <input type="text" class="form-control" style="font-size: 0.7rem;" value="{{ (config.get('base_url') or request.url_root).rstrip('/') }}/api/edl/custom/{{ list.token }}.{{ 'txt' if list.format == 'text' else list.format }}" readonly id="list_url_{{ list.id }}">
                                                     <button class="btn btn-outline-secondary" type="button" onclick="copyToClipboard('list_url_{{ list.id }}')"><i class="fas fa-copy"></i></button>
                                                 </div>
                                                 <div class="mt-1 text-muted" style="font-size: 0.65rem;">

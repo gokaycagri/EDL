@@ -1,5 +1,6 @@
 import csv
 from datetime import UTC, datetime, timedelta
+import hashlib
 import io
 import json
 import logging
@@ -161,6 +162,9 @@ def custom_list_count_api(list_id):
 
 
 @bp_api.route("/edl/custom/<token>")
+@bp_api.route("/edl/custom/<token>.txt")
+@bp_api.route("/edl/custom/<token>.csv")
+@bp_api.route("/edl/custom/<token>.json")
 def get_saved_custom_edl(token):
     """
     Returns a saved custom EDL by its token.
@@ -527,6 +531,48 @@ def live_logs():
     return api_response({"items": logs, "total": len(logs)})
 
 
+@bp_api.route("/live_logs/stream")
+@login_required
+def live_logs_stream():
+    """SSE endpoint — pushes only new log lines to the connected client.
+
+    The server polls the in-memory buffer every 2 seconds and emits only the
+    delta since the last push.  Keepalive comments are sent when there is
+    nothing new so proxies do not close idle connections.
+
+    Proxy requirements:
+      - X-Accel-Buffering: no  (nginx / OpenShift Route)
+      - Cache-Control: no-cache
+    """
+    from ..log_manager import get_live_logs_since
+
+    def _generate():
+        # Start at the current tail — don't replay history (initial load uses
+        # the regular /api/live_logs endpoint).
+        _, cursor = get_live_logs_since(0)
+        try:
+            while True:
+                time.sleep(2)
+                new_lines, cursor = get_live_logs_since(cursor)
+                if new_lines:
+                    payload = json.dumps({"items": new_lines, "cursor": cursor})
+                    yield f"data: {payload}\n\n"
+                else:
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            pass
+
+    return Response(
+        stream_with_context(_generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @bp_api.route("/live_logs/clear", methods=["POST"])
 @login_required
 def clear_live_logs_route():
@@ -613,18 +659,30 @@ def source_stats_api():
                 "last_updated": format_timestamp(real_db_times.get(name)),
             }
 
-    return api_response(
-        {
-            "sources": formatted_stats,
-            "totals": {
-                "total": total_count,
-                "ip": counts_by_type.get("ip", 0) + counts_by_type.get("cidr", 0),
-                "domain": counts_by_type.get("domain", 0) + counts_by_type.get("url", 0),
-                "feeds": len(config.get("source_urls", [])),
-            },
-            "country_stats": country_stats,
-        }
+    body = {
+        "sources": formatted_stats,
+        "totals": {
+            "total": total_count,
+            "ip": counts_by_type.get("ip", 0) + counts_by_type.get("cidr", 0),
+            "domain": counts_by_type.get("domain", 0) + counts_by_type.get("url", 0),
+            "feeds": len(config.get("source_urls", [])),
+        },
+        "country_stats": country_stats,
+    }
+
+    # ETag: skip expensive re-serialization on the client when nothing changed.
+    etag = hashlib.md5(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+    if request.headers.get("If-None-Match") == etag:
+        return Response(status=304)
+
+    resp = Response(
+        json.dumps({"status": "success", "data": body}, default=str),
+        status=200,
+        mimetype="application/json",
     )
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @bp_api.route("/regenerate_lists", methods=["POST"])

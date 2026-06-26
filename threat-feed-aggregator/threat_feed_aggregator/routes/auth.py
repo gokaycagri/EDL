@@ -1,5 +1,6 @@
 from functools import wraps
 import logging
+from urllib.parse import urlparse
 
 from flask import flash, redirect, render_template, request, session, url_for
 
@@ -10,6 +11,31 @@ from ..response_helpers import api_error
 from . import bp_auth
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_next_url(target: str | None) -> str | None:
+    """Return target only if it is a safe relative path (no scheme/host).
+
+    Prevents open-redirect attacks: an attacker could craft
+    ?next=https://evil.com to hijack post-login redirects.
+    Only paths that start with '/' and carry no netloc are accepted.
+    """
+    if not target:
+        return None
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return None
+    # Must be an absolute path (starts with /) to avoid protocol-relative URLs
+    if not target.startswith("/"):
+        return None
+    return target
+
+
+def _login_next() -> str:
+    """Return the current request path+query as a safe relative URL for ?next=."""
+    path = request.path
+    qs = request.query_string.decode("utf-8", errors="replace")
+    return f"{path}?{qs}" if qs else path
 
 
 def _normalize_api_key(auth_value):
@@ -31,7 +57,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if "logged_in" not in session:
-            return redirect(url_for("auth.login", next=request.url))
+            return redirect(url_for("auth.login", next=_login_next()))
         return f(*args, **kwargs)
 
     return decorated_function
@@ -157,12 +183,14 @@ def login():
                 from ..services.audit_service import log_action
 
                 log_action(username, "login", ip_address=request.remote_addr)
+                next_url = _safe_next_url(request.args.get("next"))
                 if is_mfa_enabled(username):
                     session.clear()
                     session["pre_mfa_auth"] = {
                         "username": username,
                         "permissions": info.get("permissions", {}),
                         "profile_name": info.get("profile_name", "Local"),
+                        "next": next_url,
                     }
                     return redirect(url_for("auth.verify_2fa"))
                 # Regenerate session to prevent session fixation
@@ -172,7 +200,7 @@ def login():
                 session["permissions"] = info.get("permissions", {})
                 session["profile_name"] = info.get("profile_name", "Local")
                 flash(message, "success")
-                return redirect(url_for("dashboard.index"))
+                return redirect(next_url or url_for("dashboard.index"))
             else:
                 from ..services.audit_service import log_action
 
@@ -191,13 +219,14 @@ def verify_2fa():
         username = user_data["username"]
         secret = get_user_mfa_secret(username)
         if verify_totp(secret, code, username=username):
+            next_url = _safe_next_url(user_data.get("next"))
             # Regenerate session to prevent session fixation
             session.clear()
             session["logged_in"] = True
             session["username"] = username
             session["permissions"] = user_data["permissions"]
             session["profile_name"] = user_data["profile_name"]
-            return redirect(url_for("dashboard.index"))
+            return redirect(next_url or url_for("dashboard.index"))
         else:
             flash("Invalid Code", "danger")
     return render_template("login_2fa.html")

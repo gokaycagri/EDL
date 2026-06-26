@@ -36,20 +36,25 @@ echo "Starting Threat Feed Aggregator with Gunicorn..."
 CERT_FILE="/app/threat_feed_aggregator/certs/cert.pem"
 KEY_FILE="/app/threat_feed_aggregator/certs/key.pem"
 
+GUNICORN_BASE="gunicorn --worker-class=gthread --workers=1 --threads=16 --bind 0.0.0.0:8080 --access-logfile - --timeout 300 threat_feed_aggregator.app:app"
+
 # Single worker + multiple threads: avoids APScheduler duplication and DB deadlocks
-if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+#
+# FORCE_HTTP_MODE=true  → always run plain HTTP regardless of cert presence.
+#                         Use this when TLS is terminated by the platform (OpenShift Route,
+#                         Kubernetes Ingress, load balancer) so platform health probes
+#                         can reach the container over HTTP without SSL mismatch warnings.
+if [ "${FORCE_HTTP_MODE:-false}" = "true" ]; then
+    echo "FORCE_HTTP_MODE is set — starting in HTTP mode (TLS handled by platform)."
+    export FORCE_HTTPS=false
+    exec $GUNICORN_BASE
+elif [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     echo "SSL certificates found — starting in HTTPS mode."
     export FORCE_HTTPS=true
-    exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
-        --certfile="$CERT_FILE" --keyfile="$KEY_FILE" \
-        --access-logfile - \
-        --timeout 300 \
-        threat_feed_aggregator.app:app
+    exec $GUNICORN_BASE \
+        --certfile="$CERT_FILE" --keyfile="$KEY_FILE"
 else
     echo "No SSL certificates found — starting in HTTP mode."
     export FORCE_HTTPS=false
-    exec gunicorn --worker-class=gthread --workers=1 --threads=8 --bind 0.0.0.0:8080 \
-        --access-logfile - \
-        --timeout 300 \
-        threat_feed_aggregator.app:app
+    exec $GUNICORN_BASE
 fi

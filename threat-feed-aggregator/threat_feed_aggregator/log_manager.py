@@ -92,6 +92,20 @@ def get_live_logs():
     return list(LOG_BUFFER)
 
 
+def get_live_logs_since(cursor: int) -> tuple[list[str], int]:
+    """Return only new log lines since cursor and the updated cursor position.
+
+    Args:
+        cursor: Index of the last seen log line (0-based, equal to len of
+                previously returned buffer).
+
+    Returns:
+        (new_lines, new_cursor) — new_lines is empty when nothing new arrived.
+    """
+    logs = list(LOG_BUFFER)
+    return logs[cursor:], len(logs)
+
+
 def clear_logs():
     """
     Clears the log buffer.

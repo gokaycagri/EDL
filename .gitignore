@@ -23,6 +23,11 @@ Python.h
 *~
 .DS_Store
 Thumbs.db
+flask_session/
+TRUE.png
+env.png
+hata.png
+
 
 # Environment
 .env
