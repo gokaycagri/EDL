@@ -692,7 +692,11 @@ def source_stats_api():
     }
 
     # ETag: skip expensive re-serialization on the client when nothing changed.
-    etag = hashlib.md5(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+    # MD5 is fine here — cache fingerprint, not a security control (B324).
+    etag = hashlib.md5(
+        json.dumps(body, sort_keys=True, default=str).encode(),
+        usedforsecurity=False,
+    ).hexdigest()
     if request.headers.get("If-None-Match") == etag:
         return Response(status=304)
 
