@@ -38,6 +38,13 @@ CONFIG_FILE_DEFAULT = os.path.join(CODE_BASE_DIR, "threat_feed_aggregator", "con
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
 STATS_FILE = os.path.join(DATA_DIR, "stats.json")
 
+import logging
+
+# Configure logging to stdout (must precede the config-copy block below —
+# its except handler logs via `logger`)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
 # Ensure Data Dir Exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
@@ -50,12 +57,6 @@ if not os.path.exists(CONFIG_FILE) and os.path.exists(CONFIG_FILE_DEFAULT):
         shutil.copy(CONFIG_FILE_DEFAULT, CONFIG_FILE)
     except Exception as _copy_e:
         logger.debug("Could not copy default config (non-fatal): %s", _copy_e)
-
-import logging
-
-# Configure logging to stdout
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
 
 import threading
 

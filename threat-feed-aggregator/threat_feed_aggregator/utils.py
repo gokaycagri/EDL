@@ -444,7 +444,7 @@ def validate_permissions(perms: dict) -> dict:
     Always returns a dict with exactly the expected permission keys.
     """
     if not isinstance(perms, dict):
-        return {k: "none" for k in _VALID_PERM_KEYS}
+        return dict.fromkeys(_VALID_PERM_KEYS, "none")
     cleaned = {}
     for key in _VALID_PERM_KEYS:
         val = perms.get(key, "none")

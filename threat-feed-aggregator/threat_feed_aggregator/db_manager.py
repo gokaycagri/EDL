@@ -43,7 +43,6 @@ from .repositories.user_repo import (
     check_admin_credentials,
     delete_admin_profile,
     delete_ldap_group_mapping,
-    update_ldap_group_mapping,
     delete_local_user,
     get_admin_profiles,
     get_all_users,
@@ -56,6 +55,7 @@ from .repositories.user_repo import (
     local_user_exists,
     set_admin_password,
     update_admin_profile,
+    update_ldap_group_mapping,
     update_local_user_password,
     verify_local_user,
 )
