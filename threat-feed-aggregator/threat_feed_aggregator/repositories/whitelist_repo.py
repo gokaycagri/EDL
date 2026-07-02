@@ -146,19 +146,54 @@ def add_api_blacklist_item(item, item_type="ip", comment="", expires_at=None, co
             return False, str(e)
 
 
+def get_expired_blacklist_items(conn=None):
+    """Returns items whose expires_at has passed, without deleting them (preview/dry-run)."""
+    from ..database.connection import db_readonly
+
+    with db_readonly() as db:
+        try:
+            now_iso = datetime.now(UTC).isoformat()
+            cursor = db.execute(
+                "SELECT item, type, comment, added_at, expires_at FROM api_blacklist"
+                " WHERE expires_at IS NOT NULL AND expires_at < ? ORDER BY expires_at ASC",
+                (now_iso,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error fetching expired blacklist items: {e}")
+            return []
+
+
 def remove_expired_blacklist_items(conn=None):
-    """Removes items from API blacklist that have passed their expiration date."""
+    """
+    Removes items from API blacklist that have passed their expiration date.
+
+    Returns:
+        (deleted_count, deleted_items) — count of removed rows and their details,
+        so callers can write audit log entries or regenerate EDL files as needed.
+    """
     with db_transaction(conn) as db:
         try:
             now_iso = datetime.now(UTC).isoformat()
-            cursor = db.execute("DELETE FROM api_blacklist WHERE expires_at IS NOT NULL AND expires_at < ?", (now_iso,))
+            # Fetch details first (same transaction) so callers can audit what was removed
+            cursor = db.execute(
+                "SELECT item, type, comment, added_at, expires_at FROM api_blacklist"
+                " WHERE expires_at IS NOT NULL AND expires_at < ?",
+                (now_iso,),
+            )
+            expired_items = [dict(row) for row in cursor.fetchall()]
+            if not expired_items:
+                return 0, []
+            cursor = db.execute(
+                "DELETE FROM api_blacklist WHERE expires_at IS NOT NULL AND expires_at < ?", (now_iso,)
+            )
             deleted = cursor.rowcount
             if deleted > 0:
-                logger.info(f"Cleanup: Removed {deleted} expired blacklist items.")
-            return deleted
+                logger.info("Cleanup: Removed %d expired blacklist item(s).", deleted)
+            return deleted, expired_items
         except Exception as e:
             logger.error(f"Error removing expired blacklist items: {e}")
-            return 0
+            return 0, []
 
 
 def get_api_blacklist_items(conn=None, limit=None):

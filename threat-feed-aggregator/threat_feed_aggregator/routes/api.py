@@ -25,6 +25,7 @@ from ..db_manager import (
     get_api_blacklist_items,
     get_custom_list_by_token,
     get_custom_list_count,
+    get_expired_blacklist_items,
     get_filtered_indicators_iter,
     get_historical_stats,
     get_indicator_counts_by_type,
@@ -32,6 +33,7 @@ from ..db_manager import (
     get_unique_indicator_count,
     get_whitelist,
     remove_api_blacklist_item,
+    remove_expired_blacklist_items,
     remove_whitelist_item,
     upsert_indicators_bulk,
 )
@@ -390,7 +392,13 @@ def run_script():
 
     from ..services.audit_service import log_action
 
-    log_action(session.get("username", "unknown"), "aggregation_started", ip_address=request.remote_addr)
+    config = read_config()
+    feed_count = len(config.get("source_urls", []))
+    log_action(
+        session.get("username", "unknown"), "aggregation_started",
+        details=f"feeds={feed_count}",
+        ip_address=request.remote_addr,
+    )
 
     def _run():
         try:
@@ -763,8 +771,8 @@ def backup_system():
         log_action(
             username,
             "backup_download",
+            details="config.json + threat_feed.db + safe_list.txt",
             ip_address=request.remote_addr,
-            details=f"User: {username}",
         )
 
         memory_file = io.BytesIO()
@@ -1109,9 +1117,14 @@ def deceptor_block():
             except Exception as db_err:
                 logger.error(f"Failed to upsert Deceptor indicators to main DB: {db_err}")
             from ..services.audit_service import log_action
-            log_action(session.get("username", "system"), "indicator_add",
-                       target=f"{added_count} indicator(s)", details="FortiDeceptor block",
-                       ip_address=request.remote_addr)
+            blocked_ips = ", ".join(ip for ip, *_ in successful_indicators)
+            log_action(
+                "FortiDeceptor",
+                "deceptor_block",
+                target=blocked_ips,
+                details=f"count={added_count} | expiry={expiry_desc} | expires_at={expires_at}",
+                ip_address=request.remote_addr,
+            )
 
         # Regenerate EDL files in background thread so firewalls pick up new blocks quickly
         regenerate_edl_files()
@@ -1471,8 +1484,8 @@ def backup_system_api():
         log_action(
             username,
             "backup_api",
+            details="config.json + threat_feed.db + safe_list.txt",
             ip_address=request.remote_addr,
-            details=f"User: {username}",
         )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1534,11 +1547,13 @@ def restore_system_api():
         from ..services.audit_service import log_action
 
         username = session.get("username", "unknown")
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as _zf_check:
+            restored_files = ", ".join(_zf_check.namelist())
         log_action(
             username,
             "restore_api",
+            details=f"files={restored_files} | size={len(zip_bytes)}B",
             ip_address=request.remote_addr,
-            details=f"User: {username}",
         )
 
         return api_response({"restored": True}, message="System restored successfully. Configuration reloaded.")
@@ -1605,9 +1620,13 @@ def deceptor_unblock():
         if removed_count > 0:
             regenerate_edl_files()
             from ..services.audit_service import log_action
-            log_action(session.get("username", "system"), "indicator_delete",
-                       target=f"{removed_count} indicator(s)", details="FortiDeceptor unblock",
-                       ip_address=request.remote_addr)
+            unblocked_ips = ", ".join(ip for ip in ip_list if ip not in skipped)
+            log_action(
+                "FortiDeceptor", "deceptor_unblock",
+                target=unblocked_ips,
+                details=f"count={removed_count} | skipped_invalid={len(skipped)}",
+                ip_address=request.remote_addr,
+            )
 
         # Always return 200 so FortiDeceptor doesn't retry for already-removed entries
         return jsonify(
@@ -1622,6 +1641,77 @@ def deceptor_unblock():
     except Exception as e:
         logger.error(f"FortiDeceptor UNBLOCK API Error: {e}", exc_info=True)
         return jsonify({"status": "error", "message": "Internal server error"}), 500
+
+
+@bp_api.route("/cleanup/blacklist/preview", methods=["GET"])
+@login_required
+@permission_required("system", "rw")
+def cleanup_blacklist_preview():
+    """
+    Returns expired api_blacklist items without removing them (dry-run).
+    Use this to inspect what the next cleanup run will delete.
+    """
+    items = get_expired_blacklist_items()
+    return api_response(
+        {
+            "expired_count": len(items),
+            "items": [
+                {
+                    "item": i["item"],
+                    "type": i["type"],
+                    "comment": i["comment"],
+                    "added_at": i["added_at"],
+                    "expires_at": i["expires_at"],
+                }
+                for i in items
+            ],
+        },
+        message=f"Found {len(items)} expired blacklist item(s).",
+    )
+
+
+@bp_api.route("/cleanup/blacklist", methods=["POST"])
+@login_required
+@permission_required("system", "rw")
+def cleanup_blacklist():
+    """
+    Manually triggers expired blacklist cleanup.
+    Removes all items whose expires_at has passed and regenerates EDL files.
+    Records a full audit log entry including the list of removed IPs.
+    """
+    from ..services.audit_service import log_action
+
+    deleted, expired_items = remove_expired_blacklist_items()
+    edl_regenerated = False
+
+    if deleted > 0:
+        regenerate_edl_files()
+        edl_regenerated = True
+        removed_ips = ", ".join(i["item"] for i in expired_items[:100])
+        log_action(
+            session.get("username", "system"),
+            "blacklist_cleanup",
+            target=f"{deleted} expired item(s)",
+            details=removed_ips,
+            ip_address=request.remote_addr,
+        )
+
+    return api_response(
+        {
+            "deleted": deleted,
+            "edl_regenerated": edl_regenerated,
+            "items": [
+                {
+                    "item": i["item"],
+                    "type": i["type"],
+                    "comment": i["comment"],
+                    "expires_at": i["expires_at"],
+                }
+                for i in expired_items
+            ],
+        },
+        message=f"Removed {deleted} expired blacklist item(s).",
+    )
 
 
 @bp_api.route("/audit_log")

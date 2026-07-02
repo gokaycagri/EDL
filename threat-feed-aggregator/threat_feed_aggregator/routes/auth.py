@@ -183,7 +183,11 @@ def login():
             if success:
                 from ..services.audit_service import log_action
 
-                log_action(username, "login", ip_address=request.remote_addr)
+                log_action(
+                    username, "login",
+                    details=f"method={info.get('source', 'local')} | profile={info.get('profile_name', '-')}",
+                    ip_address=request.remote_addr,
+                )
                 next_url = _safe_next_url(request.args.get("next"))
                 if is_mfa_enabled(username):
                     session.clear()
@@ -205,7 +209,11 @@ def login():
             else:
                 from ..services.audit_service import log_action
 
-                log_action(username, "login_failed", ip_address=request.remote_addr)
+                log_action(
+                    username, "login_failed",
+                    details=f"reason={message}",
+                    ip_address=request.remote_addr,
+                )
                 flash(message, "danger")
     return render_template("login.html")
 

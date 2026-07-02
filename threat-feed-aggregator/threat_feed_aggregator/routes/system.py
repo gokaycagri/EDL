@@ -240,7 +240,12 @@ def add_user():
         if success:
             from ..services.audit_service import log_action
 
-            log_action(session.get("username"), "user_create", target=username)
+            log_action(
+                session.get("username", "system"), "user_create",
+                target=username,
+                details=f"profile_id={profile_id}",
+                ip_address=request.remote_addr,
+            )
             flash(f"User {username} added successfully.", "success")
         else:
             flash(f"Error adding user: {message}", "danger")
@@ -349,7 +354,13 @@ def change_user_password():
         success, message = update_local_user_password(username, password)
         if success:
             flash(f"Password for {username} updated successfully.", "success")
-            log_action(session.get("username", "system"), "password_change", target=username, ip_address=request.remote_addr)
+            actor = session.get("username", "system")
+            log_action(
+                actor, "password_change",
+                target=username,
+                details="self-change" if actor == username else f"changed by {actor}",
+                ip_address=request.remote_addr,
+            )
         else:
             flash(f"Error updating password: {message}", "danger")
 
@@ -602,7 +613,12 @@ def add_source():
         from ..scheduler_manager import update_scheduled_jobs
 
         update_scheduled_jobs()
-        log_action(session.get("username", "system"), "source_add", target=name, ip_address=request.remote_addr)
+        log_action(
+            session.get("username", "system"), "source_add",
+            target=name,
+            details=f"url={url} | format={data_format} | interval={schedule_interval_minutes}min | confidence={confidence}",
+            ip_address=request.remote_addr,
+        )
 
     return redirect(url_for("dashboard.index"))
 
@@ -680,7 +696,12 @@ def update_source(index):
             from ..scheduler_manager import update_scheduled_jobs
 
             update_scheduled_jobs()
-            log_action(session.get("username", "system"), "source_edit", target=name, ip_address=request.remote_addr)
+            log_action(
+                session.get("username", "system"), "source_edit",
+                target=name,
+                details=f"url={url} | format={data_format} | interval={schedule_interval_minutes}min | confidence={confidence}",
+                ip_address=request.remote_addr,
+            )
 
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
             thread.start()
@@ -728,7 +749,12 @@ def update_settings():
         config["base_url"] = base_url
 
     write_config(config)
-    log_action(session.get("username", "system"), "config_change", details="global_settings", ip_address=request.remote_addr)
+    log_action(
+        session.get("username", "system"), "config_change",
+        target="global_settings",
+        details=f"lifetime={lifetime or 'unchanged'}d | timezone={timezone or 'unchanged'} | base_url={base_url or 'unchanged'}",
+        ip_address=request.remote_addr,
+    )
     flash("Global settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -862,7 +888,13 @@ def update_ldap():
         }
 
     write_config(config)
-    log_action(session.get("username", "system"), "config_change", details="ldap", ip_address=request.remote_addr)
+    server_list = ", ".join(s["server"] for s in ldap_servers_config) if ldap_servers_config else "none"
+    log_action(
+        session.get("username", "system"), "config_change",
+        target="ldap",
+        details=f"enabled={enabled} | servers={server_list} | port={port} | ldaps={is_ldaps}",
+        ip_address=request.remote_addr,
+    )
     flash("LDAP settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -1009,7 +1041,12 @@ def update_proxy():
     config["proxy"] = {"enabled": enabled, "server": server, "port": port, "username": username, "password": password}
 
     write_config(config)
-    log_action(session.get("username", "system"), "config_change", details="proxy", ip_address=request.remote_addr)
+    log_action(
+        session.get("username", "system"), "config_change",
+        target="proxy",
+        details=f"enabled={enabled} | server={server}:{port} | auth={'yes' if username else 'no'}",
+        ip_address=request.remote_addr,
+    )
     flash("Proxy settings updated successfully.", "success")
     return redirect(url_for("system.index"))
 
@@ -1254,9 +1291,17 @@ def add_whitelist():
 @login_required
 @list_management_required
 def remove_whitelist(item_id):
-    # Note: In app.py this was /remove_whitelist/<int:item_id>
+    # Fetch item value before deletion so the audit log records what was removed, not just the DB row ID
+    all_items = get_whitelist()
+    item_detail = next((i for i in all_items if i["id"] == item_id), None)
+    item_label = item_detail["item"] if item_detail else str(item_id)
     remove_whitelist_item(item_id)
-    log_action(session.get("username", "system"), "whitelist_remove", target=str(item_id), ip_address=request.remote_addr)
+    log_action(
+        session.get("username", "system"), "whitelist_remove",
+        target=item_label,
+        details=f"type={item_detail['type'] if item_detail else '-'}",
+        ip_address=request.remote_addr,
+    )
     return redirect(url_for("dashboard.index"))
 
 

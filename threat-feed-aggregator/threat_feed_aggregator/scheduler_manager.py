@@ -49,6 +49,45 @@ def _fetch_feed_by_name(source_name):
     fetch_and_process_single_feed(source_config)
 
 
+def _run_expired_blacklist_cleanup():
+    """
+    Scheduled task: purge expired api_blacklist entries and immediately
+    regenerate EDL files so firewalls stop enforcing removed blocks.
+
+    Runs every 6 hours. First execution is triggered immediately on
+    scheduler start (next_run_time=now) so any already-expired items
+    accumulated before this job existed are cleaned up without waiting.
+    """
+    from .aggregator import regenerate_edl_files
+    from .repositories.whitelist_repo import remove_expired_blacklist_items
+    from .services.audit_service import log_action
+
+    try:
+        deleted, expired_items = remove_expired_blacklist_items()
+        if deleted > 0:
+            # Log each removed item for traceability
+            for item in expired_items:
+                logger.info(
+                    "Blacklist cleanup: expired item removed — ip=%s type=%s comment=%r expired_at=%s",
+                    item["item"], item["type"], item["comment"], item["expires_at"],
+                )
+            # Single audit log entry summarising the batch
+            removed_ips = ", ".join(i["item"] for i in expired_items[:50])
+            log_action(
+                "scheduler",
+                "blacklist_cleanup",
+                target=f"{deleted} expired item(s)",
+                details=removed_ips,
+                ip_address="scheduler",
+            )
+            logger.info("Blacklist cleanup: %d item(s) removed — regenerating EDL files.", deleted)
+            regenerate_edl_files()
+        else:
+            logger.debug("Blacklist cleanup: no expired items found.")
+    except Exception as e:
+        logger.error("Blacklist cleanup job failed: %s", e)
+
+
 def update_scheduled_jobs():
     """Refreshes the scheduler jobs based on current config."""
     from apscheduler.jobstores.base import ConflictingIdError
@@ -71,6 +110,7 @@ def update_scheduled_jobs():
                 "update_github",
                 "update_azure",
                 "dns_deduplication_job",
+                "cleanup_expired_blacklist",
             ]:
                 try:
                     scheduler.remove_job(job.id)
@@ -139,6 +179,25 @@ def update_scheduled_jobs():
                 )
             except (ConflictingIdError, IntegrityError):
                 pass
+
+        # Expired Blacklist Cleanup — every 6 hours.
+        # next_run_time=now ensures the job fires immediately on scheduler start so
+        # any items that expired while this job did not yet exist are purged at boot.
+        try:
+            from datetime import UTC, datetime
+
+            scheduler.add_job(
+                _run_expired_blacklist_cleanup,
+                "interval",
+                hours=6,
+                id="cleanup_expired_blacklist",
+                name="Expired Blacklist Cleanup",
+                replace_existing=True,
+                next_run_time=datetime.now(UTC),
+            )
+            logger.info("Scheduled expired blacklist cleanup every 6 hours (first run: immediate).")
+        except (ConflictingIdError, IntegrityError):
+            pass
 
     except Exception as e:
         logger.error(f"Failed to update scheduled jobs: {e}")

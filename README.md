@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Version-2.4.5-6366f1?style=for-the-badge&logoColor=white" alt="Version">
+<img src="https://img.shields.io/badge/Version-2.4.6-6366f1?style=for-the-badge&logoColor=white" alt="Version">
 <img src="https://img.shields.io/badge/Python-3.13+-3b82f6?style=for-the-badge&logo=python&logoColor=white" alt="Python">
 <img src="https://img.shields.io/badge/Flask-3.1-22c55e?style=for-the-badge&logo=flask&logoColor=white" alt="Flask">
 <img src="https://img.shields.io/badge/Docker-Ready-0ea5e9?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -315,6 +315,31 @@ helm install threat-feed ./helm/ \
 ---
 
 ## 📝 Changelog
+
+### [v2.4.6] — 2026-07-02
+
+#### 🧹 Blacklist Lifecycle Management
+- **`GET /api/cleanup/blacklist/preview`** — Dry-run endpoint: lists all expired `api_blacklist` items without removing them (requires `system:rw`)
+- **`POST /api/cleanup/blacklist`** — Manual cleanup trigger: removes all expired items, regenerates EDL files, records full audit log with list of removed IPs
+- **`get_expired_blacklist_items()`** — New repository function; exported via `db_manager` for scheduler and API use
+- **Auto-cleanup scheduling** — `scheduler_manager.py` updated to run periodic expired-item cleanup
+
+#### 📋 Audit Log Enrichment
+- **FortiDeceptor block/unblock** — Audit entries now include blocked IP list, count, expiry type, and `expires_at` timestamp
+- **Backup download** — Audit records now log which files were included (`config.json + threat_feed.db + safe_list.txt`)
+- **System restore** — Audit records now include filename list and zip size
+- **Aggregation start** — Audit entries now include active feed count (`feeds=N`)
+
+#### 🐛 Bug Fixes
+- `whitelist_repo.py`: Improved handling of edge cases in expired item queries
+- `routes/auth.py`: Minor session handling fixes
+- `routes/system.py`: Stability improvements
+
+#### 🔧 Internal
+- `db_manager.py`: `get_expired_blacklist_items` and `remove_expired_blacklist_items` added to `__all__`
+- Version bumped to **2.4.6**
+
+---
 
 ### [v2.4.5] — 2026-07-02
 

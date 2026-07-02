@@ -55,8 +55,9 @@ class TestBlacklistLogic(unittest.TestCase):
         self.assertIn(self.test_ip_valid, item_ips)
         
         # 4. Run cleanup
-        deleted_count = remove_expired_blacklist_items(conn=self.conn)
+        deleted_count, deleted_items = remove_expired_blacklist_items(conn=self.conn)
         self.assertGreaterEqual(deleted_count, 1)
+        self.assertTrue(any(i["item"] == self.test_ip_expired for i in deleted_items))
         
         # 5. Verify expired is gone, valid remains
         items_after = get_api_blacklist_items(conn=self.conn)
