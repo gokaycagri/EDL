@@ -48,8 +48,8 @@ if not os.path.exists(CONFIG_FILE) and os.path.exists(CONFIG_FILE_DEFAULT):
 
     try:
         shutil.copy(CONFIG_FILE_DEFAULT, CONFIG_FILE)
-    except Exception:
-        pass  # Handle case where source might be missing in some builds
+    except Exception as _copy_e:
+        logger.debug("Could not copy default config (non-fatal): %s", _copy_e)
 
 import logging
 
@@ -97,8 +97,8 @@ def read_config():
                 # logger.warning(f"[Config] Attempting fallback to default config due to corruption.")
                 with open(CONFIG_FILE_DEFAULT) as f:
                     return json.load(f)
-            except Exception:
-                pass
+            except Exception as _fallback_e:
+                logger.warning("Fallback config read also failed: %s", _fallback_e)
         return {"source_urls": []}
 
 

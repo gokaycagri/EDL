@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import quote as _url_quote
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -16,8 +17,13 @@ if db_type == "postgres":
     db_host = os.getenv("DB_HOST", "postgres")
     db_port = os.getenv("DB_PORT", "5432")
     db_name = os.getenv("DB_NAME", "threat_feed")
-    db_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
-    jobstores = {"default": SQLAlchemyJobStore(url=db_url)}
+    db_url = f"postgresql://{db_user}:{_url_quote(db_pass, safe='')}@{db_host}:{db_port}/{db_name}"
+    try:
+        jobstores = {"default": SQLAlchemyJobStore(url=db_url)}
+    except Exception as _e:
+        _safe_url = f"postgresql://{db_user}:***@{db_host}:{db_port}/{db_name}"
+        logger.error("Failed to connect to scheduler job store at %s: %s", _safe_url, _e)
+        raise
 else:
     jobstores = {"default": SQLAlchemyJobStore(url=f"sqlite:///{os.path.join(DATA_DIR, 'jobs.sqlite')}")}
 

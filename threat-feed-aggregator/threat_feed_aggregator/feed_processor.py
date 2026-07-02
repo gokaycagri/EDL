@@ -273,8 +273,8 @@ class FeedAggregator:
             if item_type == "ip":
                 try:
                     country = get_country_code(item)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("GeoIP lookup failed for %r: %s", item, e)
             enriched_data.append((item, country, item_type))
             if (i + 1) % 10000 == 0:
                 job_service.update_job_status(source_name, "Enriching", f"Enriched {i + 1}/{total} items...")
@@ -333,7 +333,7 @@ class FeedAggregator:
                 filtered_items = await loop.run_in_executor(None, self.filter_whitelist, items)
 
                 job_service.update_job_status(name, "Enriching", f"Enriching {len(filtered_items)} items...")
-                enriched_items = self.enrich_data(filtered_items, name)
+                enriched_items = await loop.run_in_executor(None, self.enrich_data, filtered_items, name)
 
                 if enriched_items:
                     await loop.run_in_executor(None, self.save_batch, enriched_items, name)
@@ -392,8 +392,8 @@ class FeedAggregator:
             logger.error(f"Error processing {name}: {err_msg}")
             try:
                 await loop.run_in_executor(None, log_job_end, job_id, "failure", 0, err_msg, self.db_conn)
-            except Exception:
-                pass  # best-effort — don't mask the original exception
+            except Exception as e:
+                logger.warning("log_job_end failed for job %s: %s", job_id, e)
             job_service.update_job_status(name, "Failed", err_msg)
             raise
 

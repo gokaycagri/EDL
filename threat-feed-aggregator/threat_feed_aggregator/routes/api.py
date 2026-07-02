@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import re
 import threading
 import time
 import zipfile
@@ -40,13 +41,16 @@ from ..microsoft_services import process_microsoft_feeds
 from ..response_helpers import api_error, api_response
 from ..scheduler_manager import scheduler, update_scheduled_jobs
 from ..services.job_service import job_service
-from ..utils import add_to_safe_list, format_timestamp, remove_from_safe_list, validate_indicator
+from ..utils import add_to_safe_list, clamp_int, format_timestamp, remove_from_safe_list, validate_indicator
 from . import bp_api
 from .auth import api_key_required, basic_auth_required, login_required
 
 logger = logging.getLogger(__name__)
 
 _DECEPTOR_PROBE_STRINGS = {"hacker-ip", "1", "test", "ping"}
+
+# Token must be 1-64 chars: alphanumeric, hyphen, underscore only
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 @bp_api.route("/docs")
@@ -116,6 +120,9 @@ def get_firewall_edl(filename):
     """
     Public-ish endpoint for firewalls to fetch EDL files.
     Does NOT require session login.
+
+    NOTE: Error responses here use plain jsonify (not api_error/api_response envelope)
+    intentionally — firewall clients only look at HTTP status codes, not body format.
     """
     from flask import make_response, send_from_directory
 
@@ -170,6 +177,8 @@ def get_saved_custom_edl(token):
     Returns a saved custom EDL by its token.
     Uses file-based caching (10 mins) and streaming for performance.
     """
+    if not _TOKEN_RE.match(token):
+        return jsonify({"error": "Invalid token"}), 400
     list_config = get_custom_list_by_token(token)
     if not list_config:
         return jsonify({"error": "List not found"}), 404
@@ -379,6 +388,10 @@ def run_script():
         logging.info("Aggregation already running, returning status.")
         return api_response({"aggregation_status": "running"}, message="Aggregation already running")
 
+    from ..services.audit_service import log_action
+
+    log_action(session.get("username", "unknown"), "aggregation_started", ip_address=request.remote_addr)
+
     def _run():
         try:
             aggregation_task()
@@ -470,7 +483,7 @@ def get_scheduled_jobs():
 @login_required
 def trend_data():
     """Returns historical stats for the chart."""
-    days = request.args.get("days", default=30, type=int)
+    days = clamp_int(request.args.get("days"), 1, 365, 30)
     data = get_historical_stats(days)
 
     # Format dates for Chart.js using configured TZ
@@ -489,7 +502,7 @@ def trend_data():
 @login_required
 def job_history():
     """Returns past job execution history."""
-    limit = request.args.get("limit", default=20, type=int)
+    limit = clamp_int(request.args.get("limit"), 1, 1000, 20)
     history = get_job_history(limit=limit)
     # Format dates
     for item in history:
@@ -675,8 +688,10 @@ def source_stats_api():
     if request.headers.get("If-None-Match") == etag:
         return Response(status=304)
 
+    from datetime import UTC, datetime
+
     resp = Response(
-        json.dumps({"status": "success", "data": body}, default=str),
+        json.dumps({"status": "success", "timestamp": datetime.now(UTC).isoformat(), "data": body}, default=str),
         status=200,
         mimetype="application/json",
     )
@@ -859,7 +874,7 @@ def remove_safe_list_item():
 @login_required
 def api_test_feed():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
         if not data:
             return api_error("No data provided", "VALIDATION_ERROR", 400)
 
@@ -1003,6 +1018,8 @@ def remove_indicator():
 from .auth import api_key_required
 
 # --- FortiDeceptor Integration ---
+# NOTE: Response format uses {"status": ..., "message": ...} intentionally.
+# FortiDeceptor expects this specific schema; do NOT change to api_response envelope.
 
 
 @bp_api.route("/deceptor/block", methods=["POST"])
@@ -1109,6 +1126,8 @@ def deceptor_block():
 
 
 # --- Trend Micro DDEI Integration ---
+# NOTE: Response format uses {"status": ..., "message": ...} intentionally.
+# Trend Micro DDEI expects this specific schema; do NOT change to api_response envelope.
 
 
 @bp_api.route("/ddei/submit", methods=["POST"])
@@ -1367,11 +1386,24 @@ def get_whitelist_api():
 @bp_api.route("/blacklist")
 @login_required
 def get_blacklist_api():
-    """Returns paginated API blacklist as JSON."""
+    """Returns paginated API blacklist as JSON.
+
+    Query params:
+      exclude_deceptor=true  — omit items whose comment contains 'FortiDeceptor'
+      only_deceptor=true     — return only items whose comment contains 'FortiDeceptor'
+    """
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 50, type=int)
+    exclude_deceptor = request.args.get("exclude_deceptor", "false").lower() == "true"
+    only_deceptor = request.args.get("only_deceptor", "false").lower() == "true"
 
     all_items = get_api_blacklist_items()
+
+    if exclude_deceptor:
+        all_items = [i for i in all_items if "FortiDeceptor" not in (i.get("comment") or "")]
+    elif only_deceptor:
+        all_items = [i for i in all_items if "FortiDeceptor" in (i.get("comment") or "")]
+
     total = len(all_items)
     start = (page - 1) * per_page
     end = start + per_page

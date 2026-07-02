@@ -184,12 +184,21 @@ function updateSourceStats() {
                     });
                 }
 
-                if (window.mapInstance) {
+                if (countryStats && countryStats.length) {
                     var mapData = {};
-                    countryStats.forEach(function(c) { mapData[c.country_code] = c.count; });
-                    if (window.mapInstance.series && window.mapInstance.series.regions && window.mapInstance.series.regions[0]) {
-                        window.mapInstance.series.regions[0].setValues(mapData);
+                    var mapTotal = 0;
+                    countryStats.forEach(function(c) { mapData[c.country_code] = c.count; mapTotal += c.count; });
+                    // Keep module-level store fresh so tooltips always show current counts
+                    _mapData = mapData;
+                    if (window.mapInstance && window.mapInstance.series && window.mapInstance.series.regions && window.mapInstance.series.regions[0]) {
+                        // Pass log-scaled values to keep color distribution proportional
+                        window.mapInstance.series.regions[0].setValues(_logScaleData(mapData));
                     }
+                    buildCountryPanel(mapData);
+                    var totalEl = document.getElementById('mapTotalCount');
+                    if (totalEl) totalEl.textContent = mapTotal.toLocaleString();
+                    var cntEl = document.getElementById('mapCountryCount');
+                    if (cntEl) cntEl.textContent = Object.keys(mapData).length;
                 }
             }
         });
@@ -722,48 +731,130 @@ function showAddBlacklistModal() {
     });
 }
 
-// === Map (Dark Operations Colors) ===
-function initMap() {
-    var data = AppConfig.countryStats;
-    try {
-        if (typeof jsVectorMap !== 'undefined') {
-            window.mapInstance = new jsVectorMap({
-                selector: '#world-map',
-                map: 'world',
-                zoomOnScroll: false,
-                zoomButtons: true,
-                regionStyle: {
-                    initial: { fill: '#2a3a58', stroke: '#3d5070', strokeWidth: 0.8 },
-                    hover: { fill: '#3d5070' }
-                },
-                visualizeData: {
-                    scale: ['#2a3a58', '#00e5ff'],
-                    values: data
-                },
-                onRegionTooltipShow: function(event, tooltip, code) {
-                    var count = data[code] || 0;
-                    tooltip.text(
-                        '<div class="p-2" style="font-family: IBM Plex Mono, monospace;">' +
-                        '<h6 class="mb-1" style="color:#e2e8f0;">' + tooltip.text() + '</h6>' +
-                        '<span style="background:rgba(0,229,255,0.15); color:#00e5ff; padding:2px 8px; border-radius:4px; font-size:0.75rem; font-weight:600;">' + count + ' Indicators</span></div>',
-                        { isHtml: true }
-                    );
-                }
-            });
+// === Map ===
+// Module-level store so tooltip always shows current counts (not stale init-time snapshot)
+var _mapData = {};
 
-            var mapEl = document.getElementById('world-map');
-            if (mapEl) {
-                mapEl.addEventListener('wheel', function(e) {
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        if (window.mapInstance) {
-                            if (e.deltaY < 0) window.mapInstance.setScale(window.mapInstance.scale * 1.2, e.offsetX, e.offsetY);
-                            else window.mapInstance.setScale(window.mapInstance.scale / 1.2, e.offsetX, e.offsetY);
-                        }
-                    }
-                }, { passive: false });
-            }
+function _logScaleData(data) {
+    var result = {};
+    Object.keys(data).forEach(function(code) {
+        var v = data[code];
+        result[code] = v > 0 ? Math.log10(v + 1) : 0;
+    });
+    return result;
+}
+
+function _countryFlag(code) {
+    if (!code || code.length !== 2) return '';
+    return code.toUpperCase().split('').map(function(c) {
+        return String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65);
+    }).join('');
+}
+
+function buildCountryPanel(data) {
+    var panel = document.getElementById('countryStatsPanel');
+    if (!panel) return;
+
+    var entries = Object.entries(data).sort(function(a, b) { return b[1] - a[1]; });
+    var total = entries.reduce(function(s, e) { return s + e[1]; }, 0);
+    if (!entries.length) {
+        panel.innerHTML = '<div class="text-center py-4 text-muted small">No geo data available.</div>';
+        return;
+    }
+
+    var maxVal = entries[0][1];
+    var html = '';
+    entries.slice(0, 20).forEach(function(entry, i) {
+        var code = entry[0], count = entry[1];
+        var pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+        var barPct = maxVal > 0 ? ((count / maxVal) * 100).toFixed(1) : 0;
+        var flag = _countryFlag(code);
+        var rankColor = i === 0 ? '#ef4444' : i === 1 ? '#f97316' : i === 2 ? '#f59e0b' : 'var(--text-muted)';
+        html += '<div class="px-3 py-2" style="border-bottom: 1px solid var(--border-color);">' +
+            '<div class="d-flex align-items-center justify-content-between mb-1">' +
+                '<div class="d-flex align-items-center gap-2">' +
+                    '<span style="font-size:0.65rem; font-weight:700; color:' + rankColor + '; min-width:1rem;">#' + (i + 1) + '</span>' +
+                    '<span style="font-size:1rem; line-height:1;">' + flag + '</span>' +
+                    '<span class="fw-bold" style="font-size:0.82rem;">' + code + '</span>' +
+                '</div>' +
+                '<div class="text-end">' +
+                    '<span class="fw-bold" style="font-size:0.82rem; color:#ef4444;">' + count.toLocaleString() + '</span>' +
+                    '<span class="d-block" style="font-size:0.65rem; color:var(--text-muted);">' + pct + '%</span>' +
+                '</div>' +
+            '</div>' +
+            '<div style="height:3px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden;">' +
+                '<div style="height:100%; width:' + barPct + '%; background:linear-gradient(90deg,#7c2d12,' + (i < 3 ? '#ef4444' : '#dc2626') + '); border-radius:2px; transition:width 0.6s ease;"></div>' +
+            '</div>' +
+        '</div>';
+    });
+    panel.innerHTML = html;
+}
+
+function initMap() {
+    _mapData = AppConfig.countryStats || {};
+    buildCountryPanel(_mapData);
+
+    var mapEl = document.getElementById('world-map');
+    if (!mapEl || typeof jsVectorMap === 'undefined') return;
+
+    // Capture-phase listener registered BEFORE jsVectorMap attaches its bubble-phase wheel
+    // listener. This ensures:
+    //   • Non-Ctrl scroll  → stopImmediatePropagation (jsVectorMap never sees it) + no
+    //     preventDefault → browser scrolls the page naturally.
+    //   • Ctrl+scroll      → preventDefault (suppress browser page-zoom) and let the event
+    //     fall through to jsVectorMap's listener which zooms the map.
+    mapEl.addEventListener('wheel', function(e) {
+        if (!e.ctrlKey) {
+            e.stopImmediatePropagation();
+        } else {
+            e.preventDefault();
         }
+    }, { capture: true, passive: false });
+
+    try {
+        window.mapInstance = new jsVectorMap({
+            selector: '#world-map',
+            map: 'world',
+            zoomOnScroll: true,   // handled by jsVectorMap on Ctrl+scroll (capture filter above)
+            zoomButtons: true,
+            regionStyle: {
+                initial: { fill: '#1a2a40', stroke: '#253650', strokeWidth: 0.5 },
+                hover:   { fill: '#2d3f60', fillOpacity: 1 },
+                selected: { fill: '#dc2626' }
+            },
+            visualizeData: {
+                scale: ['#1e3a5f', '#dc2626'],
+                // Log₁₀ scale prevents dominant countries from washing out all others
+                values: _logScaleData(_mapData)
+            },
+            onRegionTooltipShow: function(event, tooltip, code) {
+                // Always read from _mapData (module-level) so live updates are reflected
+                var count = _mapData[code] || 0;
+                var total = Object.values(_mapData).reduce(function(s, v) { return s + v; }, 0);
+                var pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                var flag = _countryFlag(code);
+                var level = count === 0 ? 'No Data' : count < 50 ? 'Low' : count < 500 ? 'Medium' : count < 2000 ? 'High' : 'Critical';
+                var levelColor = count === 0 ? '#6b7280' : count < 50 ? '#22c55e' : count < 500 ? '#f59e0b' : count < 2000 ? '#f97316' : '#ef4444';
+                tooltip.text(
+                    '<div style="padding:8px 10px; min-width:160px;">' +
+                        '<div style="font-size:0.9rem; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px;">' +
+                            '<span style="font-size:1.1rem;">' + flag + '</span>' +
+                            '<span>' + tooltip.text() + '</span>' +
+                        '</div>' +
+                        '<div style="display:flex; justify-content:space-between; margin-bottom:4px;">' +
+                            '<span style="font-size:0.75rem; color:#9ca3af;">Indicators</span>' +
+                            '<span style="font-size:0.75rem; font-weight:700; color:#ef4444;">' + count.toLocaleString() + '</span>' +
+                        '</div>' +
+                        '<div style="display:flex; justify-content:space-between; margin-bottom:6px;">' +
+                            '<span style="font-size:0.75rem; color:#9ca3af;">Share</span>' +
+                            '<span style="font-size:0.75rem; color:#9ca3af;">' + pct + '%</span>' +
+                        '</div>' +
+                        '<span style="background:' + levelColor + '22; color:' + levelColor + '; padding:2px 8px; border-radius:4px; font-size:0.7rem; font-weight:700; border:1px solid ' + levelColor + '44;">' + level + '</span>' +
+                    '</div>',
+                    { isHtml: true }
+                );
+            }
+        });
     } catch (e) { console.error(e); }
 }
 

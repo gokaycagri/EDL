@@ -905,28 +905,38 @@ kbd {
 }
 
 /* === Scrollbar === */
+.list-scroll-area {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) var(--surface-0);
+}
+
 .main-container::-webkit-scrollbar,
 .log-window::-webkit-scrollbar,
-.terminal-window::-webkit-scrollbar {
+.terminal-window::-webkit-scrollbar,
+.list-scroll-area::-webkit-scrollbar {
     width: 6px;
 }
 
 .main-container::-webkit-scrollbar-track,
 .log-window::-webkit-scrollbar-track,
-.terminal-window::-webkit-scrollbar-track {
+.terminal-window::-webkit-scrollbar-track,
+.list-scroll-area::-webkit-scrollbar-track {
     background: var(--surface-0);
 }
 
 .main-container::-webkit-scrollbar-thumb,
 .log-window::-webkit-scrollbar-thumb,
-.terminal-window::-webkit-scrollbar-thumb {
+.terminal-window::-webkit-scrollbar-thumb,
+.list-scroll-area::-webkit-scrollbar-thumb {
     background: var(--surface-3);
     border-radius: 10px;
 }
 
 .main-container::-webkit-scrollbar-thumb:hover,
 .log-window::-webkit-scrollbar-thumb:hover,
-.terminal-window::-webkit-scrollbar-thumb:hover {
+.terminal-window::-webkit-scrollbar-thumb:hover,
+.list-scroll-area::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
 

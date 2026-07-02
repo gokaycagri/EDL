@@ -29,8 +29,10 @@ def index():
     total_indicator_count = get_unique_indicator_count()
     indicator_counts_by_type = get_indicator_counts_by_type()
     country_stats = get_country_stats()
-    whitelist = get_whitelist()
-    blacklist = get_api_blacklist_items()
+    whitelist = get_whitelist(limit=5)
+    _all_blacklist = get_api_blacklist_items()
+    blacklist = [i for i in _all_blacklist if "FortiDeceptor" not in (i.get("comment") or "")][:10]
+    deceptor_preview = [i for i in _all_blacklist if "FortiDeceptor" in (i.get("comment") or "")][:5]
     custom_lists = get_all_custom_lists()
 
     # Sort safe list for display
@@ -97,6 +99,7 @@ def index():
         indicator_counts_by_type=indicator_counts_by_type,
         whitelist=whitelist,
         blacklist=blacklist,
+        deceptor_preview=deceptor_preview,
         country_stats=country_stats,
         safe_list=safe_list_sorted,
         custom_lists=custom_lists,

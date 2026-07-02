@@ -11,6 +11,8 @@ from .auth import login_required
 
 bp_analysis = Blueprint("analysis", __name__, url_prefix="/analysis")
 
+_ANALYSIS_MAX_ROWS = 100_000
+
 
 @bp_analysis.route("/")
 @login_required
@@ -110,7 +112,7 @@ def export_indicators():
 
     # Fetch with reasonable cap
     _, _, rows = get_indicators_paginated(
-        start=0, length=100000, search_value=search_value, filters=filters, order_col=order_col, order_dir=order_dir
+        start=0, length=_ANALYSIS_MAX_ROWS, search_value=search_value, filters=filters, order_col=order_col, order_dir=order_dir
     )
 
     if export_format == "json":

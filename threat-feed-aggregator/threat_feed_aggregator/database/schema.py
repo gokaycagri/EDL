@@ -250,7 +250,7 @@ def init_db(conn=None):
                     (
                         "Super_User",
                         "Full access to all modules",
-                        json.dumps({"dashboard": "rw", "system": "rw", "tools": "rw"}),
+                        json.dumps({"dashboard": "rw", "system": "rw", "tools": "rw", "lists": "rw"}),
                     ),
                 )
                 db.execute(
@@ -258,13 +258,33 @@ def init_db(conn=None):
                     (
                         "Standard_User",
                         "Can manage feeds but not system settings",
-                        json.dumps({"dashboard": "rw", "system": "r", "tools": "rw"}),
+                        json.dumps({"dashboard": "rw", "system": "r", "tools": "rw", "lists": "none"}),
                     ),
                 )
                 db.execute(
                     insert_cmd,
-                    ("Read_Only", "View access only", json.dumps({"dashboard": "r", "system": "r", "tools": "r"})),
+                    ("Read_Only", "View access only", json.dumps({"dashboard": "r", "system": "r", "tools": "r", "lists": "none"})),
                 )
+
+            # v2.4 Migration: Add 'lists' permission to existing profiles that don't have it
+            try:
+                select_cmd = "SELECT id, name, permissions FROM admin_profiles"
+                update_cmd = "UPDATE admin_profiles SET permissions = ? WHERE id = ?"
+                if DB_TYPE == "postgres":
+                    update_cmd = update_cmd.replace("?", "%s")
+                rows = db.execute(select_cmd).fetchall()
+                for row in rows:
+                    profile_id, name, perms_str = row[0], row[1], row[2]
+                    try:
+                        perms = json.loads(perms_str)
+                    except (ValueError, TypeError):
+                        continue
+                    if "lists" not in perms:
+                        # Super_User gets rw, others get none
+                        perms["lists"] = "rw" if name == "Super_User" else "none"
+                        db.execute(update_cmd, (json.dumps(perms), profile_id))
+            except Exception as _e:
+                logger.warning("v2.4 lists permission migration: %s", _e)
 
             # Users Table Migration logic (SQLite only)
             if DB_TYPE == "sqlite":

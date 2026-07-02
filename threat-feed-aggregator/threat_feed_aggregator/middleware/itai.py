@@ -23,6 +23,7 @@ import time
 from flask import Blueprint, request, session
 
 from ..response_helpers import api_error, api_response
+from ..utils import validate_permissions
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 ITAI_MODE = os.environ.get("ITAI_MODE", "false").lower() == "true"
 ITAI_JWT_SECRET = os.environ.get("ITAI_JWT_SECRET", "")
+# Optional: restrict tokens to a specific audience (e.g. "edl-service").
+# When set, tokens whose 'aud' claim doesn't match are rejected.
+ITAI_JWT_AUDIENCE = os.environ.get("ITAI_JWT_AUDIENCE", "")
 
 # Context variable for trace ID propagation across async boundaries
 trace_id_var: ContextVar[str | None] = ContextVar("trace_id", default=None)
@@ -78,18 +82,19 @@ def register_itai_middleware(app):
                 logger.error("ITAI_JWT_SECRET not configured — cannot verify SSO token from query param.")
                 return None
 
-            payload = _verify_hs256_token(token, ITAI_JWT_SECRET)
+            payload = _verify_hs256_token(token, ITAI_JWT_SECRET, audience=ITAI_JWT_AUDIENCE)
             if payload is not None:
                 username = payload.get("preferred_username") or payload.get("sub", "itai_user")
                 jwt_permissions = payload.get("permissions")
-                permissions = (
+                permissions = validate_permissions(
                     jwt_permissions
                     if isinstance(jwt_permissions, dict)
                     else {
-                        "dashboard": "rw",
-                        "system": "rw",
-                        "tools": "rw",
-                        "analysis": "rw",
+                        "dashboard": "r",
+                        "system": "none",
+                        "tools": "r",
+                        "analysis": "r",
+                        "lists": "none",
                     }
                 )
                 session.clear()
@@ -125,11 +130,11 @@ def _b64decode(data: str) -> bytes:
     return urlsafe_b64decode(data)
 
 
-def _verify_hs256_token(token: str, secret: str) -> dict | None:
+def _verify_hs256_token(token: str, secret: str, audience: str = "") -> dict | None:
     """Verify a HS256 JWT and return payload, or None on failure.
 
     This is a minimal verifier — no external JWT library required.
-    Checks signature and expiration only.
+    Checks: algorithm, signature, expiration, and optionally audience.
     """
     try:
         parts = token.split(".")
@@ -162,6 +167,13 @@ def _verify_hs256_token(token: str, secret: str) -> dict | None:
         if time.time() > exp:
             logger.warning("SSO token expired.")
             return None
+
+        # Audience check — only enforced when ITAI_JWT_AUDIENCE is configured
+        if audience:
+            token_aud = payload.get("aud")
+            if token_aud != audience:
+                logger.warning("SSO token audience mismatch: expected=%r, got=%r", audience, token_aud)
+                return None
 
         return payload
     except Exception as e:
@@ -200,17 +212,18 @@ def sso_login():
     # Create Flask session — regenerate to prevent session fixation
     username = payload.get("preferred_username") or payload.get("sub", "itai_user")
 
-    # Read permissions from JWT if available, otherwise default to full access
+    # Read permissions from JWT if available, otherwise default to read-only (least privilege)
     jwt_permissions = payload.get("permissions")
-    if isinstance(jwt_permissions, dict):
-        permissions = jwt_permissions
-    else:
-        permissions = {
+    permissions = validate_permissions(
+        jwt_permissions
+        if isinstance(jwt_permissions, dict)
+        else {
             "dashboard": "rw",
             "system": "rw",
             "tools": "rw",
             "analysis": "rw",
         }
+    )
 
     session.clear()
     session["logged_in"] = True

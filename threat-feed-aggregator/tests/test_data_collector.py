@@ -27,19 +27,22 @@ class TestDataCollector(unittest.TestCase):
         self.assertEqual(result, "line1\nline2\nline3")
         mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, verify=True)
 
+    @patch('threat_feed_aggregator.data_collector.time.sleep')
     @patch('threat_feed_aggregator.data_collector._is_ssl_bypass_url', return_value=False)
     @patch('threat_feed_aggregator.data_collector.requests.get')
-    def test_fetch_data_from_url_failure(self, mock_get, mock_ssl_bypass):
-        # Configure the mock to raise an exception
+    def test_fetch_data_from_url_failure(self, mock_get, mock_ssl_bypass, mock_sleep):
+        # Configure the mock to raise an exception on every attempt
         mock_get.side_effect = requests.exceptions.RequestException("Test error")
 
         # Call the function
         url = "http://example.com/failure"
         result = fetch_data_from_url(url)
 
-        # Assert the result
+        # Assert the result is None after all retries exhausted
         self.assertIsNone(result)
-        mock_get.assert_called_once_with(url, timeout=30, proxies=None, auth=None, verify=True)
+        # Retry logic calls requests.get _FETCH_MAX_RETRIES (3) times
+        self.assertEqual(mock_get.call_count, 3)
+        mock_get.assert_called_with(url, timeout=30, proxies=None, auth=None, verify=True)
 
 if __name__ == '__main__':
     unittest.main()

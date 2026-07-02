@@ -1,6 +1,7 @@
 import base64
 import io
 import logging
+import re
 import ssl
 import threading
 import time
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Key: (username, code), Value: expiry timestamp
 _used_totp_codes = {}
 _used_totp_lock = threading.Lock()
-_TOTP_REPLAY_TTL = 120  # 2x the valid_window period (60s window * 2)
+_TOTP_REPLAY_TTL = 60  # 2x the valid_window period (30s window * 2)
 
 
 def _is_totp_replayed(username, code):
@@ -73,8 +74,9 @@ def verify_totp(secret, code, username=None):
 
     try:
         totp = pyotp.TOTP(secret)
-        # valid_window=2 allows for 60s before/after the current time (accommodating drift)
-        result = totp.verify(code, valid_window=2)
+        # valid_window=1 allows for 30s before/after the current time (accommodating drift).
+        # Reduced from 2 to narrow the replay attack window.
+        result = totp.verify(code, valid_window=1)
         if result:
             # Reject replayed codes within the validity window
             if username and _is_totp_replayed(username, code):
@@ -134,6 +136,27 @@ def permission_required(module, level="r"):
     return decorator
 
 
+def list_management_required(f):
+    """
+    Decorator for Safe List / Block List routes.
+    Grants access if the user has system:rw (full system access)
+    OR lists:rw (dedicated list-management permission).
+    """
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("auth.login"))
+        perms = session.get("permissions", {})
+        if perms.get("system") == "rw" or perms.get("lists") == "rw":
+            return f(*args, **kwargs)
+        logger.warning(f"Permission Denied for user {session.get('username')} on lists:rw")
+        flash("Access Denied: You do not have permission to manage lists.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    return decorated_function
+
+
 def _check_ldap_credentials(username, password):
     """
     Helper function to handle LDAP authentication logic.
@@ -170,6 +193,13 @@ def _check_ldap_credentials(username, password):
         ldaps_enabled = srv_config.get("ldaps_enabled", False)
 
         if not server_hostname or not base_dn:
+            continue
+
+        # Validate base_dn format: must be composed only of DC= components
+        # (e.g. "DC=example,DC=com"). Rejects injected characters.
+        _DN_SAFE_RE = re.compile(r"^(DC=[A-Za-z0-9\-]+)(,DC=[A-Za-z0-9\-]+)*$", re.IGNORECASE)
+        if not _DN_SAFE_RE.match(base_dn):
+            logger.error("LDAP base_dn format invalid, skipping server: %s (dn=%r)", server_hostname, base_dn)
             continue
 
         try:
@@ -255,7 +285,10 @@ def _check_ldap_credentials(username, password):
                         profile_data = next((p for p in all_profiles if p["id"] == profile_id), None)
                         import json
 
-                        permissions = json.loads(profile_data["permissions"]) if profile_data else {}
+                        from .utils import validate_permissions
+
+                        raw_perms = json.loads(profile_data["permissions"]) if profile_data else {}
+                        permissions = validate_permissions(raw_perms)
 
                         # Sync LDAP user to local users table for MFA support
                         try:

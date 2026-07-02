@@ -230,6 +230,7 @@
                                                     <td class="ps-3 fw-bold text-truncate" style="max-width: 250px;">{{ map.group_dn }}</td>
                                                     <td><span class="badge bg-soft-info border border-info">{{ map.profile_name }}</span></td>
                                                     <td class="text-end pe-3">
+                                                        <button type="button" class="btn btn-link btn-sm p-0 me-2" onclick='showEditLdapMappingModal({{ map.id }}, {{ map.profile_id }})' {{ 'disabled' if sys_perm == 'r' }}><i class="fas fa-edit"></i></button>
                                                         <form action="{{ url_for('system.delete_ldap_mapping') }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Delete?')">
                                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                                             <input type="hidden" name="mapping_id" value="{{ map.id }}">
@@ -298,6 +299,7 @@
                                                     <span class="badge {{ 'bg-success' if p_perms.dashboard == 'rw' else ('bg-info' if p_perms.dashboard == 'r' else 'bg-secondary') }}" title="Dashboard">D</span>
                                                     <span class="badge {{ 'bg-success' if p_perms.system == 'rw' else ('bg-info' if p_perms.system == 'r' else 'bg-secondary') }}" title="System">S</span>
                                                     <span class="badge {{ 'bg-success' if p_perms.tools == 'rw' else ('bg-info' if p_perms.tools == 'r' else 'bg-secondary') }}" title="Tools">T</span>
+                                                    <span class="badge {{ 'bg-success' if p_perms.get('lists') == 'rw' else ('bg-info' if p_perms.get('lists') == 'r' else 'bg-secondary') }}" title="List Management (Safe/Block List)">L</span>
                                                 </td>
                                                 <td class="text-end pe-3">
                                                     <button class="btn btn-link btn-sm p-0 me-2" onclick='showProfileModal({{ profile|tojson }})' {{ 'disabled' if sys_perm == 'r' or profile.id == 1 }}><i class="fas fa-edit"></i></button>
@@ -743,11 +745,41 @@
         });
     }
 
+    function showEditLdapMappingModal(mappingId, currentProfileId) {
+        const profiles = {{ profiles|tojson }};
+        let pCards = '<div class="row g-2">';
+        profiles.forEach(p => pCards += `<div class="col-6"><input type="radio" class="btn-check" name="editMapProfile" id="ep_${p.id}" value="${p.id}" ${p.id === currentProfileId ? 'checked' : ''}><label class="btn btn-outline-secondary btn-sm w-100 p-3 text-start" for="ep_${p.id}"><div class="fw-bold">${p.name}</div></label></div>`);
+        pCards += '</div>';
+        Swal.fire({
+            title: 'Edit LDAP Group Mapping',
+            html: `
+                <div class="text-start">
+                    <label class="form-label small fw-bold">Assign Application Profile</label>
+                    ${pCards}
+                    <small class="text-muted d-block mt-2">Select the new profile for this LDAP group.</small>
+                </div>
+            `,
+            width: '600px',
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-save me-1"></i> Save',
+            confirmButtonColor: '#4f46e5',
+            preConfirm: () => {
+                const pid = document.querySelector('input[name="editMapProfile"]:checked')?.value;
+                if (!pid) { Swal.showValidationMessage('Please select a profile'); return false; }
+                return { mapping_id: mappingId, profile_id: pid };
+            }
+        }).then(res => {
+            if (res.isConfirmed) {
+                submitForm('{{ url_for("system.update_ldap_mapping") }}', res.value);
+            }
+        });
+    }
+
     function showProfileModal(profile = null) {
         const isEdit = profile !== null;
         let perms = { dashboard: 'r', system: 'none', tools: 'none' };
         if (isEdit && profile.permissions) perms = typeof profile.permissions === 'string' ? JSON.parse(profile.permissions) : profile.permissions;
-        const modules = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'system', label: 'System' }, { id: 'tools', label: 'Tools' }];
+        const modules = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'system', label: 'System' }, { id: 'tools', label: 'Tools' }, { id: 'lists', label: 'List Management (Safe/Block List)' }];
         let gridHtml = '<div class="list-group rounded-3 mb-3 text-start">';
         modules.forEach(mod => {
             const val = perms[mod.id] || 'none';
@@ -758,7 +790,7 @@
             title: isEdit ? 'Edit Profile' : 'New Profile',
             html: `<input type="text" id="profName" class="form-control mb-2" placeholder="Name" value="${isEdit?profile.name:''}" ${isEdit?'disabled':''}><input type="text" id="profDesc" class="form-control mb-3" placeholder="Desc" value="${isEdit?profile.description||'':''}">${gridHtml}`,
             confirmButtonText: 'Save', showCancelButton: true,
-            preConfirm: () => { const name = document.getElementById('profName').value; const desc = document.getElementById('profDesc').value; const newPerms = {}; ['dashboard','system','tools'].forEach(id => newPerms[id] = document.querySelector(`input[name="perm_${id}"]:checked`).value); return { name, description: desc, permissions: JSON.stringify(newPerms) }; }
+            preConfirm: () => { const name = document.getElementById('profName').value; const desc = document.getElementById('profDesc').value; const newPerms = {}; ['dashboard','system','tools','lists'].forEach(id => newPerms[id] = document.querySelector(`input[name="perm_${id}"]:checked`).value); return { name, description: desc, permissions: JSON.stringify(newPerms) }; }
         }).then(res => { if (res.isConfirmed) { const data = { description: res.value.description, permissions: res.value.permissions }; if(isEdit) data.profile_id = profile.id; else data.name = res.value.name; submitForm(isEdit?'{{ url_for("system.update_profile") }}':'{{ url_for("system.add_profile") }}', data); } });
     }
 

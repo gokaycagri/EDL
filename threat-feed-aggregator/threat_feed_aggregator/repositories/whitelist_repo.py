@@ -41,9 +41,12 @@ def add_whitelist_item(item, item_type="ip", description="", conn=None):
             return False, str(e)
 
 
-def get_whitelist(conn=None):
+def get_whitelist(conn=None, limit=None):
     with db_transaction(conn) as db:
-        cursor = db.execute("SELECT * FROM whitelist ORDER BY added_at DESC")
+        if limit is not None:
+            cursor = db.execute("SELECT * FROM whitelist ORDER BY added_at DESC LIMIT ?", (limit,))
+        else:
+            cursor = db.execute("SELECT * FROM whitelist ORDER BY added_at DESC")
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -109,6 +112,14 @@ def add_api_blacklist_item(item, item_type="ip", comment="", expires_at=None, co
 
             from ..database.connection import DB_TYPE
 
+            # Manual adds (no source) should reject duplicates; feed-based adds upsert silently.
+            if source is None:
+                existing = db.execute(
+                    "SELECT 1 FROM api_blacklist WHERE item = ?", (item.strip(),)
+                ).fetchone()
+                if existing:
+                    return False, "Item already exists in block list."
+
             if DB_TYPE == "postgres":
                 # Optimized UPSERT for Postgres
                 query = """
@@ -150,9 +161,12 @@ def remove_expired_blacklist_items(conn=None):
             return 0
 
 
-def get_api_blacklist_items(conn=None):
+def get_api_blacklist_items(conn=None, limit=None):
     with db_transaction(conn) as db:
-        cursor = db.execute("SELECT * FROM api_blacklist ORDER BY added_at DESC")
+        if limit is not None:
+            cursor = db.execute("SELECT * FROM api_blacklist ORDER BY added_at DESC LIMIT ?", (limit,))
+        else:
+            cursor = db.execute("SELECT * FROM api_blacklist ORDER BY added_at DESC")
         return [dict(row) for row in cursor.fetchall()]
 
 

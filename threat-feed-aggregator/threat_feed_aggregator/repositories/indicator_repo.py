@@ -4,6 +4,7 @@ import os
 import threading
 import time
 
+from ..constants import BULK_INSERT_CHUNK_SIZE
 from ..database.connection import DB_TYPE, db_readonly, db_transaction, get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ def upsert_indicators_bulk(indicators, source_name="Unknown", conn=None):
     if not filtered_indicators:
         return
 
-    CHUNK_SIZE = 5000  # Process in batches
+    CHUNK_SIZE = BULK_INSERT_CHUNK_SIZE
     now_iso = datetime.now(UTC).isoformat()
 
     with db_transaction(conn) as db:
@@ -227,6 +228,8 @@ def clean_database_vacuum(conn=None):
             logger.info("Database vacuumed and optimized.")
 
 
+_INDICATOR_WARN_THRESHOLD = 500_000  # Warn when more than 500K rows loaded into memory
+
 def get_all_indicators_iter(conn=None):
     """Fetches ALL indicators. Uses fetchall() to ensure all rows are loaded
     while the DB connection is still open (critical for PostgreSQL pool + background threads)."""
@@ -234,7 +237,14 @@ def get_all_indicators_iter(conn=None):
     try:
         cursor = db.execute("SELECT indicator, last_seen, country, type, risk_score, source_count FROM indicators")
         rows = cursor.fetchall()  # Fetch ALL before releasing connection
-        logger.debug(f"get_all_indicators_iter: fetched {len(rows)} rows from indicators table.")
+        if len(rows) > _INDICATOR_WARN_THRESHOLD:
+            logger.warning(
+                "Large indicator set loaded into memory: %d rows (threshold: %d). "
+                "Consider archiving old indicators to reduce memory pressure.",
+                len(rows),
+                _INDICATOR_WARN_THRESHOLD,
+            )
+        logger.debug("get_all_indicators_iter: fetched %d rows from indicators table.", len(rows))
     finally:
         if conn is None:
             db.close()

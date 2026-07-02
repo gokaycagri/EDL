@@ -32,7 +32,7 @@ try:
     HAS_LIMITER = True
 except ImportError:
     HAS_LIMITER = False
-    logger.warning("flask_limiter not found. Rate limiting is disabled.")
+    logger.error("flask_limiter not found — rate limiting is DISABLED. Install flask-limiter for production.")
 
     # Dummy Limiter class to prevent AttributeError
     class Limiter:
@@ -81,10 +81,23 @@ if os.environ.get("REDIS_HOST"):
     app.config["SESSION_TYPE"] = "redis"
     redis_host = os.environ["REDIS_HOST"]
     redis_port = os.environ.get("REDIS_PORT", 6379)
-    app.config["SESSION_REDIS"] = redis.from_url(f"redis://{redis_host}:{redis_port}")
+    _redis_pass = os.environ.get("REDIS_PASSWORD", "")
+    _redis_url = (
+        f"redis://:{_redis_pass}@{redis_host}:{redis_port}"
+        if _redis_pass
+        else f"redis://{redis_host}:{redis_port}"
+    )
+    app.config["SESSION_REDIS"] = redis.from_url(_redis_url)
 else:
+    _session_dir = os.path.join(DATA_DIR, "flask_session")
     app.config["SESSION_TYPE"] = "filesystem"
-    app.config["SESSION_FILE_DIR"] = os.path.join(DATA_DIR, "flask_session")
+    app.config["SESSION_FILE_DIR"] = _session_dir
+    # Restrict session directory to owner-only (prevents other OS users reading sessions).
+    try:
+        os.makedirs(_session_dir, mode=0o700, exist_ok=True)
+        os.chmod(_session_dir, 0o700)
+    except OSError as _e:
+        logger.warning("Could not restrict session directory permissions: %s", _e)
 
 session_timeout = int(os.environ.get("SESSION_TIMEOUT_MINUTES", 60))
 app.config["SESSION_PERMANENT"] = True
@@ -135,18 +148,27 @@ register_itai_middleware(app)
 # Rate limiting on login endpoint (10 attempts per minute per IP)
 limiter.limit("10/minute")(app.view_functions.get("auth.login"))
 
-# Exempt machine-to-machine endpoints from CSRF (they use API key / JWT auth, not cookies)
+# Rate limiting on DDEI Basic Auth endpoint (20 attempts per minute per IP)
+# Prevents brute-force attacks against the machine-to-machine Basic Auth path.
+if HAS_LIMITER:
+    _ddei_view = app.view_functions.get("api.ddei_submit")
+    if _ddei_view:
+        limiter.limit("20/minute")(_ddei_view)
+
+# Exempt machine-to-machine endpoints from CSRF.
+# ALL endpoints in this list MUST use @api_key_required or @basic_auth_required
+# (never @login_required alone) — CSRF protection is replaced by API-key auth.
 csrf.exempt(bp_itai)  # SSO endpoint uses JWT
 
-# Exempt specific API-key-only views from CSRF after they're registered
+# API-key-only endpoints: firewall/SOAR/deceptor M2M integrations
 for endpoint in [
-    "add_indicator",
-    "remove_indicator",
-    "deceptor_block",
-    "deceptor_unblock",
-    "get_firewall_edl",
-    "get_saved_custom_edl",
-    "get_generic_edl",
+    "add_indicator",       # @api_key_required
+    "remove_indicator",    # @api_key_required
+    "deceptor_block",      # @api_key_required
+    "deceptor_unblock",    # @api_key_required
+    "get_firewall_edl",    # public (no auth required)
+    "get_saved_custom_edl",  # public (token-based)
+    "get_generic_edl",     # @api_key_required
 ]:
     view = app.view_functions.get(f"api.{endpoint}")
     if view:
@@ -194,8 +216,8 @@ def health_check():
         from .services.job_service import job_service
 
         health["aggregation_status"] = job_service.aggregation_status
-    except Exception:
-        pass
+    except Exception as _je:
+        logger.debug("Health check: job_service unavailable: %s", _je)
 
     return api_response(health)
 

@@ -8,6 +8,7 @@ from ..auth_manager import check_credentials, verify_totp
 from ..config_manager import read_config
 from ..db_manager import get_user_mfa_secret, is_mfa_enabled
 from ..response_helpers import api_error
+from ..utils import validate_permissions
 from . import bp_auth
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def api_key_required(f):
         request_key = _normalize_api_key(auth_header)
 
         if request_key:
-            logger.info(f"API Access Attempt | Key: {request_key[:6]}*** | IP: {client_ip}")
+            logger.info(f"API Access Attempt | Key: {request_key[:4]}*** | IP: {client_ip}")
         else:
             logger.warning(f"API Key Missing! IP: {client_ip} Path: {request.path}")
             return api_error("Unauthorized: Missing API Key", "AUTH_MISSING_KEY", 401)
@@ -102,7 +103,7 @@ def api_key_required(f):
             valid_client = {"name": "Global", "allowed_ips": []}
 
         if not valid_client:
-            logger.warning(f"Unauthorized Key from {client_ip}: {request_key[:10]}...")
+            logger.warning(f"Unauthorized Key from {client_ip}: {request_key[:4]}...")
             return api_error("Unauthorized: Invalid API Key", "AUTH_INVALID_KEY", 401)
 
         allowed_ips = valid_client.get("allowed_ips", [])
@@ -197,7 +198,7 @@ def login():
                 session.clear()
                 session["logged_in"] = True
                 session["username"] = username
-                session["permissions"] = info.get("permissions", {})
+                session["permissions"] = validate_permissions(info.get("permissions", {}))
                 session["profile_name"] = info.get("profile_name", "Local")
                 flash(message, "success")
                 return redirect(next_url or url_for("dashboard.index"))
@@ -224,7 +225,7 @@ def verify_2fa():
             session.clear()
             session["logged_in"] = True
             session["username"] = username
-            session["permissions"] = user_data["permissions"]
+            session["permissions"] = validate_permissions(user_data["permissions"])
             session["profile_name"] = user_data["profile_name"]
             return redirect(next_url or url_for("dashboard.index"))
         else:

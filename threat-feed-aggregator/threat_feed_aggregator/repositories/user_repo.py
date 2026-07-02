@@ -10,6 +10,7 @@ except ImportError:
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from ..database.connection import DB_TYPE, db_readonly, db_transaction
+from ..utils import validate_password_strength
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,9 @@ def get_all_users(conn=None):
 
 def add_local_user(username, password, profile_id=1, conn=None):
     """Adds a new local user."""
+    ok, msg = validate_password_strength(password)
+    if not ok:
+        return False, msg
     with db_transaction(conn) as db:
         try:
             hashed_password = generate_password_hash(password)
@@ -87,6 +91,9 @@ def add_local_user(username, password, profile_id=1, conn=None):
 
 def update_local_user_password(username, password, conn=None):
     """Updates password for an existing user."""
+    ok, msg = validate_password_strength(password)
+    if not ok:
+        return False, msg
     with db_transaction(conn) as db:
         try:
             hashed_password = generate_password_hash(password)
@@ -263,7 +270,7 @@ def get_user_permissions(username, conn=None):
 def get_ldap_group_mappings(conn=None):
     with db_readonly() as db:
         cursor = db.execute("""
-            SELECT m.id, m.group_dn, p.name as profile_name
+            SELECT m.id, m.group_dn, m.profile_id, p.name as profile_name
             FROM ldap_group_mappings m
             JOIN admin_profiles p ON m.profile_id = p.id
             ORDER BY m.id ASC
@@ -280,6 +287,19 @@ def add_ldap_group_mapping(group_dn, profile_id, conn=None):
             return True, "Mapping added."
         except (sqlite3.IntegrityError, PgIntegrityError):
             return False, "Group DN already mapped."
+        except Exception as e:
+            return False, str(e)
+
+
+def update_ldap_group_mapping(mapping_id, profile_id, conn=None):
+    with db_transaction(conn) as db:
+        try:
+            cursor = db.execute(
+                "UPDATE ldap_group_mappings SET profile_id = ? WHERE id = ?", (profile_id, mapping_id)
+            )
+            if cursor.rowcount > 0:
+                return True, "Mapping updated."
+            return False, "Mapping not found."
         except Exception as e:
             return False, str(e)
 

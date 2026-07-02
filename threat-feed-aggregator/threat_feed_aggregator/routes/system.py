@@ -1,10 +1,10 @@
 import re
 import threading
 
-from flask import flash, redirect, render_template, request, session, url_for
+from flask import flash, jsonify, redirect, render_template, request, session, url_for
 
 from ..aggregator import fetch_and_process_single_feed
-from ..auth_manager import permission_required
+from ..auth_manager import list_management_required, permission_required
 from ..cert_manager import process_pfx_upload, process_root_ca_upload
 from ..config_manager import read_config, write_config
 from ..db_manager import (
@@ -18,11 +18,13 @@ from ..db_manager import (
     delete_custom_list,
     delete_indicators,
     delete_ldap_group_mapping,
+    update_ldap_group_mapping,
     delete_local_user,
     delete_whitelisted_indicators,
     get_admin_profiles,
     get_all_users,
     get_api_blacklist_item_by_value,
+    get_api_blacklist_items,
     get_ldap_group_mappings,
     is_mfa_enabled,
     remove_api_blacklist_item,
@@ -33,6 +35,7 @@ from ..db_manager import (
     update_whitelist_item,
     verify_local_user,
 )
+from ..constants import MAX_IMPORT_FILE_BYTES
 from ..response_helpers import api_error, api_response
 from ..services.audit_service import log_action
 from . import bp_system
@@ -178,6 +181,25 @@ def add_ldap_mapping():
             flash(f"Error adding mapping: {message}", "danger")
     else:
         logger.warning("Missing group_dn or profile_id in form data.")
+        flash("Missing required fields.", "danger")
+
+    return redirect(url_for("system.index"))
+
+
+@bp_system.route("/ldap/mappings/update", methods=["POST"])
+@login_required
+@permission_required("system", "rw")
+def update_ldap_mapping():
+    mapping_id = request.form.get("mapping_id", type=int)
+    profile_id = request.form.get("profile_id", type=int)
+
+    if mapping_id and profile_id:
+        success, message = update_ldap_group_mapping(mapping_id, profile_id)
+        if success:
+            flash("Mapping updated successfully.", "success")
+        else:
+            flash(f"Error updating mapping: {message}", "danger")
+    else:
         flash("Missing required fields.", "danger")
 
     return redirect(url_for("system.index"))
@@ -334,16 +356,38 @@ def change_user_password():
     return redirect(url_for("system.index"))
 
 
+_ALLOWED_IMPORT_EXTENSIONS = {".txt", ".json", ".xml", ".csv"}
+_MAX_IMPORT_FILE_BYTES = MAX_IMPORT_FILE_BYTES
+
+
 def _parse_import_file(file):
     """
     Parses uploaded file (txt, json, xml) and returns unique items set.
     """
     import json
+    import os
 
     import defusedxml.ElementTree as ET
 
     filename = file.filename.lower()
-    content = file.read().decode("utf-8", errors="ignore")
+
+    # Validate extension
+    _, ext = os.path.splitext(filename)
+    if ext not in _ALLOWED_IMPORT_EXTENSIONS:
+        return None, f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(_ALLOWED_IMPORT_EXTENSIONS))}"
+
+    raw = file.read(_MAX_IMPORT_FILE_BYTES + 1)
+    if len(raw) > _MAX_IMPORT_FILE_BYTES:
+        return None, f"File exceeds maximum allowed size of {_MAX_IMPORT_FILE_BYTES // 1024 // 1024} MB"
+
+    try:
+        content = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            content = raw.decode("latin-1")
+        except UnicodeDecodeError:
+            return None, "File encoding is not supported. Use UTF-8 or Latin-1."
+
     items = set()
 
     try:
@@ -388,7 +432,7 @@ def _parse_import_file(file):
 
 @bp_system.route("/whitelist/import", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def import_whitelist():
     if "import_file" not in request.files:
         flash("No file part", "danger")
@@ -432,7 +476,7 @@ def import_whitelist():
 
 @bp_system.route("/blacklist/import", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def import_blacklist():
     if "import_file" not in request.files:
         flash("No file part", "danger")
@@ -1176,7 +1220,7 @@ def upload_root_ca():
 
 @bp_system.route("/whitelist/add", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def add_whitelist():
     # Note: In app.py this was /add_whitelist
     item = request.form.get("item")
@@ -1208,7 +1252,7 @@ def add_whitelist():
 
 @bp_system.route("/whitelist/remove/<int:item_id>", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def remove_whitelist(item_id):
     # Note: In app.py this was /remove_whitelist/<int:item_id>
     remove_whitelist_item(item_id)
@@ -1218,7 +1262,7 @@ def remove_whitelist(item_id):
 
 @bp_system.route("/whitelist/update", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def update_whitelist():
     item_id = request.form.get("id", type=int)
     item = request.form.get("item")
@@ -1241,7 +1285,7 @@ def update_whitelist():
 
 @bp_system.route("/blacklist/add", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def add_blacklist():
     item = request.form.get("item")
     comment = request.form.get("comment", "")
@@ -1274,7 +1318,7 @@ def add_blacklist():
 
 @bp_system.route("/blacklist/remove/<path:item_val>", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def remove_blacklist(item_val):
     remove_api_blacklist_item(item_val)
     # Trigger regeneration to remove the item immediately
@@ -1284,9 +1328,32 @@ def remove_blacklist(item_val):
     return redirect(url_for("dashboard.index"))
 
 
+@bp_system.route("/blacklist/clear_deceptor", methods=["POST"])
+@login_required
+@list_management_required
+def clear_deceptor_blocks():
+    from ..aggregator import regenerate_edl_files
+
+    all_items = get_api_blacklist_items()
+    deceptor_items = [i for i in all_items if "FortiDeceptor" in (i.get("comment") or "")]
+    count = 0
+    for item in deceptor_items:
+        if remove_api_blacklist_item(item["id"]):
+            count += 1
+    if count:
+        regenerate_edl_files()
+    log_action(
+        session.get("username", "system"),
+        "blacklist_clear_deceptor",
+        details=f"{count} FortiDeceptor records cleared",
+        ip_address=request.remote_addr,
+    )
+    return jsonify({"status": "success", "message": f"{count} records cleared"})
+
+
 @bp_system.route("/blacklist/update", methods=["POST"])
 @login_required
-@permission_required("system", "rw")
+@list_management_required
 def update_blacklist():
     item_id = request.form.get("id", type=int)
     item = request.form.get("item")

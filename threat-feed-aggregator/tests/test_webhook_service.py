@@ -20,8 +20,9 @@ def mock_config(monkeypatch):
 
 
 class TestNotify:
+    @patch("threat_feed_aggregator.services.webhook_service._validate_webhook_url", return_value=True)
     @patch("threat_feed_aggregator.services.webhook_service._send_webhook")
-    def test_sends_matching_event(self, mock_send, mock_config):
+    def test_sends_matching_event(self, mock_send, mock_validate, mock_config):
         from threat_feed_aggregator.services.webhook_service import notify
         import time
 
@@ -33,8 +34,9 @@ class TestNotify:
         calls = mock_send.call_args_list
         assert len(calls) == 2
 
+    @patch("threat_feed_aggregator.services.webhook_service._validate_webhook_url", return_value=True)
     @patch("threat_feed_aggregator.services.webhook_service._send_webhook")
-    def test_skips_non_matching_event(self, mock_send, mock_config):
+    def test_skips_non_matching_event(self, mock_send, mock_validate, mock_config):
         from threat_feed_aggregator.services.webhook_service import notify
         import time
 

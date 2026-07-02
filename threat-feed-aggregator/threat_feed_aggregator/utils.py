@@ -420,7 +420,36 @@ def get_proxy_settings():
 
 # --- Password Complexity ---
 
-_PASSWORD_MIN_LENGTH = 8
+_PASSWORD_MIN_LENGTH = 12  # NIST SP 800-63B recommends minimum 12 characters
+
+
+def clamp_int(value, min_val: int, max_val: int, default: int) -> int:
+    """Parse *value* as int and clamp to [min_val, max_val]. Returns *default* on parse error."""
+    try:
+        return max(min_val, min(int(value), max_val))
+    except (TypeError, ValueError):
+        return default
+
+
+# --- Permission Schema Validation ---
+
+_VALID_PERM_LEVELS = {"rw", "r", "none"}
+_VALID_PERM_KEYS = {"dashboard", "system", "tools", "analysis", "lists"}
+
+
+def validate_permissions(perms: dict) -> dict:
+    """Validate and sanitise a permissions dict.
+
+    Unknown keys are dropped; unknown levels fall back to 'none'.
+    Always returns a dict with exactly the expected permission keys.
+    """
+    if not isinstance(perms, dict):
+        return {k: "none" for k in _VALID_PERM_KEYS}
+    cleaned = {}
+    for key in _VALID_PERM_KEYS:
+        val = perms.get(key, "none")
+        cleaned[key] = val if val in _VALID_PERM_LEVELS else "none"
+    return cleaned
 
 
 def validate_password_strength(password):

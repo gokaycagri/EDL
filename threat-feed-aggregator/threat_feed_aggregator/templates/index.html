@@ -297,14 +297,14 @@
             <div class="card settings-card border-0 border-start border-4 border-success">
                 <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-shield-alt me-2 text-success"></i>Safe List</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-xs btn-outline-success" onclick="showImportWhitelistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
-                        <button class="btn btn-xs btn-outline-success" data-bs-toggle="modal" data-bs-target="#safeListModal">View All</button>
-                        <button class="btn btn-xs btn-success" onclick="showAddWhitelistModal()">Add</button>
+                    <div class="d-flex gap-1 flex-wrap align-items-center">
+                        <button class="btn btn-xs btn-outline-success" onclick="showImportWhitelistModal()" title="Import TXT/JSON/XML" style="min-width:28px"><i class="fas fa-file-import"></i></button>
+                        <button class="btn btn-xs btn-outline-success" data-bs-toggle="modal" data-bs-target="#safeListModal"><i class="fas fa-list fa-fw"></i><span class="d-none d-md-inline ms-1">View All</span></button>
+                        <button class="btn btn-xs btn-success" onclick="showAddWhitelistModal()"><i class="fas fa-plus fa-fw"></i><span class="d-none d-md-inline ms-1">Add</span></button>
                     </div>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 180px;"><table class="table table-sm mb-0 align-middle">
+                    <div class="table-responsive list-scroll-area" style="max-height: 180px;"><table class="table table-sm mb-0 align-middle">
                         <tbody class="small">{% if whitelist %}{% for item in whitelist[:5] %}<tr><td class="ps-3 py-2"><code class="text-success">{{ item.item }}</code></td><td class="text-end pe-3"><button class="btn btn-link btn-sm text-primary p-0 me-2" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button><form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-link btn-sm text-danger p-0"><i class="fas fa-times-circle"></i></button></form></td></tr>{% endfor %}{% else %}<tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-shield-alt empty-state-icon text-success"></i><div class="empty-state-text">No safe list entries yet</div><button class="btn btn-xs btn-outline-success empty-state-cta" onclick="showAddWhitelistModal()"><i class="fas fa-plus me-1"></i>Add First Entry</button></div></td></tr>{% endif %}</tbody>
                     </table></div>
                 </div>
@@ -313,14 +313,14 @@
             <div class="card settings-card border-0 border-start border-4 border-danger">
                 <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
                     <h6 class="fw-bold mb-0"><i class="fas fa-ban me-2 text-danger"></i>Block List</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-xs btn-outline-danger" onclick="showImportBlacklistModal()" title="Import TXT/JSON/XML"><i class="fas fa-file-import"></i></button>
-                        <button class="btn btn-xs btn-outline-danger" data-bs-toggle="modal" data-bs-target="#blockListModal">View All</button>
-                        <button class="btn btn-xs btn-danger" onclick="showAddBlacklistModal()">Add</button>
+                    <div class="d-flex gap-1 flex-wrap align-items-center">
+                        <button class="btn btn-xs btn-outline-danger" onclick="showImportBlacklistModal()" title="Import TXT/JSON/XML" style="min-width:28px"><i class="fas fa-file-import"></i></button>
+                        <button class="btn btn-xs btn-outline-danger" data-bs-toggle="modal" data-bs-target="#blockListModal"><i class="fas fa-list fa-fw"></i><span class="d-none d-md-inline ms-1">View All</span></button>
+                        <button class="btn btn-xs btn-danger" onclick="showAddBlacklistModal()"><i class="fas fa-plus fa-fw"></i><span class="d-none d-md-inline ms-1">Add</span></button>
                     </div>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 250px;"><table class="table table-sm mb-0 align-middle">
+                    <div class="table-responsive list-scroll-area" style="max-height: 250px;"><table class="table table-sm mb-0 align-middle">
                         <tbody class="small">
                             {% if blacklist %}
                                 {% for item in blacklist[:10] %}
@@ -350,6 +350,47 @@
                                 {% endfor %}
                             {% else %}
                                 <tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-ban empty-state-icon text-danger"></i><div class="empty-state-text">No blocked indicators</div><button class="btn btn-xs btn-outline-danger empty-state-cta" onclick="showAddBlacklistModal()"><i class="fas fa-plus me-1"></i>Block an Indicator</button></div></td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table></div>
+                    <div class="px-3 py-1 border-top" style="font-size:0.72em;">
+                        <i class="fas fa-robot text-warning me-1"></i>
+                        <span class="text-muted">FortiDeceptor blokları <a href="#" data-bs-toggle="modal" data-bs-target="#deceptorBlocksModal">Deceptor Blocks</a> bölümünde de yönetilebilir.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deceptor Blocks Card -->
+            <div class="card settings-card border-0 border-start border-4 border-warning">
+                <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0"><i class="fas fa-robot me-2 text-warning"></i>Deceptor Blocks</h6>
+                    <div class="d-flex gap-1 flex-wrap align-items-center">
+                        <button class="btn btn-xs btn-outline-warning" data-bs-toggle="modal" data-bs-target="#deceptorBlocksModal"><i class="fas fa-list fa-fw"></i><span class="d-none d-md-inline ms-1">View All</span></button>
+                        <button class="btn btn-xs btn-warning text-dark" onclick="clearAllDeceptorBlocks()"><i class="fas fa-trash-alt fa-fw"></i><span class="d-none d-md-inline ms-1">Clear All</span></button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive list-scroll-area" style="max-height: 180px;"><table class="table table-sm mb-0 align-middle">
+                        <tbody class="small">
+                            {% if deceptor_preview %}
+                                {% for item in deceptor_preview %}
+                                <tr>
+                                    <td class="ps-3 py-2">
+                                        <code class="text-warning fw-bold">{{ item.item }}</code>
+                                        {% if item.expires_at %}
+                                            <small class="text-info d-block" style="font-size:0.7em;"><i class="fas fa-clock me-1"></i>Expires: {{ item.expires_at|replace('T',' ')|truncate(19,True,'') }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-link btn-sm text-secondary p-0"><i class="fas fa-times-circle"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td class="text-center py-4"><div class="empty-state p-2"><i class="fas fa-robot empty-state-icon text-warning"></i><div class="empty-state-text">No Deceptor blocks</div></div></td></tr>
                             {% endif %}
                         </tbody>
                     </table></div>
@@ -390,31 +431,26 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
+                    <div class="px-3 pt-3 pb-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text border-success text-success" style="background:transparent;"><i class="fas fa-search"></i></span>
+                            <input type="text" id="safeListSearch" class="form-control border-success" placeholder="Search IP or domain…" oninput="renderSL(this.value,1)">
+                            <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('safeListSearch').value='';renderSL('',1)" title="Clear"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 align-middle">
                             <thead class="table-light"><tr class="small text-muted"><th class="ps-4">Item</th><th class="text-end pe-4">Action</th></tr></thead>
-                            <tbody class="small">
-                                {% if whitelist %}
-                                    {% for item in whitelist %}
-                                    <tr>
-                                        <td class="ps-4 py-2"><code class="text-success">{{ item.item }}</code><br><small class="text-muted">{{ item.description }}</small></td>
-                                        <td class="text-end pe-4">
-                                            <button class="btn btn-sm btn-outline-primary me-1" onclick="showEditSafeListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.description }}')"><i class="fas fa-pencil-alt"></i></button>
-                                            <form action="{{ url_for('system.remove_whitelist', item_id=item.id) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr><td colspan="2" class="text-center py-3 text-muted">Empty.</td></tr>
-                                {% endif %}
+                            <tbody id="safeListModalBody" class="small">
+                                <tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer border-0"><button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button></div>
+                <div class="modal-footer border-0 d-flex justify-content-between align-items-center">
+                    <div id="safeListPager" class="small text-muted"></div>
+                    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -428,44 +464,62 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
+                    <div class="px-3 pt-3 pb-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text border-danger text-danger" style="background:transparent;"><i class="fas fa-search"></i></span>
+                            <input type="text" id="blockListSearch" class="form-control border-danger" placeholder="Search IP or domain…" oninput="renderBL(this.value,1)">
+                            <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('blockListSearch').value='';renderBL('',1)" title="Clear"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0 align-middle">
                             <thead class="table-light"><tr class="small text-muted"><th class="ps-4">Item</th><th class="text-end pe-4">Action</th></tr></thead>
-                            <tbody class="small">
-                                {% if blacklist %}
-                                    {% for item in blacklist %}
-                                    <tr>
-                                        <td class="ps-4 py-2">
-                                            <div class="d-flex align-items-center mb-1">
-                                                <code class="text-danger fw-bold me-2">{{ item.item }}</code>
-                                                {% if "FortiDeceptor" in item.comment %}
-                                                    <span class="badge bg-soft-danger border border-danger text-xs px-1 py-0"><i class="fas fa-robot me-1"></i>FortiDeceptor</span>
-                                                {% endif %}
-                                            </div>
-                                            <div class="d-flex flex-column">
-                                                <small class="text-muted">{{ item.comment }}</small>
-                                                {% if item.expires_at %}
-                                                    <small class="text-info" style="font-size: 0.75em;"><i class="fas fa-clock me-1"></i>Expires: {{ item.expires_at|replace('T', ' ')|truncate(19, True, '') }}</small>
-                                                {% endif %}
-                                            </div>
-                                        </td>
-                                        <td class="text-end pe-4">
-                                            <button class="btn btn-sm btn-outline-primary me-1" onclick="showEditBlockListModal({{ item.id }}, '{{ item.item }}', '{{ item.type }}', '{{ item.comment }}')"><i class="fas fa-pencil-alt"></i></button>
-                                            <form action="{{ url_for('system.remove_blacklist', item_val=item.item) }}" method="POST" class="d-inline" onsubmit="return swalConfirmSubmit(this, 'Remove?')">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-trash"></i></button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                {% else %}
-                                    <tr><td colspan="2" class="text-center py-3 text-muted">Empty.</td></tr>
-                                {% endif %}
+                            <tbody id="blockListModalBody" class="small">
+                                <tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer border-0"><button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button></div>
+                <div class="modal-footer border-0 d-flex justify-content-between align-items-center">
+                    <div id="blockListPager" class="small text-muted"></div>
+                    <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deceptor Blocks Modal -->
+    <div class="modal fade" id="deceptorBlocksModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content border-0" style="border-radius: 1rem;">
+                <div class="modal-header border-0 py-3">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-robot me-2 text-warning"></i>Deceptor Blocks</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="px-3 pt-3 pb-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text border-warning text-warning" style="background:transparent;"><i class="fas fa-search"></i></span>
+                            <input type="text" id="deceptorSearch" class="form-control border-warning" placeholder="Search IP or domain…" oninput="renderDC(this.value,1)">
+                            <button class="btn btn-outline-secondary" type="button" onclick="document.getElementById('deceptorSearch').value='';renderDC('',1)" title="Clear"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light"><tr class="small text-muted"><th class="ps-4">IP / Indicator</th><th class="text-end pe-4">Action</th></tr></thead>
+                            <tbody id="deceptorModalBody" class="small">
+                                <tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 d-flex justify-content-between align-items-center">
+                    <div id="deceptorPager" class="small text-muted d-flex align-items-center gap-2"></div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-danger btn-sm" onclick="clearAllDeceptorBlocks()"><i class="fas fa-trash-alt me-1"></i>Clear All</button>
+                        <button type="button" class="btn btn-secondary btn-sm px-4" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -575,17 +629,37 @@
     <div class="row g-3 mb-3">
         <!-- Map: Full-width without card wrapper -->
         <div class="col-12">
-            <div class="card-header py-2 border-0 d-flex justify-content-between align-items-center" style="background: var(--surface-1); border-radius: var(--card-radius) var(--card-radius) 0 0; border: 1px solid var(--border-color); border-bottom: none;">
-                <h6 class="fw-bold mb-0"><i class="fas fa-globe-americas me-2 text-primary"></i>Global Threat Distribution</h6>
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center px-3 py-2" style="background: var(--surface-1); border-radius: var(--card-radius) var(--card-radius) 0 0; border: 1px solid var(--border-color); border-bottom: none;">
+                <h6 class="fw-bold mb-0"><i class="fas fa-globe-americas me-2" style="color:#ef4444;"></i>Global Threat Distribution</h6>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; font-size:0.7rem; letter-spacing:0.03em;">
+                        <i class="fas fa-map-marker-alt me-1"></i><span id="mapTotalCount">{{ country_stats|sum(attribute='count') }}</span> indicators
+                    </span>
+                    <span class="badge" style="background:rgba(239,68,68,0.08); color:#f97316; font-size:0.7rem;">
+                        <i class="fas fa-flag me-1"></i><span id="mapCountryCount">{{ country_stats|length }}</span> countries
+                    </span>
+                </div>
             </div>
-            <div class="row g-0" style="border: 1px solid var(--border-color); border-radius: 0 0 var(--card-radius) var(--card-radius); overflow: hidden;">
+            <!-- Map + Side Panel -->
+            <div class="row g-0" style="border: 1px solid var(--border-color); border-bottom: none; overflow: hidden;">
                 <div class="col-lg-9 col-md-8">
                     <div id="world-map" style="height: 380px; width: 100%;"></div>
                 </div>
-                <div class="col-lg-3 col-md-4" style="background: var(--surface-1); border-left: 1px solid var(--border-color); padding: 0.75rem;">
-                    <table class="table table-sm border-0"><thead class="border-0"><tr class="small text-muted border-0"><th class="border-0">Country</th><th class="text-end border-0">Count</th></tr></thead>
-                    <tbody id="countryStatsTableBody">{% for country in country_stats %}<tr><td class="small py-2">{{ country.country_code }}</td><td class="text-end small py-2 fw-bold text-primary">{{ country.count }}</td></tr>{% endfor %}</tbody></table>
+                <!-- Country Panel -->
+                <div class="col-lg-3 col-md-4 d-flex flex-column" style="background: var(--surface-1); border-left: 1px solid var(--border-color);">
+                    <div class="px-3 py-2" style="border-bottom: 1px solid var(--border-color);">
+                        <span class="text-uppercase fw-bold" style="font-size:0.65rem; letter-spacing:0.08em; color:var(--text-muted);">Top Threat Origins</span>
+                    </div>
+                    <div id="countryStatsPanel" style="overflow-y: auto; flex: 1; max-height: 344px;"></div>
                 </div>
+            </div>
+            <!-- Legend Footer -->
+            <div class="d-flex align-items-center gap-2 px-3 py-2" style="background: var(--surface-2, var(--surface-1)); border: 1px solid var(--border-color); border-radius: 0 0 var(--card-radius) var(--card-radius);">
+                <span style="font-size:0.68rem; color:var(--text-muted); white-space:nowrap;">Threat Intensity</span>
+                <div style="flex:1; height:5px; background: linear-gradient(90deg, #1e3a5f 0%, #7c2d12 50%, #dc2626 80%, #ef4444 100%); border-radius:3px; max-width:180px;"></div>
+                <span style="font-size:0.65rem; color:var(--text-muted); white-space:nowrap;">Low → Critical</span>
+                <span class="ms-auto" style="font-size:0.65rem; color:var(--text-muted);"><i class="fas fa-mouse-pointer me-1"></i>Ctrl + Scroll to zoom</span>
             </div>
         </div>
 
@@ -645,6 +719,251 @@
                     .catch(() => { span.textContent = '?'; });
             });
         });
+
+        // Safe List / Block List / Deceptor Blocks modal AJAX + Search
+        (function () {
+            const CSRF = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const PER = 50;
+
+            // Per-list item caches (populated on first modal open; cleared on re-open)
+            let _slAll = [], _blAll = [], _dcAll = [];
+
+            function esc(s) {
+                return String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+            function jsStr(s) {
+                return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            }
+            function searchVal(id) {
+                return (document.getElementById(id)?.value || '').trim().toLowerCase();
+            }
+            function paginate(all, term, page) {
+                const q = term.toLowerCase();
+                const filtered = q ? all.filter(i =>
+                    (i.item || '').toLowerCase().includes(q) ||
+                    (i.description || '').toLowerCase().includes(q) ||
+                    (i.comment || '').toLowerCase().includes(q)
+                ) : all;
+                const total = filtered.length;
+                const start = (page - 1) * PER;
+                return { items: filtered.slice(start, start + PER), total, start, pages: Math.ceil(total / PER) };
+            }
+            function pagerHtml(total, start, pages, page, prevFn, nextFn) {
+                if (pages > 1) {
+                    return `<span>${start+1}–${Math.min(start+PER,total)} / ${total}</span>
+                        <div class="btn-group btn-group-sm ms-2">
+                          <button class="btn btn-outline-secondary" ${page<=1?'disabled':''} onclick="${prevFn}"><i class="fas fa-chevron-left"></i></button>
+                          <button class="btn btn-outline-secondary" ${page>=pages?'disabled':''} onclick="${nextFn}"><i class="fas fa-chevron-right"></i></button>
+                        </div>`;
+                }
+                return `<span>${total} item${total!==1?'s':''}</span>`;
+            }
+
+            /* ── Safe List ─────────────────────────────────── */
+            function buildSLRow(item) {
+                return `<tr>
+                  <td class="ps-4 py-2"><code class="text-success">${esc(item.item)}</code><br>
+                    <small class="text-muted">${esc(item.description)}</small></td>
+                  <td class="text-end pe-4">
+                    <button class="btn btn-sm btn-outline-primary me-1"
+                      onclick="showEditSafeListModal(${item.id},'${jsStr(item.item)}','${jsStr(item.type)}','${jsStr(item.description)}')">
+                      <i class="fas fa-pencil-alt"></i></button>
+                    <form action="/system/whitelist/remove/${item.id}" method="POST" class="d-inline"
+                      onsubmit="return swalConfirmSubmit(this,'Remove?')">
+                      <input type="hidden" name="csrf_token" value="${CSRF}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    </form>
+                  </td></tr>`;
+            }
+
+            function renderSL(term, page) {
+                const tbody = document.getElementById('safeListModalBody');
+                const pager = document.getElementById('safeListPager');
+                if (!tbody) return;
+                const { items, total, start, pages } = paginate(_slAll, term, page);
+                const q = term.trim();
+                tbody.innerHTML = items.length
+                    ? items.map(buildSLRow).join('')
+                    : `<tr><td colspan="2" class="text-center py-3 text-muted">${q ? `No results for "<strong>${esc(q)}</strong>".` : 'Empty.'}</td></tr>`;
+                if (pager) pager.innerHTML = pagerHtml(total, start, pages, page,
+                    `renderSL(searchVal('safeListSearch'),${page-1})`,
+                    `renderSL(searchVal('safeListSearch'),${page+1})`);
+            }
+            window.renderSL = renderSL;
+
+            function loadSafeList() {
+                const tbody = document.getElementById('safeListModalBody');
+                if (!tbody) return;
+                _slAll = [];
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>';
+                fetch(`/api/whitelist?page=1&per_page=5000`)
+                    .then(r => r.json())
+                    .then(resp => { _slAll = resp.data.items || []; renderSL(searchVal('safeListSearch'), 1); })
+                    .catch(() => {
+                        tbody.innerHTML = '<tr><td colspan="2" class="text-center py-3 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Failed to load.</td></tr>';
+                    });
+            }
+            window.loadSafeList = loadSafeList;
+
+            /* ── Block List ─────────────────────────────────── */
+            function buildBLRow(item) {
+                const exp = item.expires_at
+                    ? `<small class="text-info" style="font-size:.75em;"><i class="fas fa-clock me-1"></i>Expires: ${esc(item.expires_at.replace('T',' ').substring(0,19))}</small>`
+                    : '';
+                return `<tr>
+                  <td class="ps-4 py-2">
+                    <div class="d-flex align-items-center mb-1">
+                      <code class="text-danger fw-bold me-2">${esc(item.item)}</code>
+                    </div>
+                    <div class="d-flex flex-column">
+                      <small class="text-muted">${esc(item.comment)}</small>${exp}
+                    </div>
+                  </td>
+                  <td class="text-end pe-4">
+                    <button class="btn btn-sm btn-outline-primary me-1"
+                      onclick="showEditBlockListModal(${item.id},'${jsStr(item.item)}','${jsStr(item.type)}','${jsStr(item.comment)}')">
+                      <i class="fas fa-pencil-alt"></i></button>
+                    <form action="/system/blacklist/remove/${encodeURIComponent(item.item)}" method="POST" class="d-inline"
+                      onsubmit="return swalConfirmSubmit(this,'Remove?')">
+                      <input type="hidden" name="csrf_token" value="${CSRF}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-trash"></i></button>
+                    </form>
+                  </td></tr>`;
+            }
+
+            function renderBL(term, page) {
+                const tbody = document.getElementById('blockListModalBody');
+                const pager = document.getElementById('blockListPager');
+                if (!tbody) return;
+                const { items, total, start, pages } = paginate(_blAll, term, page);
+                const q = term.trim();
+                tbody.innerHTML = items.length
+                    ? items.map(buildBLRow).join('')
+                    : `<tr><td colspan="2" class="text-center py-3 text-muted">${q ? `No results for "<strong>${esc(q)}</strong>".` : 'Empty.'}</td></tr>`;
+                if (pager) pager.innerHTML = pagerHtml(total, start, pages, page,
+                    `renderBL(searchVal('blockListSearch'),${page-1})`,
+                    `renderBL(searchVal('blockListSearch'),${page+1})`);
+            }
+            window.renderBL = renderBL;
+
+            function loadBlockList() {
+                const tbody = document.getElementById('blockListModalBody');
+                if (!tbody) return;
+                _blAll = [];
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>';
+                fetch(`/api/blacklist?page=1&per_page=5000&exclude_deceptor=true`)
+                    .then(r => r.json())
+                    .then(resp => {
+                        _blAll = resp.data.items || [];
+                        renderBL(searchVal('blockListSearch'), 1);
+                    })
+                    .catch(() => {
+                        tbody.innerHTML = '<tr><td colspan="2" class="text-center py-3 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Failed to load.</td></tr>';
+                    });
+            }
+            window.loadBlockList = loadBlockList;
+
+            /* ── Deceptor Blocks ──────────────────────────────────── */
+            function buildDCRow(item) {
+                const exp = item.expires_at
+                    ? `<small class="text-info d-block" style="font-size:.75em;"><i class="fas fa-clock me-1"></i>Expires: ${esc(item.expires_at.replace('T',' ').substring(0,19))}</small>`
+                    : '';
+                return `<tr>
+                  <td class="ps-4 py-2">
+                    <code class="text-warning fw-bold">${esc(item.item)}</code>
+                    <small class="text-muted d-block">${esc(item.comment)}</small>${exp}
+                  </td>
+                  <td class="text-end pe-4">
+                    <form action="/system/blacklist/remove/${encodeURIComponent(item.item)}" method="POST" class="d-inline"
+                      onsubmit="return swalConfirmSubmit(this,'Remove?')">
+                      <input type="hidden" name="csrf_token" value="${CSRF}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="fas fa-trash"></i></button>
+                    </form>
+                  </td></tr>`;
+            }
+
+            function renderDC(term, page) {
+                const tbody = document.getElementById('deceptorModalBody');
+                const pager = document.getElementById('deceptorPager');
+                if (!tbody) return;
+                const { items, total, start, pages } = paginate(_dcAll, term, page);
+                const q = term.trim();
+                tbody.innerHTML = items.length
+                    ? items.map(buildDCRow).join('')
+                    : `<tr><td colspan="2" class="text-center py-3 text-muted">${q ? `No results for "<strong>${esc(q)}</strong>".` : 'No Deceptor blocks found.'}</td></tr>`;
+                if (pager) pager.innerHTML = pagerHtml(total, start, pages, page,
+                    `renderDC(searchVal('deceptorSearch'),${page-1})`,
+                    `renderDC(searchVal('deceptorSearch'),${page+1})`);
+            }
+            window.renderDC = renderDC;
+
+            function loadDeceptorList() {
+                const tbody = document.getElementById('deceptorModalBody');
+                if (!tbody) return;
+                _dcAll = [];
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</td></tr>';
+                fetch(`/api/blacklist?page=1&per_page=5000&only_deceptor=true`)
+                    .then(r => r.json())
+                    .then(resp => {
+                        _dcAll = resp.data.items || [];
+                        renderDC(searchVal('deceptorSearch'), 1);
+                    })
+                    .catch(() => {
+                        tbody.innerHTML = '<tr><td colspan="2" class="text-center py-3 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Failed to load.</td></tr>';
+                    });
+            }
+            window.loadDeceptorList = loadDeceptorList;
+
+            function clearAllDeceptorBlocks() {
+                Swal.fire({
+                    title: 'Clear All Deceptor Blocks?',
+                    text: 'All FortiDeceptor-sourced blocked IPs will be removed.',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#dc3545',
+                    confirmButtonText: 'Yes, clear all'
+                }).then(result => {
+                    if (!result.isConfirmed) return;
+                    fetch('/system/blacklist/clear_deceptor', {
+                        method: 'POST',
+                        headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'}
+                    })
+                    .then(r => r.json())
+                    .then(resp => {
+                        if (resp.status === 'success') {
+                            Swal.fire('Cleared!', resp.message, 'success').then(() => location.reload());
+                        } else {
+                            Swal.fire('Error', resp.message || 'Failed.', 'error');
+                        }
+                    })
+                    .catch(() => Swal.fire('Error', 'Request failed.', 'error'));
+                });
+            }
+            window.clearAllDeceptorBlocks = clearAllDeceptorBlocks;
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const sl = document.getElementById('safeListModal');
+                if (sl) sl.addEventListener('show.bs.modal', () => {
+                    const inp = document.getElementById('safeListSearch');
+                    if (inp) inp.value = '';
+                    loadSafeList();
+                });
+                const bl = document.getElementById('blockListModal');
+                if (bl) bl.addEventListener('show.bs.modal', () => {
+                    const inp = document.getElementById('blockListSearch');
+                    if (inp) inp.value = '';
+                    loadBlockList();
+                });
+                const dc = document.getElementById('deceptorBlocksModal');
+                if (dc) dc.addEventListener('show.bs.modal', () => {
+                    const inp = document.getElementById('deceptorSearch');
+                    if (inp) inp.value = '';
+                    loadDeceptorList();
+                });
+            });
+        })();
     </script>
     <script src="{{ url_for('static', filename='js/dashboard.js', v=2) }}"></script>
 {% endblock %}

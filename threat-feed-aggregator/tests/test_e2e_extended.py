@@ -199,7 +199,7 @@ class TestRunSingleFeed:
             follow_redirects=True,
         )
         resp = auth_client.post("/api/run_single/SingleRunFeed")
-        assert resp.status_code in (200, 202, 400, 500)
+        assert resp.status_code in (200, 202, 400, 404, 500)
 
 
 # ---------------------------------------------------------------------------

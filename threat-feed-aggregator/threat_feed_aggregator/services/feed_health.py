@@ -7,6 +7,7 @@ import logging
 import threading
 
 from ..config_manager import read_config, write_config
+from .audit_service import log_action
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def record_failure(source_name, error_message):
                 f"Feed '{source_name}' auto-disabled after {MAX_CONSECUTIVE_FAILURES} consecutive failures. "
                 f"Last error: {error_message}"
             )
+            log_action("system", "feed_auto_disabled", target=source_name, ip_address="scheduler")
 
         write_config(config)
         return entry["consecutive_failures"] >= MAX_CONSECUTIVE_FAILURES

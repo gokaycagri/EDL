@@ -39,7 +39,7 @@ class TestUserAdd:
     @patch("threat_feed_aggregator.services.audit_service.log_action")
     def test_valid_user_created(self, mock_audit, mock_add, auth_client):
         resp = auth_client.post("/system/users/add", data={
-            "username": "newadmin", "password": "SecureP@ss1", "profile_id": 1,
+            "username": "newadmin", "password": "SecureP@ssword1!", "profile_id": 1,
         }, follow_redirects=True)
         assert mock_add.called
         assert b"added successfully" in resp.data

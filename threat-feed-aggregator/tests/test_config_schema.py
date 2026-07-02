@@ -1,5 +1,14 @@
 """Tests for Pydantic config validation."""
 import pytest
+
+try:
+    import pydantic as _pydantic
+    _ver = getattr(_pydantic, "VERSION", None)
+    if not isinstance(_ver, str):
+        pytest.skip("pydantic not installed (mocked)", allow_module_level=True)
+except ImportError:
+    pytest.skip("pydantic not installed", allow_module_level=True)
+
 from threat_feed_aggregator.config.schema import validate_config, AppConfig, SourceConfig
 
 

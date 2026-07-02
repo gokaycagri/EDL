@@ -37,12 +37,18 @@ def init_pg_pool():
     if DB_TYPE == "postgres" and not pg_pool:
         with pg_pool_lock:
             if not pg_pool:  # Double check inside lock
+                _db_pass = os.getenv("DB_PASS", "")
+                if not _db_pass:
+                    logger.warning(
+                        "DB_PASS is empty — PostgreSQL connection will be attempted without a password. "
+                        "Set DB_PASS environment variable for production deployments."
+                    )
                 try:
                     pg_pool = psycopg2.pool.ThreadedConnectionPool(
                         minconn=1,
                         maxconn=20,
                         user=os.getenv("DB_USER", "threat_user"),
-                        password=os.getenv("DB_PASS", ""),
+                        password=_db_pass,
                         host=os.getenv("DB_HOST", "postgres"),
                         port=os.getenv("DB_PORT", "5432"),
                         database=os.getenv("DB_NAME", "threat_feed"),
