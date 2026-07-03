@@ -184,7 +184,7 @@ def handle_csrf_error(e):
     from flask import flash, redirect, request, url_for
 
     logger.warning("CSRF validation failed for %s %s from %s: %s", request.method, request.path, request.remote_addr, e.description)
-    flash("Oturumunuz sona erdi veya geçersiz bir istek algılandı. Lütfen tekrar deneyin.", "warning")
+    flash("Your session has expired or an invalid request was detected. Please try again.", "warning")
     return redirect(url_for("auth.login"))
 
 

@@ -578,7 +578,7 @@ def add_source():
                     f'Error: The URL "{url}" is already configured for source "{existing_source.get("name")}".',
                     "danger",
                 )
-                return redirect(url_for("dashboard.index"))
+                return redirect(url_for("system.index") + "#sources")
 
         new_source = {"name": name, "url": url, "format": data_format, "confidence": confidence}
         if key_or_column:
@@ -606,7 +606,7 @@ def add_source():
                     new_source["api_headers"] = _json.loads(api_headers_raw)
                 except Exception:
                     flash("API Headers must be valid JSON (e.g. {\"Authorization\": \"Bearer TOKEN\"})", "danger")
-                    return redirect(url_for("dashboard.index"))
+                    return redirect(url_for("system.index") + "#sources")
 
         config["source_urls"].append(new_source)
         write_config(config)
@@ -621,7 +621,7 @@ def add_source():
             ip_address=request.remote_addr,
         )
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#sources")
 
 
 @bp_system.route("/update_source/<int:index>", methods=["POST"])
@@ -689,7 +689,7 @@ def update_source(index):
                         updated_source["api_headers"] = _json.loads(api_headers_raw)
                     except Exception:
                         flash("API Headers must be valid JSON (e.g. {\"Authorization\": \"Bearer TOKEN\"})", "danger")
-                        return redirect(url_for("dashboard.index"))
+                        return redirect(url_for("system.index") + "#sources")
 
             config["source_urls"][index] = updated_source
             write_config(config)
@@ -707,7 +707,7 @@ def update_source(index):
             thread = threading.Thread(target=fetch_and_process_single_feed, args=(updated_source,))
             thread.start()
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#sources")
 
 
 @bp_system.route("/remove_source/<int:index>", methods=["POST"])
@@ -726,7 +726,7 @@ def remove_source(index):
         update_scheduled_jobs()
         log_action(session.get("username", "system"), "source_delete", target=removed_name, ip_address=request.remote_addr)
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#sources")
 
 
 @bp_system.route("/update_settings", methods=["POST"])

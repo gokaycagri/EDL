@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Version-2.4.6-6366f1?style=for-the-badge&logoColor=white" alt="Version">
+<img src="https://img.shields.io/badge/Version-2.4.7-6366f1?style=for-the-badge&logoColor=white" alt="Version">
 <img src="https://img.shields.io/badge/Python-3.13+-3b82f6?style=for-the-badge&logo=python&logoColor=white" alt="Python">
 <img src="https://img.shields.io/badge/Flask-3.1-22c55e?style=for-the-badge&logo=flask&logoColor=white" alt="Flask">
 <img src="https://img.shields.io/badge/Docker-Ready-0ea5e9?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -315,6 +315,24 @@ helm install threat-feed ./helm/ \
 ---
 
 ## 📝 Changelog
+
+### [v2.4.7] — 2026-07-03
+
+#### 🎨 Login Page Redesign
+- **Complete `login.html` overhaul** (+507 lines): Modern, professional design with animated background, glassmorphism card, and smooth transitions
+- **Conditional LDAP section**: Login page dynamically shows/hides the LDAP login button based on server-side configuration — no client-side guessing
+- **LDAP config backward compatibility**: Auth module now reads `ldap_enabled` from both `auth.ldap_enabled` and the legacy `ldap.enabled` key, ensuring smooth upgrades
+
+#### 🧭 UX — Source Management Navigation
+- **Anchor-based redirects**: Add/update/remove source actions now redirect to `system.index#sources` instead of the page top — user stays on the Sources section after every operation
+
+#### 🔒 Security
+- **Improved CSRF error message**: Users now see *"Your session has expired or an invalid request was detected. Please try again."* instead of a generic error — clearer, actionable feedback
+
+#### 🔧 Internal
+- Version bumped to **2.4.7**
+
+---
 
 ### [v2.4.6] — 2026-07-02
 

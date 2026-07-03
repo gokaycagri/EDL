@@ -215,7 +215,13 @@ def login():
                     ip_address=request.remote_addr,
                 )
                 flash(message, "danger")
-    return render_template("login.html")
+    config = read_config()
+    auth_config = config.get("auth", {})
+    ldap_config = config.get("ldap", {})
+    ldap_enabled = auth_config.get("ldap_enabled")
+    if ldap_enabled is None:
+        ldap_enabled = ldap_config.get("enabled", False)
+    return render_template("login.html", ldap_enabled=ldap_enabled)
 
 
 @bp_auth.route("/login/verify-2fa", methods=["GET", "POST"])
