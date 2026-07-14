@@ -1344,10 +1344,12 @@ def add_blacklist():
 
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', "danger")
-            return redirect(url_for("dashboard.index"))
+            return redirect(url_for("system.index") + "#blocklist")
 
         if inferred_type and inferred_type != "unknown":
-            item_type = inferred_type
+            # validate_indicator returns "ip/cidr" for both single IPs and CIDRs;
+            # normalise to "ip" so edl_generator type checks work correctly.
+            item_type = "ip" if inferred_type == "ip/cidr" else inferred_type
 
         success, message = add_api_blacklist_item(item, item_type=item_type, comment=comment)
         if not success:
@@ -1359,7 +1361,7 @@ def add_blacklist():
 
             regenerate_edl_files()
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#blocklist")
 
 
 @bp_system.route("/blacklist/remove/<path:item_val>", methods=["POST"])
@@ -1371,7 +1373,7 @@ def remove_blacklist(item_val):
     from ..aggregator import regenerate_edl_files
 
     regenerate_edl_files()
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#blocklist")
 
 
 @bp_system.route("/blacklist/clear_deceptor", methods=["POST"])
@@ -1418,7 +1420,7 @@ def update_blacklist():
     else:
         flash("Invalid data for update.", "danger")
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(url_for("system.index") + "#blocklist")
 
 
 @bp_system.route("/indicators/bulk_delete", methods=["POST"])

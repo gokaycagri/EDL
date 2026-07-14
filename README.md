@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Version-2.4.7-6366f1?style=for-the-badge&logoColor=white" alt="Version">
+<img src="https://img.shields.io/badge/Version-2.4.9-6366f1?style=for-the-badge&logoColor=white" alt="Version">
 <img src="https://img.shields.io/badge/Python-3.13+-3b82f6?style=for-the-badge&logo=python&logoColor=white" alt="Python">
 <img src="https://img.shields.io/badge/Flask-3.1-22c55e?style=for-the-badge&logo=flask&logoColor=white" alt="Flask">
 <img src="https://img.shields.io/badge/Docker-Ready-0ea5e9?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -315,6 +315,21 @@ helm install threat-feed ./helm/ \
 ---
 
 ## 📝 Changelog
+
+### [v2.4.9] — 2026-07-14
+
+#### ⚡ Concurrency & EDL Generation Fixes
+- **Concurrent Regeneration Safety**: Added a `_REGEN_PENDING` flag to `edl_generator.py`. If a regeneration request (e.g. adding a blacklist item) arrives while an EDL generation is already running, a follow-up regeneration is automatically queued. This prevents race conditions where DB changes made during regeneration were omitted from the final EDL.
+- **Global EDL Deduplication**: Implemented in-memory deduplication (`seen_ip`, `seen_domain`, `seen_url`) during EDL generation to ensure that indicators existing in both feed sources and the manual API blacklist are only written once.
+- **Blacklist Type Normalization**: Fixed a bug where `ip/cidr` types from manual blacklist entries were not correctly matched in the generator. They are now mapped to `ip` and correctly appear in the output.
+
+#### 🧭 UX Improvements
+- **Blocklist Anchor Redirects**: Adding, updating, or removing blacklist/whitelist items now correctly redirects the user to `system.index#blocklist` instead of the generic dashboard. User context is preserved.
+
+#### 🔧 Internal
+- Version bumped from 2.4.7 to **2.4.9**.
+
+---
 
 ### [v2.4.7] — 2026-07-03
 

@@ -20,16 +20,28 @@ from .utils import is_rfc1918_private_ipv4_indicator
 logger = logging.getLogger(__name__)
 
 _REGEN_LOCK = threading.Lock()
+# Set when regenerate_edl_files() is called while a run is already in progress.
+# The running task checks this flag in its finally block and starts a follow-up run,
+# ensuring that block list changes made during a concurrent regeneration are never lost.
+_REGEN_PENDING = threading.Event()
 
 
 def regenerate_edl_files():
     """
     Regenerates EDL files using streaming. Writes to temp files first
     to prevent serving empty EDLs on error. Only one instance at a time per worker.
+
+    If called while a regeneration is already running, sets _REGEN_PENDING so that
+    the running task will start a follow-up regeneration when it finishes — guaranteeing
+    that any DB changes (e.g. new block list entries) committed between the two calls
+    are included in the final output.
     """
     if not _REGEN_LOCK.acquire(blocking=False):
-        logger.info("EDL regeneration already in progress, skipping call.")
-        return False, "Regeneration already in progress."
+        _REGEN_PENDING.set()
+        logger.info("EDL regeneration already in progress — follow-up queued.")
+        return False, "Regeneration queued."
+
+    _REGEN_PENDING.clear()  # this run will capture the current DB state
 
     # Unique run ID avoids cross-worker .tmp file collisions
     run_id = uuid.uuid4().hex[:8]
@@ -61,6 +73,11 @@ def regenerate_edl_files():
                 count_domain = 0
                 count_url = 0
 
+                # Track written values to deduplicate across feed indicators and block list
+                seen_ip: set[str] = set()
+                seen_domain: set[str] = set()
+                seen_url: set[str] = set()
+
                 for row in get_all_indicators_iter():
                     ind = row["indicator"]
                     itype = row["type"]
@@ -70,36 +87,50 @@ def regenerate_edl_files():
                         continue
 
                     if itype in ("ip", "cidr"):
-                        pa_ip.write(f"{ind}\n")
-                        fn_ip.write(f"{ind}\n")
-                        count_ip += 1
+                        if ind not in seen_ip:
+                            seen_ip.add(ind)
+                            pa_ip.write(f"{ind}\n")
+                            fn_ip.write(f"{ind}\n")
+                            count_ip += 1
                     elif itype == "domain":
-                        pa_dom.write(f"{ind}\n")
-                        fn_dom.write(f"{ind}\n")
-                        count_domain += 1
+                        if ind not in seen_domain:
+                            seen_domain.add(ind)
+                            pa_dom.write(f"{ind}\n")
+                            fn_dom.write(f"{ind}\n")
+                            count_domain += 1
                     elif itype == "url":
-                        url_l.write(f"{ind}\n")
-                        count_url += 1
+                        if ind not in seen_url:
+                            seen_url.add(ind)
+                            url_l.write(f"{ind}\n")
+                            count_url += 1
 
                     count += 1
 
                 # API Blacklist items (manual blocks, FortiDeceptor)
+                # Deduplicated against feed indicators via the seen_* sets above.
                 for item in get_api_blacklist_items():
                     ind = item["item"]
                     itype = item["type"]
+                    # validate_indicator() returns "ip/cidr" for individual IPs/CIDRs;
+                    # normalise here so manually-added entries reach the EDL files.
+                    is_ip_type = itype in ("ip", "cidr", "ip/cidr")
 
-                    if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
+                    if is_ip_type and is_rfc1918_private_ipv4_indicator(ind, itype):
                         skipped_private += 1
                         continue
 
-                    if itype in ("ip", "cidr"):
-                        pa_ip.write(f"{ind}\n")
-                        fn_ip.write(f"{ind}\n")
-                        count_ip += 1
+                    if is_ip_type:
+                        if ind not in seen_ip:
+                            seen_ip.add(ind)
+                            pa_ip.write(f"{ind}\n")
+                            fn_ip.write(f"{ind}\n")
+                            count_ip += 1
                     elif itype == "domain":
-                        pa_dom.write(f"{ind}\n")
-                        fn_dom.write(f"{ind}\n")
-                        count_domain += 1
+                        if ind not in seen_domain:
+                            seen_domain.add(ind)
+                            pa_dom.write(f"{ind}\n")
+                            fn_dom.write(f"{ind}\n")
+                            count_domain += 1
 
                     count += 1
 
@@ -130,6 +161,11 @@ def regenerate_edl_files():
                     pass
         finally:
             _REGEN_LOCK.release()
+            # If another caller set _REGEN_PENDING while we were running, start a
+            # follow-up regeneration now so their DB changes reach the EDL files.
+            if _REGEN_PENDING.is_set():
+                logger.info("Follow-up EDL regeneration triggered (run=%s).", run_id)
+                regenerate_edl_files()
 
     thread = threading.Thread(target=_task, name=f"EDLRegenThread-{run_id}")
     thread.daemon = True
