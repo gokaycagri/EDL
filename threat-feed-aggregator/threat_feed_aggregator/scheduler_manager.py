@@ -88,6 +88,39 @@ def _run_expired_blacklist_cleanup():
         logger.error("Blacklist cleanup job failed: %s", e)
 
 
+def _run_indicator_ttl_cleanup():
+    """
+    Nightly TTL cleanup — deletes indicators not seen within indicator_lifetime_days.
+    Respects per-source retention_days overrides from config.
+    After cleanup, regenerates EDL files so firewalls see the updated list immediately.
+    """
+    try:
+        from .edl_generator import regenerate_edl_files
+        from .repositories.indicator_repo import remove_old_indicators
+
+        config = read_config()
+        lifetime_days = config.get("indicator_lifetime_days", 30)
+        retention_map = {
+            s["name"]: s.get("retention_days", lifetime_days)
+            for s in config.get("source_urls", [])
+        }
+        deleted = remove_old_indicators(
+            source_retention_map=retention_map,
+            default_days=lifetime_days,
+        )
+        if deleted > 0:
+            logger.info(
+                "Indicator TTL cleanup: removed %d stale indicators (lifetime=%d days).",
+                deleted,
+                lifetime_days,
+            )
+            regenerate_edl_files()
+        else:
+            logger.debug("Indicator TTL cleanup: no stale indicators found (lifetime=%d days).", lifetime_days)
+    except Exception as e:
+        logger.error("Indicator TTL cleanup job failed: %s", e, exc_info=True)
+
+
 def update_scheduled_jobs():
     """Refreshes the scheduler jobs based on current config."""
     from apscheduler.jobstores.base import ConflictingIdError
@@ -111,6 +144,7 @@ def update_scheduled_jobs():
                 "update_azure",
                 "dns_deduplication_job",
                 "cleanup_expired_blacklist",
+                "cleanup_expired_indicators",
             ]:
                 try:
                     scheduler.remove_job(job.id)
@@ -196,6 +230,25 @@ def update_scheduled_jobs():
                 next_run_time=datetime.now(UTC),
             )
             logger.info("Scheduled expired blacklist cleanup every 6 hours (first run: immediate).")
+        except (ConflictingIdError, IntegrityError):
+            pass
+
+        # Indicator TTL Cleanup — every 24 hours.
+        # next_run_time=now fires immediately on startup to clear the existing backlog
+        # of stale indicators accumulated before this job was introduced.
+        try:
+            from datetime import UTC, datetime
+
+            scheduler.add_job(
+                _run_indicator_ttl_cleanup,
+                "interval",
+                hours=24,
+                id="cleanup_expired_indicators",
+                name="Indicator TTL Cleanup",
+                replace_existing=True,
+                next_run_time=datetime.now(UTC),
+            )
+            logger.info("Scheduled indicator TTL cleanup every 24 hours (first run: immediate).")
         except (ConflictingIdError, IntegrityError):
             pass
 

@@ -13,9 +13,11 @@ import shutil
 import threading
 import uuid
 
+import ipaddress
+
 from .config_manager import DATA_DIR
-from .db_manager import get_all_indicators_iter, get_api_blacklist_items
-from .utils import is_rfc1918_private_ipv4_indicator
+from .db_manager import get_all_indicators_iter, get_api_blacklist_items, get_whitelist
+from .utils import is_rfc1918_private_ipv4_indicator, is_whitelisted
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +71,21 @@ def regenerate_edl_files():
             ):
                 count = 0
                 skipped_private = 0
+                skipped_whitelisted = 0
                 count_ip = 0
                 count_domain = 0
                 count_url = 0
+
+                # Load whitelist once — applied to both feed indicators and block list items
+                _whitelist_db = get_whitelist()
+                _whitelist_items = [w["item"] for w in _whitelist_db]
+                _whitelist_nets = []
+                for _w in _whitelist_items:
+                    if "/" in _w:
+                        try:
+                            _whitelist_nets.append(ipaddress.ip_network(_w, strict=False))
+                        except ValueError:
+                            pass
 
                 # Track written values to deduplicate across feed indicators and block list
                 seen_ip: set[str] = set()
@@ -84,6 +98,10 @@ def regenerate_edl_files():
 
                     if itype in ("ip", "cidr") and is_rfc1918_private_ipv4_indicator(ind, itype):
                         skipped_private += 1
+                        continue
+
+                    if is_whitelisted(ind, _whitelist_items, _whitelist_nets)[0]:
+                        skipped_whitelisted += 1
                         continue
 
                     if itype in ("ip", "cidr"):
@@ -119,6 +137,10 @@ def regenerate_edl_files():
                         skipped_private += 1
                         continue
 
+                    if is_whitelisted(ind, _whitelist_items, _whitelist_nets)[0]:
+                        skipped_whitelisted += 1
+                        continue
+
                     if is_ip_type:
                         if ind not in seen_ip:
                             seen_ip.add(ind)
@@ -143,13 +165,14 @@ def regenerate_edl_files():
             shutil.copy(paths["fortinet_ip"], os.path.join(DATA_DIR, "fortinet_edl.txt"))
 
             logger.info(
-                "EDL regenerated OK (run=%s) | Total: %s | IP/CIDR: %s | Domain: %s | URL: %s | Skipped-private: %s",
+                "EDL regenerated OK (run=%s) | Total: %s | IP/CIDR: %s | Domain: %s | URL: %s | Skipped-private: %s | Skipped-whitelisted: %s",
                 run_id,
                 count,
                 count_ip,
                 count_domain,
                 count_url,
                 skipped_private,
+                skipped_whitelisted,
             )
 
         except Exception as e:

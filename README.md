@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Version-2.4.9-6366f1?style=for-the-badge&logoColor=white" alt="Version">
+<img src="https://img.shields.io/badge/Version-2.4.12-6366f1?style=for-the-badge&logoColor=white" alt="Version">
 <img src="https://img.shields.io/badge/Python-3.13+-3b82f6?style=for-the-badge&logo=python&logoColor=white" alt="Python">
 <img src="https://img.shields.io/badge/Flask-3.1-22c55e?style=for-the-badge&logo=flask&logoColor=white" alt="Flask">
 <img src="https://img.shields.io/badge/Docker-Ready-0ea5e9?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -315,6 +315,25 @@ helm install threat-feed ./helm/ \
 ---
 
 ## 📝 Changelog
+
+### [v2.4.12] — 2026-07-16
+
+#### 🧹 Data Lifecycle & TTL Management
+- **Nightly Indicator TTL Cleanup**: Added a new background job to automatically delete stale indicators that haven't been seen within their source's configured `retention_days` (or the global `indicator_lifetime_days`). 
+- **Immediate Re-generation**: The TTL cleanup job automatically triggers an EDL regeneration if any stale indicators are removed, ensuring firewalls receive the updated, lighter lists immediately.
+
+#### 🛡️ Safe List / Block List UX & Validation
+- **Smart Block List Expiry Handling**: When adding a Safe List item, the system warns if the item is already manually blocklisted. It now correctly respects the expiration date (`expires_at`) of manual blocklist entries; if the manual block has expired, it allows the safelisting without warning, treating it as an automated block.
+- **Immediate EDL Sync**: Adding or removing items from the Safe List now instantly triggers an EDL regeneration to push the changes.
+- **Anchor Navigation**: Adding/removing Safe List items now redirects the user to the `#safelist` anchor instead of the generic dashboard top.
+
+#### 🔔 Notification & UI Improvements
+- **Modal Alerts for Critical Messages**: SweetAlert2 flash messages for `warning` and `danger` categories have been upgraded from transient toast notifications to centered modal dialogs that require user acknowledgment (clicking 'OK'). This prevents users from missing critical error messages or warnings.
+
+#### 🔧 Internal
+- Version bumped from 2.4.9 to **2.4.12**.
+
+---
 
 ### [v2.4.9] — 2026-07-14
 

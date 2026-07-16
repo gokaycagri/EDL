@@ -195,6 +195,15 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
+              {% if category == 'warning' or category == 'danger' %}
+              Swal.fire({
+                title: {{ category|title|tojson }},
+                text: {{ message|tojson }},
+                icon: '{{ "warning" if category == "warning" else "error" }}',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '{{ "#f59e0b" if category == "warning" else "#ef4444" }}',
+              });
+              {% else %}
               Swal.fire({
                 title: {{ category|title|tojson }},
                 text: {{ message|tojson }},
@@ -204,6 +213,7 @@
                 toast: true,
                 position: 'top-end'
               });
+              {% endif %}
             {% endfor %}
           {% endif %}
         {% endwith %}

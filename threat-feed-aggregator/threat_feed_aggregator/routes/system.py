@@ -43,6 +43,14 @@ from . import bp_system
 from .auth import login_required
 
 
+def _back_url(system_anchor=""):
+    """Redirect to the referrer page if it came from dashboard, otherwise system settings."""
+    ref = request.referrer or ""
+    if "/system" not in ref:
+        return url_for("dashboard.index")
+    return url_for("system.index") + system_anchor
+
+
 def _parse_bulk_indicator_input(raw_items):
     """Parse user input into a unique indicator list while preserving order."""
     if not raw_items:
@@ -1272,7 +1280,35 @@ def add_whitelist():
 
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', "danger")
-            return redirect(url_for("dashboard.index"))
+            return redirect(_back_url("#safelist"))
+
+        # Warn only if the item exists in the Block List as a MANUAL entry.
+        # FortiDeceptor/automated entries are allowed to coexist — the EDL generator
+        # already gives Safe List priority over Block List, so the IP will be excluded
+        # from EDL output regardless of the FortiDeceptor block.
+        from datetime import UTC, datetime
+
+        bl_entry = get_api_blacklist_item_by_value(item.strip())
+        if bl_entry:
+            comment = bl_entry.get("comment") or ""
+            is_automated = "FortiDeceptor" in comment
+            if not is_automated:
+                # Check expiry for manual entries too
+                expires_at = bl_entry.get("expires_at")
+                if expires_at:
+                    try:
+                        if datetime.fromisoformat(expires_at) < datetime.now(UTC):
+                            is_automated = True  # treat expired manual entry same as automated
+                    except (ValueError, TypeError):
+                        pass
+
+            if not is_automated:
+                flash(
+                    f'Warning: "{item}" is in the Block List (manually added). '
+                    f'Remove it from the Block List first before adding to the Safe List.',
+                    "warning",
+                )
+                return redirect(_back_url("#safelist"))
 
         if inferred_type and inferred_type != "unknown":
             item_type = inferred_type
@@ -1283,9 +1319,11 @@ def add_whitelist():
         else:
             flash(f"Success: {item} added to safe list.", "success")
             delete_whitelisted_indicators([item])
+            from ..aggregator import regenerate_edl_files
+            regenerate_edl_files()
             log_action(session.get("username", "system"), "whitelist_add", target=item, ip_address=request.remote_addr)
 
-    return redirect(url_for("dashboard.index"))
+    return redirect(_back_url("#safelist"))
 
 
 @bp_system.route("/whitelist/remove/<int:item_id>", methods=["POST"])
@@ -1297,13 +1335,15 @@ def remove_whitelist(item_id):
     item_detail = next((i for i in all_items if i["id"] == item_id), None)
     item_label = item_detail["item"] if item_detail else str(item_id)
     remove_whitelist_item(item_id)
+    from ..aggregator import regenerate_edl_files
+    regenerate_edl_files()
     log_action(
         session.get("username", "system"), "whitelist_remove",
         target=item_label,
         details=f"type={item_detail['type'] if item_detail else '-'}",
         ip_address=request.remote_addr,
     )
-    return redirect(url_for("dashboard.index"))
+    return redirect(_back_url("#safelist"))
 
 
 @bp_system.route("/whitelist/update", methods=["POST"])
@@ -1344,7 +1384,7 @@ def add_blacklist():
 
         if not is_valid:
             flash(f'Error: "{item}" is not a valid IP, CIDR, or Domain/URL.', "danger")
-            return redirect(url_for("system.index") + "#blocklist")
+            return redirect(_back_url("#blocklist"))
 
         if inferred_type and inferred_type != "unknown":
             # validate_indicator returns "ip/cidr" for both single IPs and CIDRs;
@@ -1361,7 +1401,7 @@ def add_blacklist():
 
             regenerate_edl_files()
 
-    return redirect(url_for("system.index") + "#blocklist")
+    return redirect(_back_url("#blocklist"))
 
 
 @bp_system.route("/blacklist/remove/<path:item_val>", methods=["POST"])
@@ -1373,7 +1413,7 @@ def remove_blacklist(item_val):
     from ..aggregator import regenerate_edl_files
 
     regenerate_edl_files()
-    return redirect(url_for("system.index") + "#blocklist")
+    return redirect(_back_url("#blocklist"))
 
 
 @bp_system.route("/blacklist/clear_deceptor", methods=["POST"])
