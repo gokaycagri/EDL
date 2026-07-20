@@ -21,12 +21,19 @@
         color: var(--text-muted);
         font-weight: 600;
         border-bottom: 1px solid var(--border-color);
+        white-space: nowrap;
     }
-    .filter-card {
-        background: var(--surface-1);
-        border: 1px solid var(--border-color);
-        border-radius: 0.5rem;
-        padding: 1rem;
+    .log-table th .col-filter {
+        cursor: pointer;
+        opacity: 0.4;
+        font-size: 0.65rem;
+        margin-left: 4px;
+        transition: opacity 0.15s;
+    }
+    .log-table th:hover .col-filter,
+    .log-table th .col-filter.active {
+        opacity: 1;
+        color: var(--bs-primary);
     }
     .empty-state {
         text-align: center;
@@ -42,6 +49,68 @@
     .pagination-info {
         font-size: 0.8rem;
         color: var(--text-muted);
+    }
+
+    /* ── FortiGate-style filter bar ── */
+    .filter-bar {
+        background: var(--surface-1);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+    .filter-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-height: 28px;
+        margin-bottom: 6px;
+    }
+    .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: color-mix(in srgb, var(--bs-primary) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--bs-primary) 35%, transparent);
+        color: var(--text-primary);
+        border-radius: 20px;
+        padding: 2px 10px 2px 8px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .filter-chip .chip-field {
+        color: var(--text-muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.05em;
+    }
+    .filter-chip .chip-remove {
+        cursor: pointer;
+        opacity: 0.6;
+        font-size: 0.8rem;
+        line-height: 1;
+        border: none;
+        background: none;
+        padding: 0;
+        color: inherit;
+    }
+    .filter-chip .chip-remove:hover { opacity: 1; }
+
+    .filter-input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    #filterValueWrap { display: none; align-items: center; gap: 6px; }
+    #filterValueWrap.visible { display: flex; }
+    #filterFieldLabel {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--bs-primary);
+        white-space: nowrap;
     }
 </style>
 {% endblock %}
@@ -66,52 +135,46 @@
         </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="filter-card mb-3">
-        <div class="row g-2 align-items-end">
-            <div class="col-sm-6 col-md-3">
-                <label class="form-label small mb-1">Action</label>
-                <select class="form-select form-select-sm" id="filterAction">
-                    <option value="">All Actions</option>
-                    <option value="login">login</option>
-                    <option value="login_failed">login_failed</option>
-                    <option value="source_add">source_add</option>
-                    <option value="source_edit">source_edit</option>
-                    <option value="source_delete">source_delete</option>
-                    <option value="whitelist_add">whitelist_add</option>
-                    <option value="whitelist_remove">whitelist_remove</option>
-                    <option value="whitelist_import">whitelist_import</option>
-                    <option value="indicator_add">indicator_add</option>
-                    <option value="indicator_delete">indicator_delete</option>
-                    <option value="config_change">config_change</option>
-                    <option value="password_change">password_change</option>
-                    <option value="user_create">user_create</option>
-                    <option value="user_delete">user_delete</option>
-                    <option value="backup_download">backup_download</option>
-                    <option value="backup_api">backup_api</option>
-                    <option value="restore_api">restore_api</option>
-                </select>
-            </div>
-            <div class="col-sm-6 col-md-2">
-                <label class="form-label small mb-1">Username</label>
-                <input type="text" class="form-control form-control-sm" id="filterUsername" placeholder="any user">
-            </div>
-            <div class="col-sm-6 col-md-2">
-                <label class="form-label small mb-1">Date From</label>
-                <input type="date" class="form-control form-control-sm" id="filterDateFrom">
-            </div>
-            <div class="col-sm-6 col-md-2">
-                <label class="form-label small mb-1">Date To</label>
-                <input type="date" class="form-control form-control-sm" id="filterDateTo">
-            </div>
-            <div class="col-sm-12 col-md-3 d-flex gap-2">
-                <button class="btn btn-sm btn-primary flex-fill" id="btnApply">
-                    <i class="fas fa-filter me-1"></i>Apply
+    <!-- FortiGate-style Filter Bar -->
+    <div class="filter-bar mb-3">
+        <!-- Active filter chips -->
+        <div class="filter-chips" id="filterChips"></div>
+
+        <!-- Add Filter row -->
+        <div class="filter-input-row">
+            <!-- Field selector dropdown -->
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle" id="btnAddFilter" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-plus me-1"></i>Add Filter
                 </button>
-                <button class="btn btn-sm btn-outline-secondary flex-fill" id="btnClear">
-                    <i class="fas fa-times me-1"></i>Clear
+                <ul class="dropdown-menu dropdown-menu-sm shadow-sm" id="fieldMenu">
+                    <li><h6 class="dropdown-header" style="font-size:0.7rem;">SELECT FIELD</h6></li>
+                    <li><a class="dropdown-item small" href="#" data-field="action" data-label="Action"><i class="fas fa-bolt fa-fw me-2 text-warning"></i>Action</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="username" data-label="Username"><i class="fas fa-user fa-fw me-2 text-primary"></i>Username</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="target" data-label="Target"><i class="fas fa-crosshairs fa-fw me-2 text-danger"></i>Target (IP / Indicator)</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="ip_address" data-label="Client IP"><i class="fas fa-network-wired fa-fw me-2 text-info"></i>Client IP</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item small" href="#" data-field="date_from" data-label="Date From"><i class="fas fa-calendar-alt fa-fw me-2 text-secondary"></i>Date From</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="date_to" data-label="Date To"><i class="fas fa-calendar-check fa-fw me-2 text-secondary"></i>Date To</a></li>
+                </ul>
+            </div>
+
+            <!-- Value input (shown after field is selected) -->
+            <div id="filterValueWrap">
+                <span id="filterFieldLabel"></span>
+                <div id="filterValueContainer"></div>
+                <button class="btn btn-sm btn-primary" id="btnConfirmFilter">
+                    <i class="fas fa-check me-1"></i>Add
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="btnCancelFilter">
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
+
+            <!-- Clear all -->
+            <button class="btn btn-sm btn-outline-danger ms-auto" id="btnClearAll" style="display:none">
+                <i class="fas fa-times me-1"></i>Clear All
+            </button>
         </div>
     </div>
 
@@ -122,12 +185,26 @@
                 <table class="table table-hover mb-0 log-table" id="logTable">
                     <thead>
                         <tr>
-                            <th class="ps-3">Timestamp</th>
-                            <th>Username</th>
-                            <th>Action</th>
-                            <th>Target</th>
+                            <th class="ps-3">
+                                Timestamp
+                            </th>
+                            <th>
+                                Username
+                                <i class="fas fa-filter col-filter" data-field="username" data-label="Username" title="Filter by username"></i>
+                            </th>
+                            <th>
+                                Action
+                                <i class="fas fa-filter col-filter" data-field="action" data-label="Action" title="Filter by action"></i>
+                            </th>
+                            <th>
+                                Target
+                                <i class="fas fa-filter col-filter" data-field="target" data-label="Target" title="Filter by target"></i>
+                            </th>
                             <th>Details</th>
-                            <th class="pe-3">Client IP</th>
+                            <th class="pe-3">
+                                Client IP
+                                <i class="fas fa-filter col-filter" data-field="ip_address" data-label="Client IP" title="Filter by client IP"></i>
+                            </th>
                         </tr>
                     </thead>
                     <tbody id="logBody">
@@ -165,6 +242,24 @@
     let totalCount = 0;
     let autoRefreshTimer = null;
 
+    // Active filters: [{field, label, value, display}]
+    let activeFilters = [];
+
+    // Field currently being configured
+    let pendingField = null;
+
+    const ACTION_OPTIONS = [
+        "login", "login_failed",
+        "source_add", "source_edit", "source_delete",
+        "whitelist_add", "whitelist_remove", "whitelist_import",
+        "blacklist_add", "blacklist_remove", "blacklist_cleanup",
+        "indicator_add", "indicator_delete",
+        "config_change", "password_change",
+        "user_create", "user_delete",
+        "backup_download", "backup_api", "restore_api",
+        "aggregation_started", "deceptor_block", "deceptor_unblock",
+    ];
+
     const badgeClass = {
         login:            "bg-primary",
         login_failed:     "bg-danger",
@@ -174,6 +269,9 @@
         whitelist_add:    "bg-info text-dark",
         whitelist_remove: "bg-info text-dark",
         whitelist_import: "bg-info text-dark",
+        blacklist_add:    "bg-danger",
+        blacklist_remove: "bg-secondary",
+        blacklist_cleanup:"bg-secondary",
         indicator_add:    "bg-success",
         indicator_delete: "bg-danger",
         config_change:    "bg-secondary",
@@ -183,6 +281,9 @@
         backup_download:  "bg-secondary",
         backup_api:       "bg-secondary",
         restore_api:      "bg-secondary",
+        aggregation_started: "bg-primary",
+        deceptor_block:   "bg-danger",
+        deceptor_unblock: "bg-secondary",
     };
 
     function escHtml(s) {
@@ -194,25 +295,184 @@
             .replace(/"/g, "&quot;");
     }
 
-    function getFilters() {
-        return {
-            action:    document.getElementById("filterAction").value,
-            username:  document.getElementById("filterUsername").value.trim(),
-            date_from: document.getElementById("filterDateFrom").value,
-            date_to:   document.getElementById("filterDateTo").value,
-        };
+    /* ── Filter chip management ── */
+
+    function addFilter(field, label, value) {
+        if (!value) return;
+        // Replace existing filter for same field
+        activeFilters = activeFilters.filter(f => f.field !== field);
+        const display = (field === "date_from" || field === "date_to") ? value : value;
+        activeFilters.push({ field, label, value, display });
+        currentOffset = 0;
+        renderChips();
+        fetchLogs();
+    }
+
+    function removeFilter(field) {
+        activeFilters = activeFilters.filter(f => f.field !== field);
+        currentOffset = 0;
+        renderChips();
+        fetchLogs();
+    }
+
+    function clearAllFilters() {
+        activeFilters = [];
+        currentOffset = 0;
+        renderChips();
+        fetchLogs();
+    }
+
+    function renderChips() {
+        const container = document.getElementById("filterChips");
+        const clearBtn = document.getElementById("btnClearAll");
+
+        if (activeFilters.length === 0) {
+            container.innerHTML = '<span class="small text-muted" style="line-height:28px;">No active filters — click <strong>Add Filter</strong> or the <i class="fas fa-filter"></i> icon on a column header</span>';
+            clearBtn.style.display = "none";
+            return;
+        }
+
+        container.innerHTML = activeFilters.map(f => `
+            <span class="filter-chip">
+                <span class="chip-field">${escHtml(f.label)}</span>
+                <span>:</span>
+                <span>${escHtml(f.display)}</span>
+                <button class="chip-remove" data-field="${escHtml(f.field)}" title="Remove filter" aria-label="Remove ${escHtml(f.label)} filter">×</button>
+            </span>
+        `).join("");
+
+        clearBtn.style.display = "";
+
+        container.querySelectorAll(".chip-remove").forEach(btn => {
+            btn.addEventListener("click", () => removeFilter(btn.dataset.field));
+        });
+    }
+
+    /* ── Filter value input rendering ── */
+
+    function buildValueInput(field) {
+        const container = document.getElementById("filterValueContainer");
+        container.innerHTML = "";
+
+        if (field === "action") {
+            const sel = document.createElement("select");
+            sel.className = "form-select form-select-sm";
+            sel.id = "pendingValue";
+            sel.style.minWidth = "160px";
+            ACTION_OPTIONS.forEach(a => {
+                const opt = document.createElement("option");
+                opt.value = a;
+                opt.textContent = a;
+                sel.appendChild(opt);
+            });
+            // Pre-select existing value if any
+            const existing = activeFilters.find(f => f.field === "action");
+            if (existing) sel.value = existing.value;
+            container.appendChild(sel);
+        } else if (field === "date_from" || field === "date_to") {
+            const inp = document.createElement("input");
+            inp.type = "date";
+            inp.className = "form-control form-control-sm";
+            inp.id = "pendingValue";
+            const existing = activeFilters.find(f => f.field === field);
+            if (existing) inp.value = existing.value;
+            container.appendChild(inp);
+        } else {
+            const inp = document.createElement("input");
+            inp.type = "text";
+            inp.className = "form-control form-control-sm";
+            inp.id = "pendingValue";
+            inp.style.minWidth = "160px";
+            const placeholders = {
+                username: "e.g. admin",
+                target:   "e.g. 1.2.3.4",
+                ip_address: "e.g. 10.0.0.1",
+            };
+            inp.placeholder = placeholders[field] || "";
+            const existing = activeFilters.find(f => f.field === field);
+            if (existing) inp.value = existing.value;
+            container.appendChild(inp);
+            // Enter key confirms
+            inp.addEventListener("keydown", e => { if (e.key === "Enter") confirmFilter(); });
+            inp.focus();
+        }
+    }
+
+    function showFilterInput(field, label) {
+        pendingField = { field, label };
+        document.getElementById("filterFieldLabel").textContent = label + ":";
+        buildValueInput(field);
+        document.getElementById("filterValueWrap").classList.add("visible");
+        // Focus the input
+        const inp = document.getElementById("pendingValue");
+        if (inp) setTimeout(() => inp.focus(), 50);
+    }
+
+    function hideFilterInput() {
+        pendingField = null;
+        document.getElementById("filterValueWrap").classList.remove("visible");
+        document.getElementById("filterValueContainer").innerHTML = "";
+        document.getElementById("filterFieldLabel").textContent = "";
+    }
+
+    function confirmFilter() {
+        if (!pendingField) return;
+        const inp = document.getElementById("pendingValue");
+        const value = inp ? inp.value.trim() : "";
+        if (value) addFilter(pendingField.field, pendingField.label, value);
+        hideFilterInput();
+    }
+
+    /* ── "Add Filter" dropdown ── */
+
+    document.getElementById("fieldMenu").querySelectorAll("[data-field]").forEach(item => {
+        item.addEventListener("click", e => {
+            e.preventDefault();
+            showFilterInput(item.dataset.field, item.dataset.label);
+        });
+    });
+
+    document.getElementById("btnConfirmFilter").addEventListener("click", confirmFilter);
+    document.getElementById("btnCancelFilter").addEventListener("click", hideFilterInput);
+    document.getElementById("btnClearAll").addEventListener("click", clearAllFilters);
+
+    /* ── Column header filter icons ── */
+
+    document.querySelectorAll(".col-filter").forEach(icon => {
+        icon.addEventListener("click", e => {
+            e.stopPropagation();
+            showFilterInput(icon.dataset.field, icon.dataset.label);
+            // Scroll filter bar into view
+            document.getElementById("filterValueWrap").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+    });
+
+    /* ── API query building ── */
+
+    function getFiltersAsParams() {
+        const params = {};
+        activeFilters.forEach(f => { params[f.field] = f.value; });
+        return params;
     }
 
     function buildQuery(extra = {}) {
-        const f = { ...getFilters(), limit: PAGE_SIZE, offset: currentOffset, ...extra };
+        const f = { ...getFiltersAsParams(), limit: PAGE_SIZE, offset: currentOffset, ...extra };
         const params = new URLSearchParams();
-        Object.entries(f).forEach(([k, v]) => { if (v !== "" && v !== undefined) params.set(k, v); });
+        Object.entries(f).forEach(([k, v]) => { if (v !== "" && v !== undefined && v !== null) params.set(k, v); });
         return params.toString();
     }
+
+    /* ── Data fetching ── */
 
     async function fetchLogs() {
         const body = document.getElementById("logBody");
         body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-spinner fa-spin"></i> Loading…</td></tr>';
+
+        // Highlight active column filter icons
+        document.querySelectorAll(".col-filter").forEach(icon => {
+            const isActive = activeFilters.some(f => f.field === icon.dataset.field);
+            icon.classList.toggle("active", isActive);
+        });
 
         try {
             const resp = await fetch(`/api/audit_log?${buildQuery()}`);
@@ -231,7 +491,7 @@
     function renderTable(entries) {
         const body = document.getElementById("logBody");
         if (!entries || entries.length === 0) {
-            body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-clipboard-list"></i><br>No audit events found.</td></tr>';
+            body.innerHTML = '<tr><td colspan="6" class="empty-state"><i class="fas fa-clipboard-list"></i><br>No audit events found matching the active filters.</td></tr>';
             return;
         }
 
@@ -257,19 +517,7 @@
         document.getElementById("btnNext").disabled = (offset + limit) >= total;
     }
 
-    document.getElementById("btnApply").addEventListener("click", () => {
-        currentOffset = 0;
-        fetchLogs();
-    });
-
-    document.getElementById("btnClear").addEventListener("click", () => {
-        document.getElementById("filterAction").value = "";
-        document.getElementById("filterUsername").value = "";
-        document.getElementById("filterDateFrom").value = "";
-        document.getElementById("filterDateTo").value = "";
-        currentOffset = 0;
-        fetchLogs();
-    });
+    /* ── Pagination ── */
 
     document.getElementById("btnPrev").addEventListener("click", () => {
         currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
@@ -281,6 +529,8 @@
         fetchLogs();
     });
 
+    /* ── Auto-refresh ── */
+
     document.getElementById("autoRefreshToggle").addEventListener("change", function () {
         if (this.checked) {
             autoRefreshTimer = setInterval(fetchLogs, 30000);
@@ -290,10 +540,10 @@
         }
     });
 
+    /* ── CSV Export ── */
+
     document.getElementById("btnExportCsv").addEventListener("click", async () => {
-        const f = getFilters();
-        const params = new URLSearchParams({ limit: 10000, offset: 0 });
-        Object.entries(f).forEach(([k, v]) => { if (v) params.set(k, v); });
+        const params = new URLSearchParams({ limit: 10000, offset: 0, ...getFiltersAsParams() });
         try {
             const resp = await fetch(`/api/audit_log?${params}`);
             const json = await resp.json();
@@ -313,7 +563,8 @@
         }
     });
 
-    // Initial load
+    /* ── Initial render ── */
+    renderChips();
     fetchLogs();
 })();
 </script>

@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import logging
 
 from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
 
@@ -10,6 +11,7 @@ from ..services.analysis_service import get_analysis_data
 from .auth import login_required
 
 bp_analysis = Blueprint("analysis", __name__, url_prefix="/analysis")
+logger = logging.getLogger(__name__)
 
 _ANALYSIS_MAX_ROWS = 100_000
 
@@ -85,8 +87,21 @@ def data():
         except json.JSONDecodeError:
             pass
 
-    result = get_analysis_data(draw, start, length, search_value, filters, order_col, order_dir)
-    return jsonify(result)
+    # Cap length to avoid runaway queries
+    length = min(length, 100) if length > 0 else 10
+
+    try:
+        result = get_analysis_data(draw, start, length, search_value, filters, order_col, order_dir)
+        return jsonify(result)
+    except Exception as e:
+        logger.error("Analysis data query failed: %s", e, exc_info=True)
+        return jsonify({
+            "draw": draw,
+            "recordsTotal": 0,
+            "recordsFiltered": 0,
+            "data": [],
+            "error": "An error occurred while fetching data. Please check the server logs.",
+        }), 500
 
 
 @bp_analysis.route("/export", methods=["GET"])

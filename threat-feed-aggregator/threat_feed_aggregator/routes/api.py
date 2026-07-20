@@ -1730,7 +1730,9 @@ def audit_log_api():
     action = request.args.get("action") or None
     date_from = request.args.get("date_from") or None
     date_to = request.args.get("date_to") or None
+    target = request.args.get("target") or None
+    ip_address = request.args.get("ip_address") or None
 
-    entries = get_audit_log(limit=limit, offset=offset, username=username, action=action, date_from=date_from, date_to=date_to)
-    total = get_audit_log_count(username=username, action=action, date_from=date_from, date_to=date_to)
+    entries = get_audit_log(limit=limit, offset=offset, username=username, action=action, date_from=date_from, date_to=date_to, target=target, ip_address=ip_address)
+    total = get_audit_log_count(username=username, action=action, date_from=date_from, date_to=date_to, target=target, ip_address=ip_address)
     return api_response({"entries": entries, "total": total, "limit": limit, "offset": offset})

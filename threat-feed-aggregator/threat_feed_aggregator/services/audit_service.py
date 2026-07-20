@@ -33,7 +33,7 @@ def log_action(username, action, target=None, details=None, ip_address=None):
         logger.error(f"Audit log write failed: {e}")
 
 
-def _build_audit_conditions(username=None, action=None, date_from=None, date_to=None):
+def _build_audit_conditions(username=None, action=None, date_from=None, date_to=None, target=None, ip_address=None):
     conditions, params = [], []
     if username:
         conditions.append("username = ?")
@@ -47,13 +47,19 @@ def _build_audit_conditions(username=None, action=None, date_from=None, date_to=
     if date_to:
         conditions.append("timestamp <= ?")
         params.append(date_to + "T23:59:59" if len(date_to) == 10 else date_to)
+    if target:
+        conditions.append("target LIKE ?")
+        params.append(f"%{target}%")
+    if ip_address:
+        conditions.append("ip_address LIKE ?")
+        params.append(f"%{ip_address}%")
     return conditions, params
 
 
-def get_audit_log(limit=100, offset=0, username=None, action=None, date_from=None, date_to=None):
+def get_audit_log(limit=100, offset=0, username=None, action=None, date_from=None, date_to=None, target=None, ip_address=None):
     """Retrieve audit log entries with optional filtering."""
     with db_readonly() as db:
-        conditions, params = _build_audit_conditions(username, action, date_from, date_to)
+        conditions, params = _build_audit_conditions(username, action, date_from, date_to, target, ip_address)
         query = "SELECT * FROM audit_log"
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -63,10 +69,10 @@ def get_audit_log(limit=100, offset=0, username=None, action=None, date_from=Non
         return [dict(row) for row in cursor.fetchall()]
 
 
-def get_audit_log_count(username=None, action=None, date_from=None, date_to=None) -> int:
+def get_audit_log_count(username=None, action=None, date_from=None, date_to=None, target=None, ip_address=None) -> int:
     """Return total count of matching audit log entries (for pagination)."""
     with db_readonly() as db:
-        conditions, params = _build_audit_conditions(username, action, date_from, date_to)
+        conditions, params = _build_audit_conditions(username, action, date_from, date_to, target, ip_address)
         query = "SELECT COUNT(*) FROM audit_log"
         if conditions:
             query += " WHERE " + " AND ".join(conditions)

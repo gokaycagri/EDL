@@ -4,73 +4,69 @@
 
 {% block extra_head %}
 <style>
-    /* Filter Bar Styles — Dark Operations Theme */
+    /* ── FortiGate-style filter bar — shared with logs.html ── */
     .filter-bar {
-        background-color: var(--surface-1);
+        background: var(--surface-1);
         border: 1px solid var(--border-color);
         border-radius: 0.5rem;
-        padding: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+    .filter-chips {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
-        gap: 0.5rem;
-        min-height: 46px;
+        gap: 6px;
+        min-height: 28px;
+        margin-bottom: 6px;
     }
     .filter-chip {
-        background-color: var(--surface-2);
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        padding: 2px 8px;
-        font-size: 0.8rem;
-        display: flex;
+        display: inline-flex;
         align-items: center;
+        gap: 5px;
+        background: color-mix(in srgb, var(--bs-primary) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--bs-primary) 35%, transparent);
         color: var(--text-primary);
+        border-radius: 20px;
+        padding: 2px 10px 2px 8px;
+        font-size: 0.75rem;
         font-weight: 500;
     }
-    .filter-chip .key {
+    .filter-chip .chip-field {
         color: var(--text-muted);
-        margin-right: 4px;
-        text-transform: uppercase;
-        font-size: 0.7rem;
         font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.05em;
     }
-    .filter-chip .value {
-        margin-right: 6px;
-    }
-    .filter-chip .remove {
+    .filter-chip .chip-remove {
         cursor: pointer;
-        color: var(--text-muted);
-        font-size: 1rem;
-        line-height: 1;
-    }
-    .filter-chip .remove:hover { color: var(--accent-danger); }
-
-    .add-filter-btn {
-        border: 1px dashed var(--border-color);
-        color: var(--text-muted);
-        background: transparent;
-        padding: 4px 10px;
+        opacity: 0.6;
         font-size: 0.8rem;
-        border-radius: 4px;
-        transition: all 0.2s;
+        line-height: 1;
+        border: none;
+        background: none;
+        padding: 0;
+        color: inherit;
     }
-    .add-filter-btn:hover {
-        background: var(--surface-2);
-        border-color: var(--text-muted);
-        color: var(--text-primary);
+    .filter-chip .chip-remove:hover { opacity: 1; }
+
+    .filter-input-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    #filterValueWrap { display: none; align-items: center; gap: 6px; }
+    #filterValueWrap.visible { display: flex; }
+    #filterFieldLabel {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--bs-primary);
+        white-space: nowrap;
     }
 
-    /* Popover Styling for Filter Menu */
-    .filter-menu {
-        min-width: 250px;
-        padding: 10px;
-        background: var(--surface-2) !important;
-        border: 1px solid var(--border-color) !important;
-    }
-    .filter-menu label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); margin-bottom: 4px; display: block; }
-    .filter-menu select, .filter-menu input { margin-bottom: 10px; font-size: 0.85rem; }
-
-    /* Fix DataTables length menu dropdown arrow overlap */
+    /* ── DataTables length menu fix ── */
     .dataTables_length select.form-select {
         padding-right: 2.5rem !important;
         min-width: 70px !important;
@@ -78,7 +74,22 @@
         width: auto;
     }
 
-    /* SGB Child Row Expand */
+    /* ── Column header filter icons ── */
+    .log-table th .col-filter,
+    #analysisTable th .col-filter {
+        cursor: pointer;
+        opacity: 0.4;
+        font-size: 0.65rem;
+        margin-left: 4px;
+        transition: opacity 0.15s;
+    }
+    #analysisTable th:hover .col-filter,
+    #analysisTable th .col-filter.active {
+        opacity: 1;
+        color: var(--bs-primary);
+    }
+
+    /* ── SGB Child Row Expand ── */
     td.dt-control {
         cursor: pointer;
         text-align: center;
@@ -116,53 +127,60 @@
         <p class="small mb-0" style="color: var(--text-secondary);">Deep dive into aggregated threat indicators, risk scores, and attribution.</p>
     </div>
 
-    <!-- Filter Bar -->
-    <div class="mb-3">
-        <div class="filter-bar" id="filterContainer">
-            <!-- Filter Chips will be inserted here -->
+    <!-- FortiGate-style Filter Bar -->
+    <div class="filter-bar mb-3">
+        <!-- Active filter chips -->
+        <div class="filter-chips" id="filterChips"></div>
 
+        <!-- Add Filter row -->
+        <div class="filter-input-row">
+            <!-- Field selector dropdown -->
             <div class="dropdown">
-                <button class="add-filter-btn dropdown-toggle" type="button" id="addFilterDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-plus me-1"></i> Add Filter
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle" id="btnAddFilter" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-plus me-1"></i>Add Filter
                 </button>
-                <div class="dropdown-menu shadow p-3 filter-menu" aria-labelledby="addFilterDropdown">
-                    <label>Filter Type</label>
-                    <select id="newFilterType" class="form-select form-select-sm">
-                        <option value="source">Source Name</option>
-                        <option value="tag">Tag (Botnet, Malware...)</option>
-                        <option value="type">Indicator Type</option>
-                        <option value="level">Risk Level</option>
-                        <option value="country">Country Code</option>
-                        <option value="risk_score">Risk Score (Threshold)</option>
-                        <optgroup label="SGB Intelligence">
-                            <option value="sgb_desc">SGB Kategori (PH/BP/MW/C2)</option>
-                            <option value="sgb_source">SGB Kaynak (IH/SB)</option>
-                            <option value="sgb_criticality">SGB Kritiklik (1-4)</option>
-                        </optgroup>
-                    </select>
-
-                    <label id="valueLabel">Value</label>
-                    <input type="text" id="newFilterValue" class="form-control form-control-sm" placeholder="Type or select..." list="filterOptionsList" autocomplete="off">
-                    <datalist id="filterOptionsList">
-                        <!-- Populated by JS -->
-                    </datalist>
-
-                    <div class="d-grid mt-2">
-                        <button class="btn btn-sm btn-primary" onclick="addFilter()">Apply</button>
-                    </div>
-                </div>
+                <ul class="dropdown-menu dropdown-menu-sm shadow-sm" id="fieldMenu">
+                    <li><h6 class="dropdown-header" style="font-size:0.7rem;">SELECT FIELD</h6></li>
+                    <li><a class="dropdown-item small" href="#" data-field="source"           data-label="Source"><i class="fas fa-database fa-fw me-2 text-primary"></i>Source Name</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="type"             data-label="Type"><i class="fas fa-tag fa-fw me-2 text-info"></i>Indicator Type</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="level"            data-label="Level"><i class="fas fa-tachometer-alt fa-fw me-2 text-warning"></i>Risk Level</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="country"          data-label="Country"><i class="fas fa-globe fa-fw me-2 text-success"></i>Country Code</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="tag"              data-label="Tag"><i class="fas fa-hashtag fa-fw me-2 text-secondary"></i>Tag</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="risk_score"       data-label="Risk Score"><i class="fas fa-chart-bar fa-fw me-2 text-danger"></i>Risk Score (≥ threshold)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header" style="font-size:0.7rem;">SGB INTELLIGENCE</h6></li>
+                    <li><a class="dropdown-item small" href="#" data-field="sgb_desc"         data-label="SGB Category"><i class="fas fa-shield-alt fa-fw me-2 text-cyan"></i>SGB Kategori (PH/BP/MW/C2)</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="sgb_source"       data-label="SGB Source"><i class="fas fa-sitemap fa-fw me-2 text-cyan"></i>SGB Kaynak (IH/SB)</a></li>
+                    <li><a class="dropdown-item small" href="#" data-field="sgb_criticality"  data-label="SGB Criticality"><i class="fas fa-exclamation-triangle fa-fw me-2 text-cyan"></i>SGB Kritiklik (1-4)</a></li>
+                </ul>
             </div>
 
-            <!-- Clear All -->
+            <!-- Inline value input (shown after field is selected) -->
+            <div id="filterValueWrap">
+                <span id="filterFieldLabel"></span>
+                <div id="filterValueContainer"></div>
+                <button class="btn btn-sm btn-primary" id="btnConfirmFilter">
+                    <i class="fas fa-check me-1"></i>Add
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="btnCancelFilter">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Export & Clear -->
             <div class="ms-auto d-flex align-items-center gap-2">
                 <div class="dropdown">
-                    <button class="btn btn-export btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown"><i class="fas fa-download me-1"></i>Export</button>
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-download me-1"></i>Export
+                    </button>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item small" href="/api/export?format=csv"><i class="fas fa-file-csv me-2 text-success"></i>CSV</a></li>
                         <li><a class="dropdown-item small" href="/api/export?format=json"><i class="fas fa-file-code me-2 text-info"></i>JSON</a></li>
                     </ul>
                 </div>
-                <button class="btn btn-link text-decoration-none btn-sm" style="font-size: 0.8rem; color: var(--text-muted);" onclick="clearAllFilters()">Clear All</button>
+                <button class="btn btn-sm btn-outline-danger" id="btnClearAll" style="display:none">
+                    <i class="fas fa-times me-1"></i>Clear All
+                </button>
             </div>
         </div>
     </div>
@@ -175,17 +193,31 @@
                         <tr class="small text-uppercase" style="color: var(--text-muted);">
                             <th></th>
                             <th>Indicator</th>
-                            <th>Type</th>
-                            <th>Country</th>
+                            <th>
+                                Type
+                                <i class="fas fa-filter col-filter" data-field="type" data-label="Type" title="Filter by type"></i>
+                            </th>
+                            <th>
+                                Country
+                                <i class="fas fa-filter col-filter" data-field="country" data-label="Country" title="Filter by country"></i>
+                            </th>
                             <th>Score</th>
-                            <th>Level</th>
-                            <th>Sources</th>
-                            <th>Tags</th>
+                            <th>
+                                Level
+                                <i class="fas fa-filter col-filter" data-field="level" data-label="Level" title="Filter by risk level"></i>
+                            </th>
+                            <th>
+                                Sources
+                                <i class="fas fa-filter col-filter" data-field="source" data-label="Source" title="Filter by source"></i>
+                            </th>
+                            <th>
+                                Tags
+                                <i class="fas fa-filter col-filter" data-field="tag" data-label="Tag" title="Filter by tag"></i>
+                            </th>
                             <th>Last Seen</th>
                         </tr>
                     </thead>
-                    <tbody class="small">
-                    </tbody>
+                    <tbody class="small"></tbody>
                 </table>
             </div>
         </div>
@@ -195,8 +227,27 @@
 
 {% block extra_scripts %}
 <script>
-    let activeFilters = [];
+(function () {
+    let activeFilters = [];  // [{field, label, value}]
     let table;
+    let pendingField = null;
+    let debounceTimer = null;
+
+    /* ── Label map ── */
+    const FIELD_LABELS = {
+        source: "Source", type: "Type", level: "Level", country: "Country",
+        tag: "Tag", risk_score: "Risk Score",
+        sgb_desc: "SGB Category", sgb_source: "SGB Source", sgb_criticality: "SGB Criticality",
+    };
+
+    /* ── Predefined options for select-type fields ── */
+    const STATIC_OPTIONS = {
+        type:            ["ip", "cidr", "domain", "url"],
+        level:           ["Critical", "High", "Medium", "Low"],
+        sgb_desc:        ["PH", "BP", "MW", "C2"],
+        sgb_source:      ["IH", "SB"],
+        sgb_criticality: ["1", "2", "3", "4"],
+    };
 
     function escHtml(s) {
         if (!s) return '';
@@ -218,69 +269,251 @@
         </div>`;
     }
 
-    $(document).ready(function() {
+    /* ── Filter chip management ── */
+
+    function addFilter(field, label, value) {
+        if (!value) return;
+        activeFilters = activeFilters.filter(f => f.field !== field);
+        activeFilters.push({ field, label, value });
+        renderChips();
+        reloadTable();
+    }
+
+    function removeFilter(field) {
+        activeFilters = activeFilters.filter(f => f.field !== field);
+        renderChips();
+        reloadTable();
+    }
+
+    function clearAllFilters() {
+        activeFilters = [];
+        renderChips();
+        reloadTable();
+    }
+
+    function reloadTable() {
+        if (table) table.ajax.reload();
+        // Highlight active column filter icons
+        document.querySelectorAll('#analysisTable th .col-filter').forEach(icon => {
+            icon.classList.toggle('active', activeFilters.some(f => f.field === icon.dataset.field));
+        });
+    }
+
+    function renderChips() {
+        const container = document.getElementById('filterChips');
+        const clearBtn  = document.getElementById('btnClearAll');
+
+        if (activeFilters.length === 0) {
+            container.innerHTML = '<span class="small text-muted" style="line-height:28px;">No active filters — click <strong>Add Filter</strong> or the <i class="fas fa-filter"></i> icon on a column header</span>';
+            clearBtn.style.display = 'none';
+            return;
+        }
+
+        container.innerHTML = activeFilters.map(f => `
+            <span class="filter-chip">
+                <span class="chip-field">${escHtml(f.label)}</span>
+                <span>:</span>
+                <span>${escHtml(f.value)}</span>
+                <button class="chip-remove" data-field="${escHtml(f.field)}" title="Remove filter" aria-label="Remove ${escHtml(f.label)} filter">×</button>
+            </span>
+        `).join('');
+
+        clearBtn.style.display = '';
+        container.querySelectorAll('.chip-remove').forEach(btn => {
+            btn.addEventListener('click', () => removeFilter(btn.dataset.field));
+        });
+    }
+
+    /* ── Inline value input ── */
+
+    function buildValueInput(field) {
+        const container = document.getElementById('filterValueContainer');
+        container.innerHTML = '';
+
+        if (STATIC_OPTIONS[field]) {
+            const sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm';
+            sel.id = 'pendingValue';
+            sel.style.minWidth = '140px';
+            STATIC_OPTIONS[field].forEach(opt => {
+                const o = document.createElement('option');
+                o.value = opt; o.textContent = opt;
+                sel.appendChild(o);
+            });
+            const existing = activeFilters.find(f => f.field === field);
+            if (existing) sel.value = existing.value;
+            container.appendChild(sel);
+        } else if (field === 'risk_score') {
+            const inp = document.createElement('input');
+            inp.type = 'number'; inp.min = '0'; inp.max = '100';
+            inp.className = 'form-control form-control-sm';
+            inp.id = 'pendingValue';
+            inp.placeholder = 'e.g. 80  (means ≥ 80)';
+            inp.style.width = '160px';
+            const existing = activeFilters.find(f => f.field === field);
+            if (existing) inp.value = existing.value;
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') confirmFilter(); });
+            container.appendChild(inp);
+            setTimeout(() => inp.focus(), 50);
+        } else {
+            // Text with datalist autocomplete
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.className = 'form-control form-control-sm';
+            inp.id = 'pendingValue';
+            inp.style.minWidth = '160px';
+            inp.placeholder = field === 'country' ? 'e.g. TR, US' : field === 'source' ? 'e.g. feodo' : 'Type to search…';
+            inp.setAttribute('list', 'filterOptionsList');
+            inp.autocomplete = 'off';
+            const existing = activeFilters.find(f => f.field === field);
+            if (existing) inp.value = existing.value;
+            container.appendChild(inp);
+
+            inp.addEventListener('input', () => {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => fetchAutocomplete(field, inp.value), 300);
+            });
+            inp.addEventListener('keydown', e => { if (e.key === 'Enter') confirmFilter(); });
+            fetchAutocomplete(field, inp.value || '');
+            setTimeout(() => inp.focus(), 50);
+        }
+    }
+
+    function showFilterInput(field, label) {
+        pendingField = { field, label };
+        document.getElementById('filterFieldLabel').textContent = label + ':';
+        buildValueInput(field);
+        document.getElementById('filterValueWrap').classList.add('visible');
+    }
+
+    function hideFilterInput() {
+        pendingField = null;
+        document.getElementById('filterValueWrap').classList.remove('visible');
+        document.getElementById('filterValueContainer').innerHTML = '';
+        document.getElementById('filterFieldLabel').textContent = '';
+    }
+
+    function confirmFilter() {
+        if (!pendingField) return;
+        const inp = document.getElementById('pendingValue');
+        const value = inp ? inp.value.trim() : '';
+        if (value) addFilter(pendingField.field, pendingField.label, value);
+        hideFilterInput();
+    }
+
+    /* ── Autocomplete (for free-text fields) ── */
+
+    function fetchAutocomplete(field, query) {
+        if (STATIC_OPTIONS[field] || field === 'risk_score') return;
+        fetch(`{{ url_for('analysis.filter_options') }}?column=${encodeURIComponent(field)}&q=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(resp => {
+                const items = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
+                const dl = document.getElementById('filterOptionsList');
+                if (dl) {
+                    dl.innerHTML = '';
+                    items.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item;
+                        dl.appendChild(opt);
+                    });
+                }
+            })
+            .catch(() => {});
+    }
+
+    /* ── Event wiring: field menu ── */
+
+    document.getElementById('fieldMenu').querySelectorAll('[data-field]').forEach(item => {
+        item.addEventListener('click', e => {
+            e.preventDefault();
+            showFilterInput(item.dataset.field, item.dataset.label);
+        });
+    });
+
+    document.getElementById('btnConfirmFilter').addEventListener('click', confirmFilter);
+    document.getElementById('btnCancelFilter').addEventListener('click', hideFilterInput);
+    document.getElementById('btnClearAll').addEventListener('click', clearAllFilters);
+
+    /* ── Column header filter icons ── */
+
+    document.querySelectorAll('#analysisTable th .col-filter').forEach(icon => {
+        icon.addEventListener('click', e => {
+            e.stopPropagation();
+            showFilterInput(icon.dataset.field, icon.dataset.label);
+            document.getElementById('filterValueWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    });
+
+    /* ── DataTables init ── */
+
+    $(document).ready(function () {
         table = $('#analysisTable').DataTable({
             processing: true,
             serverSide: true,
             ajax: {
                 url: "{{ url_for('analysis.data') }}",
-                data: function(d) {
-                    let filterDict = {};
-                    activeFilters.forEach(f => {
-                        filterDict[f.type] = f.value;
-                    });
+                data: function (d) {
+                    const filterDict = {};
+                    activeFilters.forEach(f => { filterDict[f.field] = f.value; });
                     d.custom_filters = JSON.stringify(filterDict);
                 }
             },
             columns: [
-                { data: null, orderable: false, className: '', defaultContent: '', render: function(data) {
+                { data: null, orderable: false, className: '', defaultContent: '', render: function (data) {
                     return data.sgb_desc || data.sgb_source || data.sgb_criticality ? '<span class="dt-control"></span>' : '';
                 }},
-                { data: 'indicator', render: function(data) { return `<span class="fw-bold" style="color: var(--text-primary);">${data}</span>`; }},
-                { data: 'type', render: function(data) {
+                { data: 'indicator', render: function (data) { return `<span class="fw-bold" style="color: var(--text-primary);">${data}</span>`; }},
+                { data: 'type', render: function (data) {
                     let color = 'secondary';
-                    if(data === 'ip' || data === 'cidr') color = 'info'; else if(data === 'domain') color = 'warning'; else if(data === 'url') color = 'primary';
+                    if (data === 'ip' || data === 'cidr') color = 'info';
+                    else if (data === 'domain') color = 'warning';
+                    else if (data === 'url') color = 'primary';
                     return `<span class="badge bg-soft-${color} text-${color} text-uppercase" style="font-size:0.65rem;">${data}</span>`;
                 }},
-                { data: 'country', render: function(data) { return data ? `<span class="badge" style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);">${data}</span>` : '<span class="text-muted" style="font-size:0.75rem;"><i class="fas fa-globe me-1"></i>Unknown</span>'; }},
-                { data: 'risk_score', render: function(data) {
+                { data: 'country', render: function (data) {
+                    return data
+                        ? `<span class="badge" style="background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border-color);">${data}</span>`
+                        : '<span class="text-muted" style="font-size:0.75rem;"><i class="fas fa-globe me-1"></i>Unknown</span>';
+                }},
+                { data: 'risk_score', render: function (data) {
                     let color = 'success';
-                    if(data >= 90) color = 'danger'; else if(data >= 70) color = 'warning'; else if(data >= 40) color = 'primary';
+                    if (data >= 90) color = 'danger'; else if (data >= 70) color = 'warning'; else if (data >= 40) color = 'primary';
                     return `<div class="progress" style="height: 6px; width: 60px; background: var(--surface-2);" title="${data}"><div class="progress-bar bg-${color}" role="progressbar" style="width: ${data}%"></div></div><small style="font-size:0.7em; color: var(--text-muted);">${data}/100</small>`;
                 }},
-                { data: 'level', render: function(data) {
+                { data: 'level', render: function (data) {
                     let color = 'secondary';
-                    if(data === 'Critical') color = 'danger'; else if(data === 'High') color = 'warning'; else if(data === 'Medium') color = 'primary'; else if(data === 'Low') color = 'success';
+                    if (data === 'Critical') color = 'danger'; else if (data === 'High') color = 'warning'; else if (data === 'Medium') color = 'primary'; else if (data === 'Low') color = 'success';
                     return `<span class="badge bg-${color}">${data}</span>`;
                 }},
-                { data: 'sources', render: function(data) { return `<span style="font-size:0.75rem; color: var(--text-muted);">${data}</span>`; }},
-                { data: 'tags', render: function(data) {
+                { data: 'sources', render: function (data) { return `<span style="font-size:0.75rem; color: var(--text-muted);">${data}</span>`; }},
+                { data: 'tags', render: function (data) {
                     return data.map(tag => {
                         let color = 'secondary';
-                        if(tag.includes('Malware') || tag.includes('Botnet')) color = 'danger';
-                        else if(tag.includes('Phishing')) color = 'warning';
-                        else if(tag === 'SGB') color = 'info';
+                        if (tag.includes('Malware') || tag.includes('Botnet')) color = 'danger';
+                        else if (tag.includes('Phishing')) color = 'warning';
+                        else if (tag === 'SGB') color = 'info';
                         return `<span class="badge bg-soft-${color} text-${color} me-1" style="font-size:0.65rem;">${tag}</span>`;
                     }).join('');
                 }},
-                { data: 'last_seen', render: function(data) { return data ? data.replace('T', ' ').substring(0, 16) : '-'; }}
+                { data: 'last_seen', render: function (data) { return data ? data.replace('T', ' ').substring(0, 16) : '-'; }}
             ],
             order: [[4, 'desc']],
-            createdRow: function(row, data) {
+            createdRow: function (row, data) {
                 if (data.risk_score >= 90) row.classList.add('risk-critical');
                 else if (data.risk_score >= 70) row.classList.add('risk-high');
                 else if (data.risk_score >= 40) row.classList.add('risk-medium');
                 else row.classList.add('risk-low');
             },
-            language: { search: "", searchPlaceholder: "Global search..." },
+            language: { search: '', searchPlaceholder: 'Global search…' },
             lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-            pagingType: "full_numbers",
+            pagingType: 'full_numbers',
             dom: '<"d-flex justify-content-between align-items-center mb-3"f>rt<"d-flex justify-content-between align-items-center mt-3"lip>'
         });
 
-        // Child row expand/collapse for SGB metadata
-        $('#analysisTable tbody').on('click', 'td:first-child span.dt-control', function() {
-            const tr = $(this).closest('tr');
+        // SGB child row expand/collapse
+        $('#analysisTable tbody').on('click', 'td:first-child span.dt-control', function () {
+            const tr  = $(this).closest('tr');
             const row = table.row(tr);
             if (row.child.isShown()) {
                 row.child.hide();
@@ -290,140 +523,12 @@
                 tr.addClass('dt-hasChild');
             }
         });
-
-        // Filter Logic
-        const filterTypeSelect = $('#newFilterType');
-        const filterValueInput = $('#newFilterValue');
-        const dataList = $('#filterOptionsList');
-        let debounceTimer;
-
-        function fetchOptions(query) {
-            const col = filterTypeSelect.val();
-            if (col === 'risk_score') return; // No autocomplete for numbers
-
-            fetch(`{{ url_for('analysis.filter_options') }}?column=${col}&q=${encodeURIComponent(query)}`)
-                .then(r => r.json())
-                .then(resp => {
-                    const items = (resp.data && resp.data.items) ? resp.data.items : (Array.isArray(resp) ? resp : []);
-                    dataList.empty();
-                    items.forEach(item => {
-                        const option = document.createElement('option');
-                        option.value = item;
-                        dataList.append(option);
-                    });
-                });
-        }
-
-        // Fetch on Type Change (Initial list)
-        filterTypeSelect.change(function() {
-            filterValueInput.val('');
-            const type = $(this).val();
-
-            if (type === 'risk_score') {
-                filterValueInput.attr('placeholder', 'e.g. 80 (means >= 80)');
-                filterValueInput.attr('type', 'number'); // Force number input
-                filterValueInput.attr('list', ''); // Disable datalist
-            } else {
-                filterValueInput.attr('placeholder', 'Type or select...');
-                filterValueInput.attr('type', 'text');
-                filterValueInput.attr('list', 'filterOptionsList');
-                fetchOptions('');
-            }
-        });
-
-        // Fetch on Typing (Debounced)
-        filterValueInput.on('input', function() {
-            const query = this.value;
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                fetchOptions(query);
-            }, 300);
-        });
-
-        // Initial Fetch
-        fetchOptions('');
     });
 
-    function addFilter() {
-        const type = $('#newFilterType').val();
-        const val = $('#newFilterValue').val().trim();
-
-        if (!val) return;
-
-        // Check duplicates
-        if (activeFilters.some(f => f.type === type)) {
-            // Update existing
-            activeFilters = activeFilters.map(f => f.type === type ? {type, value: val} : f);
-        } else {
-            activeFilters.push({ type, value: val });
-        }
-
-        renderFilters();
-        table.ajax.reload();
-
-        // Hide dropdown
-        $('[data-bs-toggle="dropdown"]').dropdown('hide');
-    }
-
-    function removeFilter(type) {
-        activeFilters = activeFilters.filter(f => f.type !== type);
-        renderFilters();
-        table.ajax.reload();
-    }
-
-    function clearAllFilters() {
-        activeFilters = [];
-        renderFilters();
-        table.ajax.reload();
-    }
-
-    function renderFilters() {
-        const container = $('#filterContainer');
-        // Keep the dropdown and clear buttons, remove chips
-        container.find('.filter-chip').remove();
-
-        activeFilters.forEach(f => {
-            const chip = document.createElement('div');
-            chip.className = 'filter-chip';
-            chip.title = 'Click to edit';
-
-            const keySpan = document.createElement('span');
-            keySpan.className = 'key';
-            keySpan.textContent = f.type + ':';
-
-            const valSpan = document.createElement('span');
-            valSpan.className = 'value';
-            valSpan.textContent = f.value;
-            valSpan.style.cssText = 'cursor:pointer; border-bottom:1px dotted var(--border-color);';
-            valSpan.addEventListener('click', () => editFilter(f.type, f.value));
-
-            const removeSpan = document.createElement('span');
-            removeSpan.className = 'remove';
-            removeSpan.textContent = '\u00D7';
-            removeSpan.addEventListener('click', () => removeFilter(f.type));
-
-            chip.appendChild(keySpan);
-            chip.appendChild(valSpan);
-            chip.appendChild(removeSpan);
-            container.find('.dropdown')[0].before(chip);
-        });
-    }
-
-    function editFilter(type, value) {
-        // Set values in dropdown
-        $('#newFilterType').val(type).trigger('change');
-
-        // Wait for change handler to adjust inputs
-        setTimeout(() => {
-            if (type === 'type' || type === 'level') {
-                $('#newFilterValueSelect').val(value);
-            } else {
-                $('#newFilterValue').val(value);
-            }
-            // Show dropdown
-            const dropdownToggle = document.getElementById('addFilterDropdown');
-            new bootstrap.Dropdown(dropdownToggle).show();
-        }, 50);
-    }
+    /* ── Initial render ── */
+    renderChips();
+})();
 </script>
+<!-- Datalist for autocomplete -->
+<datalist id="filterOptionsList"></datalist>
 {% endblock %}
