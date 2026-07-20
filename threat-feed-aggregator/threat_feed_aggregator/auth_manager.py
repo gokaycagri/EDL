@@ -195,9 +195,13 @@ def _check_ldap_credentials(username, password):
         if not server_hostname or not base_dn:
             continue
 
-        # Validate base_dn format: must be composed only of DC= components
-        # (e.g. "DC=example,DC=com"). Rejects injected characters.
-        _DN_SAFE_RE = re.compile(r"^(DC=[A-Za-z0-9\-]+)(,DC=[A-Za-z0-9\-]+)*$", re.IGNORECASE)
+        # Validate base_dn format: must be composed of valid LDAP DN components
+        # (DC, OU, CN, O, L, ST, C). E.g. "OU=MFA,DC=example,DC=com". Rejects injected characters.
+        _DN_SAFE_RE = re.compile(
+            r"^(?:(?:DC|OU|CN|O|L|ST|C)=[A-Za-z0-9\-\s\.]+)"
+            r"(?:,(?:DC|OU|CN|O|L|ST|C)=[A-Za-z0-9\-\s\.]+)*$",
+            re.IGNORECASE,
+        )
         if not _DN_SAFE_RE.match(base_dn):
             logger.error("LDAP base_dn format invalid, skipping server: %s (dn=%r)", server_hostname, base_dn)
             continue

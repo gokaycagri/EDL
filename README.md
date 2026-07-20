@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://img.shields.io/badge/Version-2.4.12-6366f1?style=for-the-badge&logoColor=white" alt="Version">
+<img src="https://img.shields.io/badge/Version-2.4.13-6366f1?style=for-the-badge&logoColor=white" alt="Version">
 <img src="https://img.shields.io/badge/Python-3.13+-3b82f6?style=for-the-badge&logo=python&logoColor=white" alt="Python">
 <img src="https://img.shields.io/badge/Flask-3.1-22c55e?style=for-the-badge&logo=flask&logoColor=white" alt="Flask">
 <img src="https://img.shields.io/badge/Docker-Ready-0ea5e9?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
@@ -315,6 +315,13 @@ helm install threat-feed ./helm/ \
 ---
 
 ## 📝 Changelog
+
+### [v2.4.13] — 2026-07-20
+
+#### 🔐 Authentication & LDAP
+- **Flexible LDAP Base DN Validation**: Updated the internal Base DN format validator. It now supports the full range of standard LDAP components (such as `OU`, `CN`, `O`, `L`, `ST`, `C`) rather than strictly enforcing only Domain Components (`DC`). This resolves issues where valid Base DNs containing organizational units (e.g., `OU=Users,DC=example,DC=com`) were incorrectly rejected as invalid configurations.
+
+---
 
 ### [v2.4.12] — 2026-07-16
 
